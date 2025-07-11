@@ -251,7 +251,7 @@ const LoginForm = ({ onLogin, onSwitchToSignup }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-[#004785] text-white text-xs lg:text-sm xl:text-base font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer"
+                className="w-full bg-[#004785] text-white text-xs lg:text-sm xl:text-md font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center gap-2">
