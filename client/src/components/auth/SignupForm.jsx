@@ -607,7 +607,7 @@ const SignupForm = ({ onSignup, onSwitchToLogin }) => {
             style={{ objectPosition: "35% center" }}
           />
           {/* Light blue tint */}
-          <div className="absolute inset-0 bg-[#002E96] opacity-70"></div>
+          <div className="absolute inset-0 bg-[#002052] opacity-80"></div>
         </div>
 
         {/* Content */}
