@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Link } from 'react-router-dom';
 
-const LoginForm = ({ onLogin, onSwitchToSignup }) => {
+const LoginForm = ({ onLogin }) => {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -276,12 +276,12 @@ const LoginForm = ({ onLogin, onSwitchToSignup }) => {
           <div className="text-center mt-6">
             <p className="text-xs lg:text-sm text-gray-600">
               Don't have an account?{" "}
-              <button
-                onClick={onSwitchToSignup}
-                className="text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors duration-200 cursor-pointer"
+              <Link
+                to="/signup"
+                className="text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors duration-200"
               >
                 Sign up
-              </button>
+              </Link>
             </p>
           </div>
         </div>

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, Upload, ArrowLeft } from "lucide-react";
+import { Link } from 'react-router-dom';
 
-const SignupForm = ({ onSignup, onSwitchToLogin }) => {
+const SignupForm = ({ onSignup }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     companyName: "",
@@ -441,12 +442,12 @@ const SignupForm = ({ onSignup, onSwitchToLogin }) => {
       <div className="text-center mt-4">
         <p className="text-xs lg:text-sm text-gray-600">
           Already have an account?{" "}
-          <button
-            onClick={onSwitchToLogin}
-            className="text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors duration-200 cursor-pointer"
+          <Link
+            to="/login"
+            className="text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors duration-200"
           >
             Log in
-          </button>
+          </Link>
         </p>
       </div>
     </div>
@@ -615,11 +616,13 @@ const SignupForm = ({ onSignup, onSwitchToLogin }) => {
           {/* Logo */}
           <div className="mb-8">
             <div className="text-center">
-              <img
-                src="/images/logos/TRISHKAYE LOGO SVG.svg"
-                alt="TRISHKAYE Logo"
-                className="w-50 lg:w-60 xl:w-70"
-              />
+              <Link to="/">
+                <img
+                  src="/images/logos/TRISHKAYE LOGO SVG.svg"
+                  alt="TRISHKAYE Logo"
+                  className="w-50 lg:w-60 xl:w-70 cursor-pointer hover:opacity-80 transition-opacity"
+                />
+              </Link>
             </div>
           </div>
           {/* Welcome Message */}
