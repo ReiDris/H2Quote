@@ -7,7 +7,11 @@ const Hero = ({
   showButton = false, 
   buttonText = "Learn More", 
   onButtonClick,
-  sectionId = "home" 
+  sectionId = "home",
+  titleWeight = "font-extralight",
+  subtitleWeight = "font-bold",
+  titleSize = "text-4xl xl:text-6xl",
+  subtitleSize = "text-4xl lg:text-5xl xl:text-7xl"
 }) => {
   return (
     <section id={sectionId} className="relative h-screen flex flex-col text-white">
@@ -28,11 +32,11 @@ const Hero = ({
       {/* Hero Content */}
       <div className="relative z-10 flex-1 flex items-center justify-center text-center">
         <div>
-          <h1 className="text-4xl xl:text-6xl font-extralight mb-4">
+          <h1 className={`${titleSize} mb-4 ${titleWeight}`}>
             {title}
           </h1>
           {subtitle && (
-            <h2 className="text-4xl lg:text-5xl xl:text-7xl font-bold mb-8">
+            <h2 className={`${subtitleSize} mb-8 ${subtitleWeight}`}>
               {subtitle}
             </h2>
           )}

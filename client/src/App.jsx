@@ -2,10 +2,10 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 import AboutUsPage from "./pages/AboutUsPage";
+import ServicesPage from "./pages/ServicesPage";
 import LoginForm from "./components/auth/LoginForm";
 import SignupForm from "./components/auth/SignupForm";
 // Import other pages as you create them
-// import ServicesPage from "./pages/ServicesPage";
 // import LoginPage from "./pages/LoginPage";
 // import AdminDashboard from "./pages/admin/AdminDashboard";
 // import StaffDashboard from "./pages/staff/StaffDashboard";
@@ -19,9 +19,9 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/about" element={<AboutUsPage />} />
+          <Route path="/services" element={<ServicesPage />} />
           
-          {/* Future Routes - uncomment as you create the pages */}
-          {/* <Route path="/services" element={<ServicesPage />} /> */}
+          {/* Authentication Routes */}
           <Route path="/login" element={<LoginForm />} />
           <Route path="/signup" element={<SignupForm />} />
 
