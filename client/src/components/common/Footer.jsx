@@ -121,22 +121,25 @@ const Footer = () => {
             <div className="flex space-x-8">
               <Link
                 to="/"
+                onClick={() => window.scrollTo(0, 0)}
                 className="text-white hover:text-amber-300 text-sm transition-colors"
               >
                 Home
               </Link>
               <Link
                 to="/about"
+                onClick={() => window.scrollTo(0, 0)}
                 className="text-white hover:text-amber-300 text-sm transition-colors"
               >
                 About Us
               </Link>
-              <a
-                href="/#services"
+              <Link
+                to="/services"
+                onClick={() => window.scrollTo(0, 0)}
                 className="text-white hover:text-amber-300 text-sm transition-colors"
               >
                 Services
-              </a>
+              </Link>
             </div>
           </div>
         </div>

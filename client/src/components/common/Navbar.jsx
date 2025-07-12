@@ -36,25 +36,33 @@ const Navbar = () => {
           <div className="flex items-center space-x-10 lg:space-x-10 xl:space-x-30">
             <Link
               to="/"
-              className="hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl text-white"
+              className={`hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl ${
+                location.pathname === "/" ? "text-amber-300 font-semibold" : "text-white"
+              }`}
             >
               Home
             </Link>
             <Link
               to="/about"
-              className="hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl text-white"
+              className={`hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl ${
+                location.pathname === "/about" ? "text-amber-300 font-semibold" : "text-white"
+              }`}
             >
               About Us
             </Link>
-            <button
-              onClick={() => handleNavigation("services")}
-              className="hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl text-white"
+            <Link
+              to="/services"
+              className={`hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl ${
+                location.pathname === "/services" ? "text-amber-300 font-semibold" : "text-white"
+              }`}
             >
               Services
-            </button>
+            </Link>
             <Link
               to="/login"
-              className="hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl text-white"
+              className={`hover:text-amber-300 cursor-pointer transition-colors text-sm lg:text-lg xl:text-xl ${
+                location.pathname === "/login" || location.pathname === "/signup" ? "text-amber-300 font-semibold" : "text-white"
+              }`}
             >
               Log In | Sign Up
             </Link>

@@ -112,6 +112,10 @@ const LandingPage = () => {
         buttonText="Learn More"
         onButtonClick={() => handleNavigation("about")}
         sectionId="home"
+        titleWeight="font-extralight"
+        subtitleWeight="font-bold"
+        titleSize="text-4xl xl:text-6xl"
+        subtitleSize="text-4xl lg:text-5xl xl:text-7xl"
       />
 
       {/* Why Choose Us Section */}
