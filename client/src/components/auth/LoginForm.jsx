@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 
-const LoginForm = ({ onLogin }) => {
+const LoginForm = () => {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -10,6 +11,13 @@ const LoginForm = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get the page they tried to visit before login
+  const from = location.state?.from?.pathname || null;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -52,20 +60,35 @@ const LoginForm = ({ onLogin }) => {
     if (!validateForm()) return;
 
     setIsLoading(true);
+    setErrors({});
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Call the onLogin function passed from parent
-      if (onLogin) {
-        onLogin(formData);
+      const user = await login(formData);
+      
+      // Determine redirect path based on user role
+      let redirectPath;
+      if (from) {
+        redirectPath = from;
+      } else {
+        switch (user.role) {
+          case 'admin':
+            redirectPath = '/admin/service-tracker';
+            break;
+          case 'staff':
+            redirectPath = '/staff/service-tracker';
+            break;
+          case 'customer':
+            redirectPath = '/customer/dashboard';
+            break;
+          default:
+            redirectPath = '/';
+        }
       }
 
-      console.log("Login submitted:", formData);
+      navigate(redirectPath, { replace: true });
     } catch (error) {
       console.error("Login error:", error);
-      setErrors({ general: "Login failed. Please try again." });
+      setErrors({ general: error.message || "Login failed. Please try again." });
     } finally {
       setIsLoading(false);
     }
