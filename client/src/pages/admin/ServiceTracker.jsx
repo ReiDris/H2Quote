@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   ListFilter,
@@ -11,6 +12,12 @@ import AdminLayout from "../../layouts/AdminLayout";
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const navigate = useNavigate();
+
+  const handleMoreActions = (requestId) => {
+    // Navigate to the service request details page
+    navigate(`/admin/service-request/${requestId.replace('#', '')}`);
+  };
 
   // Mock data for the service requests
   const mockData = [
@@ -152,7 +159,7 @@ const ServiceTracker = () => {
               placeholder="Search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500 text-lg"
             />
           </div>
 
@@ -231,7 +238,11 @@ const ServiceTracker = () => {
                       {getStatusBadge(item.warrantyStatus, "warrantyStatus")}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-center">
-                      <button className="text-gray-800 cursor-pointer">
+                      <button 
+                        onClick={() => handleMoreActions(item.id)}
+                        className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
+                        title="View Details"
+                      >
                         <CgMaximizeAlt size={20} />
                       </button>
                     </td>
