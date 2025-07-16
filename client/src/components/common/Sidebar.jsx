@@ -13,9 +13,12 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 
 const Sidebar = ({ userRole }) => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // Use the user role from auth context instead of props for reliability
+  const actualUserRole = user?.role || userRole;
 
   const handleLogoutClick = () => {
     setShowLogoutModal(true);
@@ -33,45 +36,46 @@ const Sidebar = ({ userRole }) => {
 
   // Define navigation items based on user role
   const getNavigationItems = () => {
-    const baseItems = [
+    // Admin and Staff items (staff will have fewer items)
+    const adminStaffItems = [
       {
-        to: `/${userRole}/service-tracker`,
+        to: `/${actualUserRole}/service-tracker`,
         icon: ScrollText,
         label: "Service Tracker",
         roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/verify-accounts`,
+        to: `/${actualUserRole}/verify-accounts`,
         icon: Inbox,
         label: "Verify Accounts",
-        roles: ["admin"],
+        roles: ["admin"], // Only admin can see this
       },
       {
-        to: `/${userRole}/client-profiles`,
+        to: `/${actualUserRole}/client-profiles`,
         icon: Users,
         label: "Client Profiles",
         roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/messages`,
+        to: `/${actualUserRole}/messages`,
         icon: MessageCircle,
         label: "Messages",
         roles: ["admin", "staff", "customer"],
       },
       {
-        to: `/${userRole}/activity-log`,
+        to: `/${actualUserRole}/activity-log`,
         icon: History,
         label: "Activity Log",
-        roles: ["admin"],
+        roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/user-management`,
+        to: `/${actualUserRole}/user-management`,
         icon: UserCheck,
         label: "User Management",
-        roles: ["admin"],
+        roles: ["admin"], // Only admin can see this
       },
       {
-        to: `/${userRole}/account-settings`,
+        to: `/${actualUserRole}/account-settings`,
         icon: Settings,
         label: "Account Settings",
         roles: ["admin", "staff", "customer"],
@@ -98,10 +102,22 @@ const Sidebar = ({ userRole }) => {
         label: "My Requests",
         roles: ["customer"],
       },
+      {
+        to: "/customer/messages",
+        icon: MessageCircle,
+        label: "Messages",
+        roles: ["customer"],
+      },
+      {
+        to: "/customer/account-settings",
+        icon: Settings,
+        label: "Account Settings",
+        roles: ["customer"],
+      },
     ];
 
-    const items = userRole === "customer" ? customerItems : baseItems;
-    return items.filter((item) => item.roles.includes(userRole));
+    const items = actualUserRole === "customer" ? customerItems : adminStaffItems;
+    return items.filter((item) => item.roles.includes(actualUserRole));
   };
 
   const navigationItems = getNavigationItems();

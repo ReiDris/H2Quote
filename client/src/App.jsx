@@ -10,7 +10,7 @@ import ServicesPage from "./pages/ServicesPage";
 import LoginForm from "./components/auth/LoginForm";
 import SignupForm from "./components/auth/SignupForm";
 
-// Admin Pages
+// Admin Pages (these will be reused for staff)
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
 import ServiceRequestDetails from "./pages/admin/ServiceRequestDetails";
 import VerifyAccountsPage from "./pages/admin/VerifyAccounts";
@@ -20,9 +20,6 @@ import ActivityLogPage from "./pages/admin/ActivityLog";
 import AccountSettings from "./pages/admin/AccountSettings";
 import Messages from "./pages/admin/Messages";
 import MessageDetail from "./pages/admin/MessageDetail";
-
-// Staff Pages (will be created later)
-// import StaffServiceTrackerPage from "./pages/staff/ServiceTrackerPage";
 
 // Customer Pages (will be created later)
 // import CustomerDashboard from "./pages/customer/CustomerDashboard";
@@ -116,12 +113,12 @@ function App() {
               }
             />
 
-            {/* Protected Staff Routes */}
+            {/* Protected Staff Routes - Reusing Admin Components */}
             <Route
               path="/staff/service-tracker"
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
-                  <div>Staff Service Tracker - Coming Soon</div>
+                  <ServiceTrackerPage />
                 </ProtectedRoute>
               }
             />
@@ -130,6 +127,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
                   <ServiceRequestDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/client-profiles"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <ClientProfilesPage />
                 </ProtectedRoute>
               }
             />
