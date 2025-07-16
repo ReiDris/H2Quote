@@ -17,6 +17,9 @@ import VerifyAccountsPage from "./pages/admin/VerifyAccounts";
 import ClientProfilesPage from "./pages/admin/ClientProfiles";
 import UserManagementPage from "./pages/admin/UserManagement";
 import ActivityLogPage from "./pages/admin/ActivityLog";
+import AccountSettings from "./pages/admin/AccountSettings";
+import Messages from "./pages/admin/Messages";
+import MessageDetail from "./pages/admin/MessageDetail";
 
 // Staff Pages (will be created later)
 // import StaffServiceTrackerPage from "./pages/staff/ServiceTrackerPage";
@@ -88,6 +91,30 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/account-settings"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AccountSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/messages"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <Messages />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/messages/:messageId"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <MessageDetail />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Protected Staff Routes */}
             <Route
@@ -106,6 +133,30 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/staff/account-settings"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <AccountSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/messages"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <Messages />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/messages/:messageId"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <MessageDetail />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Protected Customer Routes */}
             <Route
@@ -113,6 +164,30 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
                   <div>Customer Dashboard - Coming Soon</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/account-settings"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <AccountSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/messages"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <Messages />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/messages/:messageId"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <MessageDetail />
                 </ProtectedRoute>
               }
             />
