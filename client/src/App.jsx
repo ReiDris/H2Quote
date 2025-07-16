@@ -12,6 +12,7 @@ import SignupForm from "./components/auth/SignupForm";
 
 // Admin Pages
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
+import ServiceRequestDetails from "./pages/admin/ServiceRequestDetails";
 import VerifyAccountsPage from "./pages/admin/VerifyAccounts";
 import ClientProfilesPage from "./pages/admin/ClientProfiles";
 import UserManagementPage from "./pages/admin/UserManagement";
@@ -44,6 +45,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <ServiceTrackerPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/service-request/:id"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <ServiceRequestDetails />
                 </ProtectedRoute>
               }
             />
@@ -86,6 +95,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
                   <div>Staff Service Tracker - Coming Soon</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/service-request/:id"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <ServiceRequestDetails />
                 </ProtectedRoute>
               }
             />
