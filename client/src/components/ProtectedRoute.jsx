@@ -26,7 +26,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
       ? '/admin/service-tracker' 
       : user.role === 'staff' 
         ? '/staff/service-tracker' 
-        : '/customer/dashboard';
+        : '/customer/company-overview';
     
     return <Navigate to={redirectPath} replace />;
   }
