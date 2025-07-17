@@ -159,7 +159,7 @@ const LoginForm = () => {
           {/* Google Login Button */}
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white border-1 border-black rounded-4xl py-3 px-4 text-gray-700 font-medium text-sm xl:text-lg hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200 mb-6"
+            className="w-full flex items-center justify-center gap-3 bg-white border-1 border-black rounded-4xl py-3 px-4 text-gray-700 font-medium text-sm xl:text-lg hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200 mb-6 cursor-pointer"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path

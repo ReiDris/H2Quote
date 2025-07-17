@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
+  Home,
   ScrollText,
   Inbox,
   Users,
@@ -9,13 +10,21 @@ import {
   UserCheck,
   Settings,
   LogOut,
+  ChevronDown,
+  ChevronRight,
+  Building2,
+  Package,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 
 const Sidebar = ({ userRole }) => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isHomeExpanded, setIsHomeExpanded] = useState(false);
+
+  // Use the user role from auth context instead of props for reliability
+  const actualUserRole = user?.role || userRole;
 
   const handleLogoutClick = () => {
     setShowLogoutModal(true);
@@ -31,77 +40,82 @@ const Sidebar = ({ userRole }) => {
     setShowLogoutModal(false);
   };
 
+  const toggleHomeExpanded = () => {
+    setIsHomeExpanded(!isHomeExpanded);
+  };
+
   // Define navigation items based on user role
   const getNavigationItems = () => {
-    const baseItems = [
+    // Admin and Staff items (staff will have fewer items)
+    const adminStaffItems = [
       {
-        to: `/${userRole}/service-tracker`,
+        to: `/${actualUserRole}/service-tracker`,
         icon: ScrollText,
         label: "Service Tracker",
         roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/verify-accounts`,
+        to: `/${actualUserRole}/verify-accounts`,
         icon: Inbox,
         label: "Verify Accounts",
-        roles: ["admin"],
+        roles: ["admin"], // Only admin can see this
       },
       {
-        to: `/${userRole}/client-profiles`,
+        to: `/${actualUserRole}/client-profiles`,
         icon: Users,
         label: "Client Profiles",
         roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/messages`,
+        to: `/${actualUserRole}/messages`,
         icon: MessageCircle,
         label: "Messages",
-        roles: ["admin", "staff", "customer"],
+        roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/activity-log`,
+        to: `/${actualUserRole}/activity-log`,
         icon: History,
         label: "Activity Log",
-        roles: ["admin"],
+        roles: ["admin", "staff"],
       },
       {
-        to: `/${userRole}/user-management`,
+        to: `/${actualUserRole}/user-management`,
         icon: UserCheck,
         label: "User Management",
-        roles: ["admin"],
+        roles: ["admin"], // Only admin can see this
       },
       {
-        to: `/${userRole}/account-settings`,
+        to: `/${actualUserRole}/account-settings`,
         icon: Settings,
         label: "Account Settings",
-        roles: ["admin", "staff", "customer"],
+        roles: ["admin", "staff"],
       },
     ];
 
     // Customer-specific items
     const customerItems = [
       {
-        to: "/customer/dashboard",
+        to: "/customer/service-tracker",
         icon: ScrollText,
-        label: "Dashboard",
+        label: "Service Tracker",
         roles: ["customer"],
       },
       {
-        to: "/customer/services",
-        icon: Inbox,
-        label: "Services",
+        to: "/customer/messages",
+        icon: MessageCircle,
+        label: "Messages",
         roles: ["customer"],
       },
       {
-        to: "/customer/requests",
-        icon: Users,
-        label: "My Requests",
+        to: "/customer/account-settings",
+        icon: Settings,
+        label: "Account Settings",
         roles: ["customer"],
       },
     ];
 
-    const items = userRole === "customer" ? customerItems : baseItems;
-    return items.filter((item) => item.roles.includes(userRole));
+    const items = actualUserRole === "customer" ? customerItems : adminStaffItems;
+    return items.filter((item) => item.roles.includes(actualUserRole));
   };
 
   const navigationItems = getNavigationItems();
@@ -112,6 +126,79 @@ const Sidebar = ({ userRole }) => {
         {/* Navigation */}
         <div className="flex-1 py-6 mt-2">
           <nav className="space-y-4 px-2 lg:px-3 xl:px-5 text-xs xl:text-sm">
+            {/* Home Section - Only for customers */}
+            {actualUserRole === "customer" && (
+              <div>
+                <div
+                  onClick={toggleHomeExpanded}
+                  className="group relative flex items-center justify-center xl:justify-start gap-3 px-2 py-2 transition-colors duration-200 text-white border-b border-[#004785] hover:border-b-2 hover:border-amber-300 cursor-pointer"
+                >
+                  <Home size={20} />
+                  <span className="hidden xl:block font-normal">Home</span>
+                  <div className="hidden xl:block ml-auto">
+                    {isHomeExpanded ? (
+                      <ChevronDown size={16} />
+                    ) : (
+                      <ChevronRight size={16} />
+                    )}
+                  </div>
+
+                  {/* Tooltip for collapsed state */}
+                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 xl:hidden transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                    Home
+                  </div>
+                </div>
+
+                {/* Home Submenu */}
+                {isHomeExpanded && (
+                  <div className="ml-4 xl:ml-8 space-y-2 mt-2">
+                    <NavLink
+                      to="/customer/company-overview"
+                      className={({ isActive }) =>
+                        `group relative flex items-center justify-center xl:justify-start gap-3 px-2 py-2 transition-colors duration-200 ${
+                          isActive
+                            ? "text-white border-b-2 border-amber-300"
+                            : "text-white border-b-2 border-[#004785] hover:border-b-2 hover:border-amber-300"
+                        }`
+                      }
+                    >
+                      <Building2 size={16} />
+                      <span className="hidden xl:block font-normal text-xs">
+                        Company Overview
+                      </span>
+
+                      {/* Tooltip for collapsed state */}
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 xl:hidden transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                        Company Overview
+                      </div>
+                    </NavLink>
+
+                    <NavLink
+                      to="/customer/services"
+                      className={({ isActive }) =>
+                        `group relative flex items-center justify-center xl:justify-start gap-3 px-2 py-2 transition-colors duration-200 ${
+                          isActive
+                            ? "text-white border-b-2 border-amber-300"
+                            : "text-white border-b-2 border-[#004785] hover:border-b-2 hover:border-amber-300"
+                        }`
+                      }
+                    >
+                      <Package size={16} />
+                      <span className="hidden xl:block font-normal text-xs">
+                        Services
+                      </span>
+
+                      {/* Tooltip for collapsed state */}
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 xl:hidden transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                        Services
+                      </div>
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Regular Navigation Items */}
             {navigationItems.map((item, index) => {
               const IconComponent = item.icon;
               return (
@@ -122,7 +209,7 @@ const Sidebar = ({ userRole }) => {
                     `group relative flex items-center justify-center xl:justify-start gap-3 px-2 py-2 transition-colors duration-200 ${
                       isActive
                         ? "text-white border-b-2 border-amber-300"
-                        : "text-white hover:border-b-2 border-amber-300"
+                        : "text-white border-b-2 border-[#004785] hover:border-b-2 hover:border-amber-300"
                     }`
                   }
                 >

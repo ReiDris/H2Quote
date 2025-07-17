@@ -10,7 +10,7 @@ import ServicesPage from "./pages/ServicesPage";
 import LoginForm from "./components/auth/LoginForm";
 import SignupForm from "./components/auth/SignupForm";
 
-// Admin Pages
+// Admin Pages (these will be reused for staff)
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
 import ServiceRequestDetails from "./pages/admin/ServiceRequestDetails";
 import VerifyAccountsPage from "./pages/admin/VerifyAccounts";
@@ -21,11 +21,14 @@ import AccountSettings from "./pages/admin/AccountSettings";
 import Messages from "./pages/admin/Messages";
 import MessageDetail from "./pages/admin/MessageDetail";
 
-// Staff Pages (will be created later)
-// import StaffServiceTrackerPage from "./pages/staff/ServiceTrackerPage";
-
-// Customer Pages (will be created later)
-// import CustomerDashboard from "./pages/customer/CustomerDashboard";
+// Customer Pages
+import CustomerServiceTracker from "./pages/customer/CustomerServiceTracker";
+import CustomerServiceRequestDetails from "./pages/customer/CustomerServiceRequestDetails";
+import CustomerMessages from "./pages/customer/CustomerMessages";
+import CustomerMessageDetail from "./pages/customer/CustomerMessageDetail";
+import CustomerAccountSettings from "./pages/customer/CustomerAccountSettings";
+import CompanyOverview from "./pages/customer/CompanyOverview";
+import Services from "./pages/customer/Services";
 
 function App() {
   return (
@@ -116,12 +119,12 @@ function App() {
               }
             />
 
-            {/* Protected Staff Routes */}
+            {/* Protected Staff Routes - Reusing Admin Components */}
             <Route
               path="/staff/service-tracker"
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
-                  <div>Staff Service Tracker - Coming Soon</div>
+                  <ServiceTrackerPage />
                 </ProtectedRoute>
               }
             />
@@ -130,6 +133,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
                   <ServiceRequestDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/client-profiles"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <ClientProfilesPage />
                 </ProtectedRoute>
               }
             />
@@ -157,21 +168,45 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/staff/activity-log"
+              element={
+                <ProtectedRoute allowedRoles={['staff']}>
+                  <ActivityLogPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Protected Customer Routes */}
             <Route
-              path="/customer/dashboard"
+              path="/customer/company-overview"
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
-                  <div>Customer Dashboard - Coming Soon</div>
+                  <CompanyOverview />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/customer/account-settings"
+              path="/customer/services"
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
-                  <AccountSettings />
+                  <Services />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/service-tracker"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerServiceTracker />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/service-request/:id"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerServiceRequestDetails />
                 </ProtectedRoute>
               }
             />
@@ -179,7 +214,7 @@ function App() {
               path="/customer/messages"
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
-                  <Messages />
+                  <CustomerMessages />
                 </ProtectedRoute>
               }
             />
@@ -187,7 +222,15 @@ function App() {
               path="/customer/messages/:messageId"
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
-                  <MessageDetail />
+                  <CustomerMessageDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/account-settings"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerAccountSettings />
                 </ProtectedRoute>
               }
             />
@@ -203,7 +246,7 @@ function App() {
             />
             <Route 
               path="/customer" 
-              element={<Navigate to="/customer/dashboard" replace />} 
+              element={<Navigate to="/customer/service-tracker" replace />} 
             />
             
             {/* Catch-all route for 404 - redirects to home */}
