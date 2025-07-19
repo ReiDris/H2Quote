@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import Hero from "../components/common/Hero";
 import Footer from "../components/common/Footer";
+import Vincent from '../components/common/Vincent';
+
 
 const LandingPage = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -207,6 +209,7 @@ const LandingPage = () => {
 
       {/* Footer */}
       <Footer />
+      <Vincent />
     </div>
   );
 };

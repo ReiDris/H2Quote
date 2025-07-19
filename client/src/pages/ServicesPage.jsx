@@ -5,6 +5,8 @@ import {
     LucideArrowLeft,
     LucideArrowRight
 } from "lucide-react";
+import Vincent from '../components/common/Vincent';
+
 
 const ServicesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -493,6 +495,7 @@ const ServicesPage = () => {
 
       {/* Footer */}
       <Footer />
+      <Vincent />
     </div>
   );
 };

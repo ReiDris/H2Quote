@@ -1,6 +1,8 @@
 import React from "react";
 import Hero from "../components/common/Hero";
 import Footer from "../components/common/Footer";
+import Vincent from '../components/common/Vincent';
+
 
 const AboutUsPage = () => {
   const handleNavigation = (section) => {
@@ -160,6 +162,7 @@ const AboutUsPage = () => {
 
       {/* Footer */}
       <Footer />
+      <Vincent />
     </div>
   );
 };
