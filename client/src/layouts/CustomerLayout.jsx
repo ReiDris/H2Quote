@@ -1,6 +1,7 @@
 import React from 'react';
 import Header from '../components/common/Header';
 import Sidebar from '../components/common/Sidebar';
+import Vincent from '../components/common/Vincent';
 
 const CustomerLayout = ({ children }) => {
   return (
@@ -18,6 +19,9 @@ const CustomerLayout = ({ children }) => {
           {children}
         </main>
       </div>
+      
+      {/* Vincent Chatbot - available on all customer pages */}
+      <Vincent />
     </div>
   );
 };

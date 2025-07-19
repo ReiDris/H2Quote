@@ -78,7 +78,7 @@ const LoginForm = () => {
             redirectPath = '/staff/service-tracker';
             break;
           case 'customer':
-            redirectPath = '/customer/dashboard';
+            redirectPath = '/customer/company-overview';
             break;
           default:
             redirectPath = '/';
