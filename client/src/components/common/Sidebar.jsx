@@ -185,7 +185,7 @@ const Sidebar = ({ userRole }) => {
                     >
                       <Package size={16} />
                       <span className="hidden xl:block font-normal text-xs">
-                        Services
+                        Product List
                       </span>
 
                       {/* Tooltip for collapsed state */}
