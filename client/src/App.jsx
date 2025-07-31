@@ -27,6 +27,7 @@ import CustomerServiceRequestDetails from "./pages/customer/CustomerServiceReque
 import CustomerMessages from "./pages/customer/CustomerMessages";
 import CustomerMessageDetail from "./pages/customer/CustomerMessageDetail";
 import CustomerAccountSettings from "./pages/customer/CustomerAccountSettings";
+import CustomerAccountVerification from "./pages/customer/CustomerAccountVerification";
 import CompanyOverview from "./pages/customer/CompanyOverview";
 import Services from "./pages/customer/Services";
 
@@ -231,6 +232,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
                   <CustomerAccountSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customer/account-verification"
+              element={
+                <ProtectedRoute allowedRoles={['customer']}>
+                  <CustomerAccountVerification />
                 </ProtectedRoute>
               }
             />

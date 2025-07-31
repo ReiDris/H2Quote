@@ -8,18 +8,30 @@ import {
 } from "lucide-react";
 import { CgMaximizeAlt } from "react-icons/cg";
 import AdminLayout from "../../layouts/AdminLayout";
+import StaffLayout from "../../layouts/StaffLayout";
+import { useAuth } from "../../hooks/useAuth"; // Assuming you have this hook
 
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
+  const { user } = useAuth(); // Get user role from auth context
+
+  // Determine user role from auth context (this will work seamlessly with backend)
+  const userRole = user?.role || "admin"; // Fallback to admin if no role
 
   const handleMoreActions = (requestId) => {
-    // Navigate to the service request details page
-    navigate(`/admin/service-request/${requestId.replace('#', '')}`);
+    // Dynamic navigation based on user role from auth context
+    const basePath =
+      userRole === "admin"
+        ? "/admin"
+        : userRole === "staff"
+        ? "/staff"
+        : "/admin";
+    navigate(`${basePath}/service-request/${requestId.replace("#", "")}`);
   };
 
-  // Mock data for the service requests
+  // Mock data for the service requests (this will be replaced with API calls)
   const mockData = [
     {
       id: "#REQ01",
@@ -144,8 +156,11 @@ const ServiceTracker = () => {
   const endIndex = startIndex + 10;
   const paginatedData = filteredData.slice(startIndex, endIndex);
 
+  // Choose layout based on user role from auth context
+  const Layout = userRole === "admin" ? AdminLayout : StaffLayout;
+
   return (
-    <AdminLayout>
+    <Layout>
       <div className="space-y-6">
         {/* Search and Filter Section */}
         <div className="flex items-center justify-between gap-4">
@@ -238,7 +253,7 @@ const ServiceTracker = () => {
                       {getStatusBadge(item.warrantyStatus, "warrantyStatus")}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-center">
-                      <button 
+                      <button
                         onClick={() => handleMoreActions(item.id)}
                         className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
                         title="View Details"
@@ -289,7 +304,7 @@ const ServiceTracker = () => {
                     className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
                       currentPage === pageNum
                         ? "bg-gray-200 text-gray-600"
-                          : "text-gray-600 hover:bg-gray-100"
+                        : "text-gray-600 hover:bg-gray-100"
                     }`}
                   >
                     {pageNum}
@@ -329,7 +344,7 @@ const ServiceTracker = () => {
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </Layout>
   );
 };
 
