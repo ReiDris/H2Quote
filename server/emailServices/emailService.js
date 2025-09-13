@@ -1,4 +1,3 @@
-// services/emailService.js - Complete version
 const transporter = require('../config/email');
 
 const sendEmail = async (to, subject, htmlContent) => {

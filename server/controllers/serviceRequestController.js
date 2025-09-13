@@ -1,4 +1,3 @@
-// controllers/serviceRequestController.js
 const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
 
@@ -7,7 +6,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Customer creates a new service request
 const createServiceRequest = async (req, res) => {
   const client = await pool.connect();
   
@@ -15,7 +13,7 @@ const createServiceRequest = async (req, res) => {
     await client.query('BEGIN');
 
     const {
-      selectedServices, // array of services with {id, quantity}
+      selectedServices, 
       paymentMode,
       paymentTerms,
       downpayment,
@@ -28,7 +26,6 @@ const createServiceRequest = async (req, res) => {
     const customerId = req.user.id;
     const companyId = req.user.companyId;
 
-    // Validate required fields
     if (!selectedServices || selectedServices.length === 0) {
       return res.status(400).json({
         success: false,
@@ -36,11 +33,9 @@ const createServiceRequest = async (req, res) => {
       });
     }
 
-    // Generate request number using your existing function
     const requestNumberResult = await client.query('SELECT generate_request_number() as request_number');
     const requestNumber = requestNumberResult.rows[0].request_number;
 
-    // Calculate costs and duration
     let totalCost = 0;
     let estimatedDuration = 0;
     const serviceDetails = [];
@@ -65,7 +60,6 @@ const createServiceRequest = async (req, res) => {
       const itemTotal = serviceData.base_price * service.quantity;
       totalCost += itemTotal;
       
-      // Convert hours to days for duration estimation
       const serviceDays = Math.ceil(serviceData.estimated_duration_hours / 8);
       estimatedDuration = Math.max(estimatedDuration, serviceDays);
 
@@ -77,11 +71,9 @@ const createServiceRequest = async (req, res) => {
       });
     }
 
-    // Get initial status ID (assuming "New" is the first status)
     const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['New']);
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
-    // Create main service request
     const insertRequestQuery = `
       INSERT INTO service_requests 
       (request_number, company_id, requested_by_user_id, status_id, 
@@ -101,7 +93,6 @@ const createServiceRequest = async (req, res) => {
 
     const requestId = requestResult.rows[0].request_id;
 
-    // Add service items
     for (const service of serviceDetails) {
       const insertItemQuery = `
         INSERT INTO service_request_items 
@@ -113,8 +104,6 @@ const createServiceRequest = async (req, res) => {
         service.unitPrice, service.totalPrice
       ]);
     }
-
-    // Status history is automatically created by trigger
 
     await client.query('COMMIT');
 
@@ -141,7 +130,6 @@ const createServiceRequest = async (req, res) => {
   }
 };
 
-// Get customer's service requests
 const getCustomerRequests = async (req, res) => {
   try {
     const customerId = req.user.id;
@@ -176,14 +164,12 @@ const getCustomerRequests = async (req, res) => {
   }
 };
 
-// Get detailed service request
 const getRequestDetails = async (req, res) => {
   try {
     const { requestId } = req.params;
     const userId = req.user.id;
     const userType = req.user.userType;
 
-    // Base query with customer check for non-admin users
     let whereClause = 'sr.request_id = $1';
     let queryParams = [requestId];
 
@@ -217,7 +203,6 @@ const getRequestDetails = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Get service items
     const itemsQuery = `
       SELECT 
         sri.*, s.service_name, sc.category_name as category
@@ -229,7 +214,6 @@ const getRequestDetails = async (req, res) => {
     `;
     const itemsResult = await pool.query(itemsQuery, [requestId]);
 
-    // Get status history
     const historyQuery = `
       SELECT 
         rsh.*, 
@@ -245,7 +229,6 @@ const getRequestDetails = async (req, res) => {
     `;
     const historyResult = await pool.query(historyQuery, [requestId]);
 
-    // Get quotation if exists
     const quotationQuery = `
       SELECT q.*, CONCAT(u.first_name, ' ', u.last_name) as created_by_name
       FROM quotations q
@@ -275,7 +258,6 @@ const getRequestDetails = async (req, res) => {
   }
 };
 
-// Admin/Staff: Get all service requests
 const getAllRequests = async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
@@ -311,7 +293,6 @@ const getAllRequests = async (req, res) => {
 
     const result = await pool.query(query, queryParams);
 
-    // Get total count
     const countQuery = `
       SELECT COUNT(*) FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
@@ -342,7 +323,6 @@ const getAllRequests = async (req, res) => {
   }
 };
 
-// Admin/Staff: Add additional services/chemicals to existing request
 const addServicesToRequest = async (req, res) => {
   const client = await pool.connect();
   
@@ -353,7 +333,6 @@ const addServicesToRequest = async (req, res) => {
     const { additionalServices, adminNotes } = req.body;
     const adminId = req.user.id;
 
-    // Validate request exists and is in modifiable status
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -371,7 +350,6 @@ const addServicesToRequest = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Check if request can be modified
     if (!['New', 'Under Review', 'Quote Prepared'].includes(request.status_name)) {
       return res.status(400).json({
         success: false,
@@ -381,7 +359,6 @@ const addServicesToRequest = async (req, res) => {
 
     let additionalCost = 0;
 
-    // Add new services/chemicals
     for (const service of additionalServices) {
       const serviceQuery = `
         SELECT service_id, base_price FROM services 
@@ -401,7 +378,6 @@ const addServicesToRequest = async (req, res) => {
       const itemTotal = serviceData.base_price * service.quantity;
       additionalCost += itemTotal;
 
-      // Add to request items
       await client.query(`
         INSERT INTO service_request_items 
         (request_id, service_id, quantity, unit_price, line_total, notes)
@@ -409,14 +385,12 @@ const addServicesToRequest = async (req, res) => {
       `, [requestId, service.id, service.quantity, serviceData.base_price, itemTotal, 'Added by admin']);
     }
 
-    // Update request - the trigger will automatically update estimated_cost
     await client.query(`
       UPDATE service_requests 
       SET updated_at = NOW()
       WHERE request_id = $1
     `, [requestId]);
 
-    // Change status to Quote Prepared
     const quoteStatusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['Quote Prepared']);
     const quoteStatusId = quoteStatusResult.rows[0]?.status_id;
 
@@ -450,7 +424,6 @@ const addServicesToRequest = async (req, res) => {
   }
 };
 
-// Admin: Create quotation with discount
 const createQuotation = async (req, res) => {
   const client = await pool.connect();
   
@@ -469,7 +442,6 @@ const createQuotation = async (req, res) => {
     } = req.body;
     const adminId = req.user.id;
 
-    // Get request details and items
     const requestQuery = `
       SELECT sr.*, calculate_request_total(sr.request_id) as subtotal
       FROM service_requests sr
@@ -490,10 +462,8 @@ const createQuotation = async (req, res) => {
     const taxAmount = discountedSubtotal * parseFloat(taxRate);
     const totalAmount = discountedSubtotal + taxAmount;
 
-    // Generate quotation number
     const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
-    // Create quotation
     const insertQuotationQuery = `
       INSERT INTO quotations 
       (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
@@ -511,7 +481,6 @@ const createQuotation = async (req, res) => {
 
     const quotationId = quotationResult.rows[0].quotation_id;
 
-    // Copy service items to quotation items
     const copyItemsQuery = `
       INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
       SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
@@ -521,7 +490,6 @@ const createQuotation = async (req, res) => {
     `;
     await client.query(copyItemsQuery, [quotationId, requestId]);
 
-    // Update request status to Quote Prepared
     const quoteStatusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['Quote Prepared']);
     const quoteStatusId = quoteStatusResult.rows[0]?.status_id;
 
@@ -558,7 +526,6 @@ const createQuotation = async (req, res) => {
   }
 };
 
-// Customer: Approve or reject quotation
 const respondToQuotation = async (req, res) => {
   const client = await pool.connect();
   
@@ -569,7 +536,6 @@ const respondToQuotation = async (req, res) => {
     const { approved, customerNotes } = req.body;
     const customerId = req.user.id;
 
-    // Verify this is customer's quotation
     const quotationQuery = `
       SELECT q.*, sr.requested_by_user_id 
       FROM quotations q
@@ -588,15 +554,13 @@ const respondToQuotation = async (req, res) => {
     const quotation = quotationResult.rows[0];
     const newQuotationStatus = approved ? 'Approved' : 'Rejected';
     const newRequestStatus = approved ? 'Quote Approved' : 'Under Review';
-    
-    // Update quotation status
+
     await client.query(`
       UPDATE quotations 
       SET status = $1, approved_date = $2, approved_by_user_id = $3
       WHERE quotation_id = $4
     `, [newQuotationStatus, approved ? 'NOW()' : null, approved ? customerId : null, quotationId]);
 
-    // Update request status
     const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', [newRequestStatus]);
     const statusId = statusResult.rows[0]?.status_id;
 
@@ -631,7 +595,6 @@ const respondToQuotation = async (req, res) => {
   }
 };
 
-// Get available services catalog
 const getServicesCatalog = async (req, res) => {
   try {
     const { category } = req.query;
@@ -671,7 +634,6 @@ const getServicesCatalog = async (req, res) => {
   }
 };
 
-// Get chemicals catalog (for admin to add to requests)
 const getChemicalsCatalog = async (req, res) => {
   try {
     const query = `

@@ -8,7 +8,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Get all pending users for admin approval
 const getPendingUsers = async (req, res) => {
   try {
     const { data: users, error } = await supabase
@@ -40,12 +39,10 @@ const getPendingUsers = async (req, res) => {
   }
 };
 
-// Approve a user
 const approveUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Update user status to Active
     const { error: userError } = await supabase
       .from('users')
       .update({ 
@@ -58,7 +55,6 @@ const approveUser = async (req, res) => {
       throw userError;
     }
 
-    // Also activate the company if this is the primary contact
     const { data: user } = await supabase
       .from('users')
       .select('company_id, is_primary_contact')
@@ -75,7 +71,6 @@ const approveUser = async (req, res) => {
         .eq('company_id', user.company_id);
     }
 
-    // Log audit entry
     await supabase
       .from('audit_log')
       .insert({
@@ -102,13 +97,11 @@ const approveUser = async (req, res) => {
   }
 };
 
-// Reject a user
 const rejectUser = async (req, res) => {
   try {
     const { userId } = req.params;
     const { reason } = req.body;
 
-    // Update user status to Rejected
     const { error } = await supabase
       .from('users')
       .update({ 
@@ -122,7 +115,6 @@ const rejectUser = async (req, res) => {
       throw error;
     }
 
-    // Log audit entry
     await supabase
       .from('audit_log')
       .insert({
@@ -149,12 +141,10 @@ const rejectUser = async (req, res) => {
   }
 };
 
-// Serve verification files
 const serveVerificationFile = async (req, res) => {
   try {
     const { userId } = req.params;
-    
-    // Get file path from database
+
     const { data: user, error } = await supabase
       .from('users')
       .select('verification_file_path, verification_file_original_name')
@@ -170,16 +160,14 @@ const serveVerificationFile = async (req, res) => {
     
     const filePath = user.verification_file_path;
     const originalName = user.verification_file_original_name;
-    
-    // Check if file exists
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         success: false,
         message: 'File not found on server'
       });
     }
-    
-    // Set proper headers
+
     res.setHeader('Content-Disposition', `attachment; filename="${originalName}"`);
     res.sendFile(path.resolve(filePath));
     

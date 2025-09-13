@@ -1,4 +1,3 @@
-// middleware/auth.js
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -21,7 +20,6 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Get fresh user data
     const { data: userResults, error } = await supabase
       .rpc('get_user_with_company', { user_email: decoded.email });
 
@@ -34,7 +32,6 @@ const authenticateToken = async (req, res, next) => {
 
     const user = userResults[0];
 
-    // Check if user is still active
     if (user.user_status !== 'Active') {
       return res.status(403).json({
         success: false,

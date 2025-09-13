@@ -1,8 +1,6 @@
-// routes/health.js
 const express = require('express');
 const router = express.Router();
 
-// Basic health check
 router.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -13,10 +11,9 @@ router.get('/health', (req, res) => {
   });
 });
 
-// Detailed health check (optional)
+
 router.get('/health/detailed', async (req, res) => {
   try {
-    // You can add database ping, external service checks here
     const healthData = {
       success: true,
       message: 'All systems operational',

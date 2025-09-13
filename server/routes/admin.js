@@ -1,4 +1,3 @@
-// routes/admin.js
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
@@ -6,7 +5,6 @@ const path = require('path');
 const pool = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 
-// Admin middleware to check if user is admin
 const requireAdmin = (req, res, next) => {
   if (req.user.userType !== 'admin') {
     return res.status(403).json({
@@ -17,11 +15,9 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Apply authentication and admin check to all routes
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// Get all pending users for admin approval
 const getPendingUsers = async (req, res) => {
   try {
     const query = `
@@ -50,7 +46,6 @@ const getPendingUsers = async (req, res) => {
   }
 };
 
-// Approve a user
 const approveUser = async (req, res) => {
   const client = await pool.connect();
   
@@ -59,19 +54,16 @@ const approveUser = async (req, res) => {
 
     const { userId } = req.params;
 
-    // Update user status to Active
     await client.query(
       'UPDATE users SET status = $1, updated_at = NOW() WHERE user_id = $2',
       ['Active', userId]
     );
 
-    // Get user info to check if primary contact
     const userResult = await client.query(
       'SELECT company_id, is_primary_contact FROM users WHERE user_id = $1',
       [userId]
     );
 
-    // If primary contact, also activate the company
     if (userResult.rows.length > 0 && userResult.rows[0].is_primary_contact) {
       await client.query(
         'UPDATE companies SET status = $1, updated_at = NOW() WHERE company_id = $2',
@@ -123,12 +115,10 @@ const rejectUser = async (req, res) => {
   }
 };
 
-// Serve verification files (your existing function with fixes)
 const serveVerificationFile = async (req, res) => {
   try {
     const { userId } = req.params;
-    
-    // Get file path from database
+
     const query = 'SELECT verification_file_path, verification_file_original_name FROM users WHERE user_id = $1';
     const result = await pool.query(query, [userId]);
     
@@ -141,16 +131,14 @@ const serveVerificationFile = async (req, res) => {
     
     const filePath = result.rows[0].verification_file_path;
     const originalName = result.rows[0].verification_file_original_name;
-    
-    // Check if file exists
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         success: false,
         message: 'File not found on server'
       });
     }
-    
-    // Set proper headers
+
     res.setHeader('Content-Disposition', `attachment; filename="${originalName}"`);
     res.sendFile(path.resolve(filePath));
     
@@ -163,7 +151,6 @@ const serveVerificationFile = async (req, res) => {
   }
 };
 
-// Define routes
 router.get('/pending-users', getPendingUsers);
 router.post('/approve-user/:userId', approveUser);
 router.post('/reject-user/:userId', rejectUser);

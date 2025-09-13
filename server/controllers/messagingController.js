@@ -1,7 +1,10 @@
-// controllers/simplifiedMessagingController.js
+const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
 
-// Get user's inbox messages (what your frontend expects)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 const getInboxMessages = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -40,7 +43,6 @@ const getInboxMessages = async (req, res) => {
     queryParams.push(limit, offset);
     const result = await pool.query(query, queryParams);
 
-    // Get total count
     const countQuery = `
       SELECT COUNT(*) FROM messages 
       WHERE ${whereClause}
@@ -48,7 +50,6 @@ const getInboxMessages = async (req, res) => {
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
     const totalCount = parseInt(countResult.rows[0].count);
 
-    // Format data to match your frontend expectations
     const messages = result.rows.map(msg => ({
       id: msg.id,
       sender: msg.sender + (msg.senderCompany ? ` (${msg.senderCompany})` : ''),
@@ -84,7 +85,6 @@ const getInboxMessages = async (req, res) => {
   }
 };
 
-// Get sent messages
 const getSentMessages = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -151,13 +151,11 @@ const getSentMessages = async (req, res) => {
   }
 };
 
-// Get single message details with thread
 const getMessageDetails = async (req, res) => {
   try {
     const { messageId } = req.params;
     const userId = req.user.id;
 
-    // Get message thread (original + replies)
     const { data: thread, error } = await supabase
       .rpc('get_message_thread', { 
         msg_id: parseInt(messageId), 
@@ -175,10 +173,8 @@ const getMessageDetails = async (req, res) => {
       });
     }
 
-    // Mark original message as read if user is recipient
     await pool.query('SELECT mark_message_read($1, $2)', [messageId, userId]);
 
-    // Separate original message and replies
     const originalMessage = thread.find(msg => msg.is_original);
     const replies = thread.filter(msg => !msg.is_original);
 
@@ -211,7 +207,6 @@ const getMessageDetails = async (req, res) => {
   }
 };
 
-// Send new message
 const sendMessage = async (req, res) => {
   const client = await pool.connect();
   
@@ -228,7 +223,6 @@ const sendMessage = async (req, res) => {
 
     const senderId = req.user.id;
 
-    // Validate required fields
     if (!recipientId || !subject || !content) {
       return res.status(400).json({
         success: false,
@@ -236,7 +230,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Verify recipient exists
     const recipientCheck = await client.query(
       'SELECT user_id FROM users WHERE user_id = $1',
       [recipientId]
@@ -249,7 +242,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Insert message
     const insertQuery = `
       INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -283,7 +275,6 @@ const sendMessage = async (req, res) => {
   }
 };
 
-// Reply to message
 const replyToMessage = async (req, res) => {
   const client = await pool.connect();
   
@@ -301,7 +292,6 @@ const replyToMessage = async (req, res) => {
       });
     }
 
-    // Get original message details
     const originalQuery = `
       SELECT sender_id, recipient_id, subject, related_request_id, message_type
       FROM messages 
@@ -318,12 +308,9 @@ const replyToMessage = async (req, res) => {
     }
 
     const original = originalResult.rows[0];
-    
-    // Determine reply recipient (if sender is replying, send to original recipient, vice versa)
     const replyRecipient = original.sender_id === senderId ? original.recipient_id : original.sender_id;
     const replySubject = original.subject.startsWith('Re: ') ? original.subject : `Re: ${original.subject}`;
 
-    // Insert reply message
     const replyQuery = `
       INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -337,7 +324,6 @@ const replyToMessage = async (req, res) => {
 
     const replyId = replyResult.rows[0].message_id;
 
-    // Link reply to original message
     await client.query(`
       INSERT INTO message_replies (original_message_id, reply_message_id)
       VALUES ($1, $2)
@@ -366,7 +352,6 @@ const replyToMessage = async (req, res) => {
   }
 };
 
-// Get unread count
 const getUnreadCount = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -390,10 +375,9 @@ const getUnreadCount = async (req, res) => {
   }
 };
 
-// Mark messages as read
 const markAsRead = async (req, res) => {
   try {
-    const { messageIds } = req.body; // Array of message IDs
+    const { messageIds } = req.body; 
     const userId = req.user.id;
 
     if (!Array.isArray(messageIds) || messageIds.length === 0) {
@@ -403,7 +387,6 @@ const markAsRead = async (req, res) => {
       });
     }
 
-    // Mark messages as read
     const query = `
       UPDATE messages 
       SET is_read = TRUE, read_at = NOW()
@@ -428,7 +411,6 @@ const markAsRead = async (req, res) => {
   }
 };
 
-// Delete messages
 const deleteMessages = async (req, res) => {
   try {
     const { messageIds } = req.body;
@@ -441,7 +423,6 @@ const deleteMessages = async (req, res) => {
       });
     }
 
-    // Soft delete - mark as deleted for the user
     const query = `
       UPDATE messages 
       SET sender_deleted = CASE WHEN sender_id = $2 THEN TRUE ELSE sender_deleted END,
@@ -466,7 +447,6 @@ const deleteMessages = async (req, res) => {
   }
 };
 
-// Get list of users to message (for compose)
 const getMessageableUsers = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -476,7 +456,6 @@ const getMessageableUsers = async (req, res) => {
     let queryParams = [userId];
 
     if (userType === 'client') {
-      // Clients can only message admin/staff
       query = `
         SELECT user_id as id, CONCAT(first_name, ' ', last_name) as name, 
                user_type, department
@@ -485,7 +464,6 @@ const getMessageableUsers = async (req, res) => {
         ORDER BY user_type, last_name
       `;
     } else {
-      // Admin/staff can message anyone
       query = `
         SELECT u.user_id as id, CONCAT(u.first_name, ' ', u.last_name) as name, 
                u.user_type, u.department, c.company_name
