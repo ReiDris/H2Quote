@@ -9,7 +9,7 @@ const messageRoutes = require('./routes/messaging');
 
 const app = express();
 
-if (!process.env.JWT_SECRET) {
+if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
     console.error('Missing required environment variables');
     process.exit(1);
 }
