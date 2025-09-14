@@ -6,7 +6,7 @@ const { createClient } = require("@supabase/supabase-js");
 const pool = require("../config/database");
 const fs = require("fs");
 const path = require("path");
-const { sendUserWelcomeEmail, sendAdminNotificationEmail } = require('../services/emailService');
+const { sendUserWelcomeEmail, sendAdminNotificationEmail, sendPasswordResetEmail } = require('../services/emailService');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -447,16 +447,25 @@ const forgotPassword = async (req, res) => {
     // Check if user exists
     const { data: user, error } = await supabase
       .from("users")
-      .select("user_id, first_name, last_name, email")
+      .select("user_id, first_name, last_name, email, status")
       .eq("email", email)
       .single();
 
+    // Always return success message for security (don't reveal if email exists)
+    const successMessage = "If an account exists with this email, a password reset link has been sent.";
+
     if (error || !user) {
-      // Don't reveal if user exists for security
       return res.json({
         success: true,
-        message:
-          "If an account exists with this email, a password reset link has been sent.",
+        message: successMessage,
+      });
+    }
+
+    // Check if user account is active
+    if (user.status !== 'Active') {
+      return res.json({
+        success: true,
+        message: successMessage,
       });
     }
 
@@ -474,17 +483,25 @@ const forgotPassword = async (req, res) => {
       .eq("user_id", user.user_id);
 
     if (updateError) {
-      throw updateError;
+      console.error('Failed to save reset token:', updateError);
+      return res.json({
+        success: true,
+        message: successMessage,
+      });
     }
 
-    // TODO: Send reset email (implement your email service)
-    console.log("Password reset email would be sent to:", email);
-    console.log("Reset token:", resetToken);
+    // Send reset email
+    const userName = `${user.first_name} ${user.last_name}`.trim();
+    try {
+      await sendPasswordResetEmail(email, userName, resetToken);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      // Still return success to not reveal email existence
+    }
 
     res.json({
       success: true,
-      message:
-        "If an account exists with this email, a password reset link has been sent.",
+      message: successMessage,
     });
   } catch (error) {
     console.error("Password reset error:", error);
@@ -495,10 +512,171 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+const resetPassword = async (req, res) => {
+  try {
+    const { token, email, newPassword, confirmPassword } = req.body;
+
+    // Validate input
+    if (!token || !email || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match",
+      });
+    }
+
+    // Validate password strength (same as signup)
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+      });
+    }
+
+    // Find user with valid reset token
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("user_id, email, reset_token, reset_token_expiry, status")
+      .eq("email", email)
+      .eq("reset_token", token)
+      .single();
+
+    if (error || !user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token",
+      });
+    }
+
+    // Check if token has expired
+    const now = new Date();
+    const tokenExpiry = new Date(user.reset_token_expiry);
+    
+    if (now > tokenExpiry) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token has expired. Please request a new password reset.",
+      });
+    }
+
+    // Check if user account is active
+    if (user.status !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: "Account is not active. Please contact support.",
+      });
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password and clear reset token
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({
+        password_hash: hashedPassword,
+        reset_token: null,
+        reset_token_expiry: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.user_id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    // Log password reset for audit
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "users",
+        record_id: user.user_id,
+        action: "UPDATE",
+        new_values: { password_reset: true },
+        changed_by: user.email,
+        change_reason: "Password reset by user",
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Failed to log password reset:", auditError);
+    }
+
+    res.json({
+      success: true,
+      message: "Password has been reset successfully. You can now log in with your new password.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset password. Please try again.",
+    });
+  }
+};
+
+const validateResetToken = async (req, res) => {
+  try {
+    const { token, email } = req.query;
+
+    if (!token || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and email are required",
+      });
+    }
+
+    // Check if reset token exists and is valid
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("user_id, reset_token_expiry")
+      .eq("email", email)
+      .eq("reset_token", token)
+      .single();
+
+    if (error || !user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reset token",
+      });
+    }
+
+    // Check if token has expired
+    const now = new Date();
+    const tokenExpiry = new Date(user.reset_token_expiry);
+    
+    if (now > tokenExpiry) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token has expired",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Reset token is valid",
+    });
+  } catch (error) {
+    console.error("Validate reset token error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to validate reset token",
+    });
+  }
+};
+
 module.exports = {
   signup,
   login,
   getCurrentUser,
   logout,
   forgotPassword,
+  resetPassword,
+  validateResetToken,
 };
