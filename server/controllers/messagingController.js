@@ -111,7 +111,6 @@ const getSentMessages = async (req, res) => {
 
     const result = await pool.query(query, [userId, limit, offset]);
 
-    // Get total count
     const countResult = await pool.query(`
       SELECT COUNT(*) FROM messages 
       WHERE sender_id = $1 AND sender_deleted = FALSE
