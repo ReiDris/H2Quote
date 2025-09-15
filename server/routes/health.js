@@ -20,9 +20,7 @@ router.get('/health/detailed', async (req, res) => {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       memory: process.memoryUsage(),
-      // Add database check if needed:
-      // database: await checkDatabaseConnection(),
-      // supabase: await checkSupabaseConnection()
+     
     };
 
     res.json(healthData);

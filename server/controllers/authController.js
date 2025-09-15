@@ -1,4 +1,3 @@
-// controllers/authController.js
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -13,14 +12,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Your existing signup function
 const signup = async (req, res) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-
-    // Extract form data
     const {
       companyName,
       customerName,
@@ -30,7 +26,6 @@ const signup = async (req, res) => {
       confirmPassword,
     } = req.body;
 
-    // Validate required fields
     if (
       !companyName ||
       !customerName ||
@@ -45,7 +40,6 @@ const signup = async (req, res) => {
       });
     }
 
-    // Validate file upload
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -53,7 +47,6 @@ const signup = async (req, res) => {
       });
     }
 
-    // Check if email already exists
     const existingUserQuery = "SELECT user_id FROM users WHERE email = $1";
     const existingUsers = await client.query(existingUserQuery, [email]);
 
@@ -64,7 +57,6 @@ const signup = async (req, res) => {
       });
     }
 
-    // Check if company already exists
     let companyId;
     const existingCompanyQuery =
       "SELECT company_id FROM companies WHERE company_name = $1";
@@ -75,7 +67,6 @@ const signup = async (req, res) => {
     if (existingCompanies.rows.length > 0) {
       companyId = existingCompanies.rows[0].company_id;
     } else {
-      // Create new company with pending status
       const insertCompanyQuery = `
                 INSERT INTO companies 
                 (company_name, phone, email, status, created_at, updated_at) 
@@ -90,20 +81,16 @@ const signup = async (req, res) => {
       companyId = companyResult.rows[0].company_id;
     }
 
-    // Hash password
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Generate verification token
     const verificationToken =
       Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 
-    // Split customer name into first and last name
     const nameParts = customerName.trim().split(" ");
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(" ") || "";
 
-    // Insert user with verification file info
     const insertUserQuery = `
             INSERT INTO users 
             (company_id, first_name, last_name, email, phone, user_type, password_hash, 
@@ -127,13 +114,12 @@ const signup = async (req, res) => {
 
     const userId = userResult.rows[0].user_id;
 
-    // Send emails
     try {
         await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
         await sendAdminNotificationEmail(userId, customerName, companyName, email, contactNo);
     } catch (emailError) {
         console.error('Failed to send emails:', emailError);
-        // Don't fail the signup if email fails
+       
     }
 
     await client.query("COMMIT");
@@ -157,7 +143,6 @@ const signup = async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
 
-    // Clean up uploaded file if database operation fails
     if (req.file && req.file.path) {
       try {
         fs.unlinkSync(req.file.path);
@@ -177,12 +162,10 @@ const signup = async (req, res) => {
   }
 };
 
-// Login function
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validate input
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -190,7 +173,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Get user with company details using the helper function
     const { data: userResults, error: userError } = await supabase.rpc(
       "get_user_with_company",
       { user_email: email }
@@ -205,7 +187,6 @@ const login = async (req, res) => {
 
     const user = userResults[0];
 
-    // Check user account status first
     if (user.user_status === "Inactive") {
       let message = "Your account is pending verification.";
 
@@ -230,7 +211,6 @@ const login = async (req, res) => {
       });
     }
 
-    // For client users, also check company status
     if (user.user_type === "client" && user.company_status !== "Active") {
       return res.status(403).json({
         success: false,
@@ -239,7 +219,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Verify password
     if (!user.password_hash) {
       return res.status(401).json({
         success: false,
@@ -255,7 +234,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Update last login timestamp
     const { error: updateError } = await supabase
       .from("users")
       .update({ last_login: new Date().toISOString() })
@@ -265,7 +243,6 @@ const login = async (req, res) => {
       console.error("Failed to update last login:", updateError);
     }
 
-    // Generate JWT token
     const tokenPayload = {
       userId: user.user_id,
       email: user.email,
@@ -279,7 +256,6 @@ const login = async (req, res) => {
       { expiresIn: "24h" }
     );
 
-    // Determine user role for frontend routing
     let role;
     switch (user.user_type) {
       case "admin":
@@ -289,13 +265,12 @@ const login = async (req, res) => {
         role = "staff";
         break;
       case "client":
-        role = "customer"; // Your frontend expects 'customer'
+        role = "customer"; 
         break;
       default:
         role = "customer";
     }
 
-    // Prepare user data for response
     const userData = {
       id: user.user_id,
       email: user.email,
@@ -303,7 +278,7 @@ const login = async (req, res) => {
       firstName: user.first_name,
       lastName: user.last_name,
       userType: user.user_type,
-      role: role, // For frontend routing
+      role: role, 
       department: user.department,
       companyId: user.company_id,
       companyName: user.company_name,
@@ -312,7 +287,6 @@ const login = async (req, res) => {
       lastLogin: user.last_login,
     };
 
-    // Log successful login for audit
     try {
       await supabase.from("audit_log").insert({
         table_name: "users",
@@ -345,7 +319,6 @@ const login = async (req, res) => {
   }
 };
 
-// Get current user function
 const getCurrentUser = async (req, res) => {
   try {
     const { data: userResults, error } = await supabase.rpc(
@@ -406,10 +379,8 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-// Logout function
 const logout = async (req, res) => {
   try {
-    // Log logout for audit
     await supabase.from("audit_log").insert({
       table_name: "users",
       record_id: req.user.id,
@@ -432,7 +403,6 @@ const logout = async (req, res) => {
   }
 };
 
-// Forgot password function
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -444,14 +414,12 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // Check if user exists
     const { data: user, error } = await supabase
       .from("users")
       .select("user_id, first_name, last_name, email, status")
       .eq("email", email)
       .single();
 
-    // Always return success message for security (don't reveal if email exists)
     const successMessage = "If an account exists with this email, a password reset link has been sent.";
 
     if (error || !user) {
@@ -461,7 +429,6 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // Check if user account is active
     if (user.status !== 'Active') {
       return res.json({
         success: true,
@@ -469,11 +436,9 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate reset token
     const resetToken = crypto.randomBytes(32).toString("hex");
     const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
 
-    // Save reset token
     const { error: updateError } = await supabase
       .from("users")
       .update({
@@ -490,13 +455,12 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // Send reset email
     const userName = `${user.first_name} ${user.last_name}`.trim();
     try {
       await sendPasswordResetEmail(email, userName, resetToken);
     } catch (emailError) {
       console.error('Failed to send password reset email:', emailError);
-      // Still return success to not reveal email existence
+     
     }
 
     res.json({
@@ -516,7 +480,6 @@ const resetPassword = async (req, res) => {
   try {
     const { token, email, newPassword, confirmPassword } = req.body;
 
-    // Validate input
     if (!token || !email || !newPassword || !confirmPassword) {
       return res.status(400).json({
         success: false,
@@ -531,7 +494,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Validate password strength (same as signup)
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
     if (!passwordRegex.test(newPassword)) {
       return res.status(400).json({
@@ -540,7 +502,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Find user with valid reset token
     const { data: user, error } = await supabase
       .from("users")
       .select("user_id, email, reset_token, reset_token_expiry, status")
@@ -555,7 +516,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Check if token has expired
     const now = new Date();
     const tokenExpiry = new Date(user.reset_token_expiry);
     
@@ -566,7 +526,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Check if user account is active
     if (user.status !== 'Active') {
       return res.status(400).json({
         success: false,
@@ -574,11 +533,9 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Hash new password
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
 
-    // Update password and clear reset token
     const { error: updateError } = await supabase
       .from("users")
       .update({
@@ -593,7 +550,6 @@ const resetPassword = async (req, res) => {
       throw updateError;
     }
 
-    // Log password reset for audit
     try {
       await supabase.from("audit_log").insert({
         table_name: "users",
@@ -632,7 +588,6 @@ const validateResetToken = async (req, res) => {
       });
     }
 
-    // Check if reset token exists and is valid
     const { data: user, error } = await supabase
       .from("users")
       .select("user_id, reset_token_expiry")
@@ -647,7 +602,6 @@ const validateResetToken = async (req, res) => {
       });
     }
 
-    // Check if token has expired
     const now = new Date();
     const tokenExpiry = new Date(user.reset_token_expiry);
     

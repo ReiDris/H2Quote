@@ -71,8 +71,6 @@ const createUserWithPassword = async (userData) => {
     if (!password) {
         throw new Error('Password is required');
     }
-
-    // Hash the password
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
     
@@ -114,7 +112,6 @@ const updateUser = async (userId, updateData) => {
             status
         } = updateData;
 
-        // Build dynamic update query
         const updateFields = [];
         const values = [];
         let paramCount = 1;
@@ -148,7 +145,6 @@ const updateUser = async (userId, updateData) => {
             throw new Error('No fields to update');
         }
 
-        // Always update the updated_at timestamp
         updateFields.push(`updated_at = NOW()`);
         values.push(userId);
 
