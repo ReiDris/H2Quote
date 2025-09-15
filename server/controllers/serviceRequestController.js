@@ -74,7 +74,6 @@ const createServiceRequest = async (req, res) => {
     const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['New']);
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
-    // Convert downpayment percentage string to number (e.g., "50%" -> 50)
     let downpaymentPercentage = 0;
     if (downpayment && downpayment.includes('%')) {
       downpaymentPercentage = parseFloat(downpayment.replace('%', ''));
@@ -113,12 +112,10 @@ const createServiceRequest = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Create default payment records
     try {
       await createDefaultPayments(requestId);
     } catch (paymentError) {
       console.error('Failed to create default payments:', paymentError);
-      // Don't fail the request creation if payment setup fails
     }
 
     res.status(201).json({
@@ -323,7 +320,6 @@ const getRequestDetails = async (req, res) => {
     `;
     const quotationResult = await pool.query(quotationQuery, [requestId]);
 
-    // Get real payment history from database
     const paymentQuery = `
       SELECT 
         payment_phase as phase,
@@ -342,7 +338,6 @@ const getRequestDetails = async (req, res) => {
     `;
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
-    // If no payments exist, create default payment structure based on downpayment_percentage
     let paymentHistory;
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
@@ -396,7 +391,6 @@ const getRequestDetails = async (req, res) => {
   }
 };
 
-// Keep all other existing functions unchanged...
 const getAllRequests = async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
