@@ -4,7 +4,8 @@ const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const healthRoutes = require('./routes/health');
 const serviceRequestRoutes = require('./routes/serviceRequests');
-const messageRoutes = require('./routes/messaging'); 
+const messageRoutes = require('./routes/messaging');
+const chatbotRoutes = require('./routes/chatbot');
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api', healthRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
 app.use('/api/messaging', messageRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 app.use((error, req, res, next) => {
     console.error('Unhandled error:', error);

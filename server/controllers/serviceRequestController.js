@@ -6,6 +6,37 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+const createDefaultPayments = async (requestId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const requestQuery = `
+      SELECT estimated_cost, downpayment_percentage 
+      FROM service_requests 
+      WHERE request_id = $1
+    `;
+    const request = await client.query(requestQuery, [requestId]);
+    const { estimated_cost, downpayment_percentage } = request.rows[0];
+    
+    const downpaymentPercent = downpayment_percentage || 50;
+    const downpaymentAmount = Math.round((estimated_cost * downpaymentPercent) / 100);
+    const remainingAmount = estimated_cost - downpaymentAmount;
+    
+    await client.query(`
+      INSERT INTO payments (request_id, payment_phase, amount, status)
+      VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+    `, [requestId, downpaymentAmount, remainingAmount]);
+    
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 const createServiceRequest = async (req, res) => {
   const client = await pool.connect();
   
@@ -74,6 +105,11 @@ const createServiceRequest = async (req, res) => {
     const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['New']);
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
+    let downpaymentPercentage = 0;
+    if (downpayment && downpayment.includes('%')) {
+      downpaymentPercentage = parseFloat(downpayment.replace('%', ''));
+    }
+
     const insertRequestQuery = `
       INSERT INTO service_requests 
       (request_number, company_id, requested_by_user_id, status_id, 
@@ -88,7 +124,7 @@ const createServiceRequest = async (req, res) => {
       requestNumber, companyId, customerId, initialStatusId,
       'Service request from customer portal', siteLocation, preferredSchedule,
       specialRequirements, remarks, totalCost, estimatedDuration,
-      paymentMode, paymentTerms, downpayment
+      paymentMode, paymentTerms, downpaymentPercentage
     ]);
 
     const requestId = requestResult.rows[0].request_id;
@@ -106,6 +142,12 @@ const createServiceRequest = async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    try {
+      await createDefaultPayments(requestId);
+    } catch (paymentError) {
+      console.error('Failed to create default payments:', paymentError);
+    }
 
     res.status(201).json({
       success: true,
@@ -136,11 +178,38 @@ const getCustomerRequests = async (req, res) => {
     
     const query = `
       SELECT 
-        sr.request_id, sr.request_number, rs.status_name as status, 
-        sr.estimated_cost, sr.request_date as created_at,
-        sr.target_completion_date, sr.estimated_duration_days,
+        sr.request_id, 
+        sr.request_number, 
+        rs.status_name as status, 
+        sr.estimated_cost, 
+        sr.request_date as created_at,
+        sr.target_completion_date, 
+        sr.estimated_duration_days,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        sr.payment_mode, sr.payment_terms, sr.downpayment_percentage
+        sr.payment_mode, 
+        sr.payment_terms, 
+        sr.downpayment_percentage,
+        -- Add service status for frontend
+        CASE 
+          WHEN rs.status_name = 'New' THEN 'Pending'
+          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+          WHEN rs.status_name = 'Completed' THEN 'Completed'
+          ELSE rs.status_name
+        END as service_status,
+        -- Add payment status calculation
+        CASE 
+          WHEN sr.payment_status IS NULL THEN 'Pending'
+          ELSE sr.payment_status
+        END as payment_status,
+        -- Add warranty status
+        CASE 
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
+          ELSE 'N/A'
+        END as warranty_status
       FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
       LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
@@ -180,10 +249,42 @@ const getRequestDetails = async (req, res) => {
 
     const requestQuery = `
       SELECT 
-        sr.*, rs.status_name,
+        sr.*, 
+        rs.status_name,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
         c.company_name,
-        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name
+        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+        -- Add formatted fields for frontend
+        TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
+        CASE 
+          WHEN rs.status_name = 'New' THEN 'Pending'
+          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+          WHEN rs.status_name = 'Completed' THEN 'Completed'
+          ELSE rs.status_name
+        END as service_status,
+        CASE 
+          WHEN sr.payment_status IS NULL THEN 'Pending'
+          ELSE sr.payment_status
+        END as payment_status,
+        CASE 
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
+          ELSE 'N/A'
+        END as warranty_status,
+        CASE 
+          WHEN sr.warranty_months IS NOT NULL THEN CONCAT(sr.warranty_months, ' months')
+          ELSE '6 months'
+        END as warranty,
+        CASE 
+          WHEN sr.estimated_duration_days IS NOT NULL THEN CONCAT(sr.estimated_duration_days, ' Days')
+          ELSE '3 - 7 Days'
+        END as estimated_duration,
+        TO_CHAR(sr.service_start_date, 'Mon DD, YYYY') as service_start_date,
+        TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
+        TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline
       FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
       JOIN users u ON sr.requested_by_user_id = u.user_id
@@ -205,7 +306,18 @@ const getRequestDetails = async (req, res) => {
 
     const itemsQuery = `
       SELECT 
-        sri.*, s.service_name, sc.category_name as category
+        sri.*, 
+        s.service_name, 
+        sc.category_name as category,
+        CASE 
+          WHEN sc.category_name IS NOT NULL THEN sc.category_name
+          ELSE 'Services'
+        END as service_category,
+        s.service_name as service,
+        COALESCE(sri.notes, '-') as remarks,
+        sri.quantity,
+        CONCAT('₱', sri.unit_price::text) as unit_price,
+        CONCAT('₱', sri.line_total::text) as total_price
       FROM service_request_items sri
       JOIN services s ON sri.service_id = s.service_id
       LEFT JOIN service_categories sc ON s.category_id = sc.category_id
@@ -239,10 +351,62 @@ const getRequestDetails = async (req, res) => {
     `;
     const quotationResult = await pool.query(quotationQuery, [requestId]);
 
+    const paymentQuery = `
+      SELECT 
+        payment_phase as phase,
+        CONCAT(ROUND((amount::numeric / NULLIF(sr.estimated_cost, 0) * 100), 0), '%') as percentage,
+        CONCAT('₱', amount::text) as amount,
+        COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
+        CASE 
+          WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
+          ELSE 'Pending'
+        END as "paidOn",
+        status as "paymentStatus"
+      FROM payments p
+      JOIN service_requests sr ON p.request_id = sr.request_id
+      WHERE p.request_id = $1
+      ORDER BY payment_id
+    `;
+    const paymentResult = await pool.query(paymentQuery, [requestId]);
+
+    let paymentHistory;
+    if (paymentResult.rows.length === 0) {
+      const downpaymentPercent = request.downpayment_percentage || 50;
+      const remainingPercent = 100 - downpaymentPercent;
+      const downpaymentAmount = Math.round((request.estimated_cost * downpaymentPercent) / 100);
+      const remainingAmount = request.estimated_cost - downpaymentAmount;
+
+      paymentHistory = [
+        {
+          phase: "Down Payment",
+          percentage: `${downpaymentPercent}%`,
+          amount: `₱${downpaymentAmount.toLocaleString()}`,
+          proofOfPayment: "-",
+          paidOn: "Pending",
+          paymentStatus: "Pending"
+        },
+        {
+          phase: "Completion Balance",
+          percentage: `${remainingPercent}%`,
+          amount: `₱${remainingAmount.toLocaleString()}`,
+          proofOfPayment: "-",
+          paidOn: "Pending",
+          paymentStatus: "Pending"
+        }
+      ];
+    } else {
+      paymentHistory = paymentResult.rows;
+    }
+
     res.json({
       success: true,
       data: {
-        request: request,
+        request: {
+          ...request,
+          id: request.request_number,
+          totalCost: `₱ ${request.estimated_cost?.toLocaleString() || '0'}`,
+          paymentHistory: paymentHistory
+        },
         items: itemsResult.rows,
         statusHistory: historyResult.rows,
         quotation: quotationResult.rows[0] || null
