@@ -13,7 +13,8 @@ const emailConfig = {
     }
 };
 
-const transporter = nodemailer.createTransporter(emailConfig);
+// Change from createTransporter to createTransport
+const transporter = nodemailer.createTransport(emailConfig);
 
 transporter.verify((error, success) => {
     if (error) {

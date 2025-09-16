@@ -5,7 +5,7 @@ const { createClient } = require("@supabase/supabase-js");
 const pool = require("../config/database");
 const fs = require("fs");
 const path = require("path");
-const { sendUserWelcomeEmail, sendAdminNotificationEmail, sendPasswordResetEmail } = require('../services/emailService');
+const { sendUserWelcomeEmail, sendAdminNotificationEmail, sendPasswordResetEmail } = require('../emailServices/emailService');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -116,7 +116,8 @@ const signup = async (req, res) => {
 
     try {
         await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
-        await sendAdminNotificationEmail(userId, customerName, companyName, email, contactNo);
+        // FIXED: Removed userId parameter to match function signature
+        await sendAdminNotificationEmail(customerName, companyName, email, contactNo);
     } catch (emailError) {
         console.error('Failed to send emails:', emailError);
        

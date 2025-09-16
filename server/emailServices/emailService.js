@@ -55,7 +55,7 @@ const generateUserWelcomeEmail = (customerName, companyName, email, contactNo) =
     `;
 };
 
-const generateAdminNotificationEmail = (userId, customerName, companyName, email, contactNo) => {
+const generateAdminNotificationEmail = (customerName, companyName, email, contactNo) => {
     return `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background-color: #fff3cd; padding: 30px; border-radius: 10px; border-left: 5px solid #ffc107;">
@@ -67,7 +67,6 @@ const generateAdminNotificationEmail = (userId, customerName, companyName, email
                 
                 <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
                     <h3 style="color: #333; margin-top: 0;">User Details:</h3>
-                    <p style="margin: 5px 0;"><strong>User ID:</strong> ${userId}</p>
                     <p style="margin: 5px 0;"><strong>Name:</strong> ${customerName}</p>
                     <p style="margin: 5px 0;"><strong>Company:</strong> ${companyName}</p>
                     <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
@@ -89,17 +88,73 @@ const generateAdminNotificationEmail = (userId, customerName, companyName, email
     `;
 };
 
+const generateAccountApprovalEmail = (customerName, companyName, email) => {
+    return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #d4edda; padding: 30px; border-radius: 10px; border-left: 5px solid #28a745;">
+                <h1 style="color: #155724; text-align: center; margin-bottom: 30px;">Account Approved!</h1>
+                
+                <p style="font-size: 16px; color: #155724; line-height: 1.6;">
+                    Dear ${customerName},
+                </p>
+                
+                <p style="font-size: 16px; color: #155724; line-height: 1.6;">
+                    Great news! Your H2Quote account for <strong>${companyName}</strong> has been approved and is now active.
+                </p>
+                
+                <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #c3e6cb;">
+                    <h3 style="color: #155724; margin-top: 0;">What's Next?</h3>
+                    <ul style="color: #155724; margin: 10px 0; padding-left: 20px;">
+                        <li style="margin-bottom: 8px;">Log in to your account using your registered email: <strong>${email}</strong></li>
+                        <li style="margin-bottom: 8px;">Browse our services catalog and request quotes</li>
+                        <li style="margin-bottom: 8px;">Track your service requests and manage payments</li>
+                        <li style="margin-bottom: 8px;">Access your account settings and company information</li>
+                    </ul>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" 
+                       style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                        Login to Your Account
+                    </a>
+                </div>
+                
+                <p style="font-size: 16px; color: #155724; line-height: 1.6;">
+                    You can now enjoy full access to our platform and start requesting services for your business needs.
+                </p>
+                
+                <p style="font-size: 16px; color: #155724; line-height: 1.6;">
+                    If you have any questions or need assistance getting started, please don't hesitate to contact our support team.
+                </p>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <p style="color: #6c757d; font-size: 14px;">
+                        Welcome aboard!<br>
+                        The H2Quote Team
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
 const sendUserWelcomeEmail = async (customerName, companyName, email, contactNo) => {
     const subject = 'Welcome to H2Quote - Account Under Review';
     const htmlContent = generateUserWelcomeEmail(customerName, companyName, email, contactNo);
     return await sendEmail(email, subject, htmlContent);
 };
 
-const sendAdminNotificationEmail = async (userId, customerName, companyName, email, contactNo) => {
+const sendAdminNotificationEmail = async (customerName, companyName, email, contactNo) => {
     const subject = `New User Registration - ${companyName}`;
-    const htmlContent = generateAdminNotificationEmail(userId, customerName, companyName, email, contactNo);
+    const htmlContent = generateAdminNotificationEmail(customerName, companyName, email, contactNo);
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@trishkaye.com';
     return await sendEmail(adminEmail, subject, htmlContent);
+};
+
+const sendAccountApprovalEmail = async (customerName, companyName, email) => {
+    const subject = 'Account Approved - Welcome to H2Quote!';
+    const htmlContent = generateAccountApprovalEmail(customerName, companyName, email);
+    return await sendEmail(email, subject, htmlContent);
 };
 
 const generatePasswordResetEmail = (userName, resetToken, resetUrl) => {
@@ -164,8 +219,10 @@ module.exports = {
     sendEmail,
     generateUserWelcomeEmail,
     generateAdminNotificationEmail,
+    generateAccountApprovalEmail,
     sendUserWelcomeEmail,
     sendAdminNotificationEmail,
+    sendAccountApprovalEmail,
     generatePasswordResetEmail,
     sendPasswordResetEmail
 };

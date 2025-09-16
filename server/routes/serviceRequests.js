@@ -25,16 +25,20 @@ const requireCustomer = (req, res, next) => {
 
 router.use(authenticateToken);
 
+// Specific routes FIRST
 router.get('/services/catalog', serviceRequestController.getServicesCatalog);
-
-router.post('/', requireCustomer, serviceRequestController.createServiceRequest);
+router.get('/chemicals/catalog', serviceRequestController.getChemicalsCatalog);
+router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCatalog);
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
-router.get('/:requestId/details', serviceRequestController.getRequestDetails); // Can be accessed by customer or admin
-router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 
-router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
+// Routes with parameters
+router.get('/:requestId/details', serviceRequestController.getRequestDetails);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
-router.get('/chemicals/catalog', requireAdminOrStaff, serviceRequestController.getChemicalsCatalog);
+router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
+
+// Generic routes LAST
+router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
+router.post('/', requireCustomer, serviceRequestController.createServiceRequest);
 
 module.exports = router;
