@@ -6,6 +6,37 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+const createDefaultPayments = async (requestId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const requestQuery = `
+      SELECT estimated_cost, downpayment_percentage 
+      FROM service_requests 
+      WHERE request_id = $1
+    `;
+    const request = await client.query(requestQuery, [requestId]);
+    const { estimated_cost, downpayment_percentage } = request.rows[0];
+    
+    const downpaymentPercent = downpayment_percentage || 50;
+    const downpaymentAmount = Math.round((estimated_cost * downpaymentPercent) / 100);
+    const remainingAmount = estimated_cost - downpaymentAmount;
+    
+    await client.query(`
+      INSERT INTO payments (request_id, payment_phase, amount, status)
+      VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+    `, [requestId, downpaymentAmount, remainingAmount]);
+    
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 const createServiceRequest = async (req, res) => {
   const client = await pool.connect();
   
