@@ -72,33 +72,68 @@ const createServiceRequest = async (req, res) => {
     const serviceDetails = [];
 
     for (const service of selectedServices) {
-      const serviceQuery = `
-        SELECT service_id, service_name, base_price, estimated_duration_hours 
-        FROM services 
-        WHERE service_id = $1 AND is_active = true
-      `;
-      const serviceResult = await client.query(serviceQuery, [service.id]);
+      // Handle different item types (services, chemicals, refrigerants)
+      let itemQuery, itemData;
       
-      if (serviceResult.rows.length === 0) {
+      if (typeof service.id === 'string' && service.id.startsWith('chem_')) {
+        // Chemical item
+        const chemicalId = parseInt(service.id.replace('chem_', ''));
+        itemQuery = `
+          SELECT chemical_id as id, chemical_name as name, price as base_price, 'chemical' as type
+          FROM chemicals 
+          WHERE chemical_id = $1 AND is_active = true
+        `;
+        const result = await client.query(itemQuery, [chemicalId]);
+        itemData = result.rows[0];
+      } else if (typeof service.id === 'string' && service.id.startsWith('refrig_')) {
+        // Refrigerant item
+        const refrigerantId = parseInt(service.id.replace('refrig_', ''));
+        itemQuery = `
+          SELECT refrigerant_id as id, refrigerant_name as name, price as base_price, 'refrigerant' as type
+          FROM refrigerants 
+          WHERE refrigerant_id = $1 AND is_active = true
+        `;
+        const result = await client.query(itemQuery, [refrigerantId]);
+        itemData = result.rows[0];
+      } else {
+        // Service item
+        itemQuery = `
+          SELECT service_id as id, service_name as name, base_price, estimated_duration_hours, 'service' as type
+          FROM services 
+          WHERE service_id = $1 AND is_active = true
+        `;
+        const result = await client.query(itemQuery, [service.id]);
+        itemData = result.rows[0];
+        
+        if (itemData && itemData.estimated_duration_hours) {
+          const serviceDays = Math.ceil(itemData.estimated_duration_hours / 8);
+          estimatedDuration = Math.max(estimatedDuration, serviceDays);
+        }
+      }
+      
+      if (!itemData) {
         await client.query('ROLLBACK');
         return res.status(400).json({
           success: false,
-          message: `Service with ID ${service.id} not found`
+          message: `Item with ID ${service.id} not found`
         });
       }
 
-      const serviceData = serviceResult.rows[0];
-      const itemTotal = serviceData.base_price * service.quantity;
+      const itemTotal = itemData.base_price * service.quantity;
       totalCost += itemTotal;
-      
-      const serviceDays = Math.ceil(serviceData.estimated_duration_hours / 8);
-      estimatedDuration = Math.max(estimatedDuration, serviceDays);
+
+      // For non-service items, add minimal duration
+      if (itemData.type !== 'service' && estimatedDuration === 0) {
+        estimatedDuration = 1; // Default 1 day for chemicals/refrigerants
+      }
 
       serviceDetails.push({
-        serviceId: serviceData.service_id,
+        itemId: itemData.id,
+        itemType: itemData.type,
         quantity: service.quantity,
-        unitPrice: serviceData.base_price,
-        totalPrice: itemTotal
+        unitPrice: itemData.base_price,
+        totalPrice: itemTotal,
+        name: itemData.name
       });
     }
 
@@ -129,16 +164,32 @@ const createServiceRequest = async (req, res) => {
 
     const requestId = requestResult.rows[0].request_id;
 
-    for (const service of serviceDetails) {
-      const insertItemQuery = `
-        INSERT INTO service_request_items 
-        (request_id, service_id, quantity, unit_price, line_total)
-        VALUES ($1, $2, $3, $4, $5)
-      `;
-      await client.query(insertItemQuery, [
-        requestId, service.serviceId, service.quantity, 
-        service.unitPrice, service.totalPrice
-      ]);
+    // Insert items based on type
+    for (const item of serviceDetails) {
+      if (item.itemType === 'service') {
+        const insertItemQuery = `
+          INSERT INTO service_request_items 
+          (request_id, service_id, quantity, unit_price, line_total)
+          VALUES ($1, $2, $3, $4, $5)
+        `;
+        await client.query(insertItemQuery, [
+          requestId, item.itemId, item.quantity, 
+          item.unitPrice, item.totalPrice
+        ]);
+      }
+      // Note: You may want to create separate tables for chemical_request_items and refrigerant_request_items
+      // For now, we'll store them in service_request_items with a note
+      else {
+        const insertItemQuery = `
+          INSERT INTO service_request_items 
+          (request_id, service_id, quantity, unit_price, line_total, notes)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `;
+        await client.query(insertItemQuery, [
+          requestId, item.itemId, item.quantity, 
+          item.unitPrice, item.totalPrice, `${item.itemType}: ${item.name}`
+        ]);
+      }
     }
 
     await client.query('COMMIT');
@@ -773,9 +824,17 @@ const getServicesCatalog = async (req, res) => {
 
     const query = `
       SELECT 
-        s.service_id, s.service_name as name, sc.category_name as category, 
-        s.base_price, s.description, s.estimated_duration_hours,
-        s.requires_site_visit, s.chemicals_required
+        s.service_id, 
+        s.service_name as name, 
+        sc.category_name as category, 
+        s.base_price, 
+        s.description, 
+        s.estimated_duration_hours,
+        s.requires_site_visit, 
+        s.chemicals_required,
+        s.equipment_required,
+        s.service_code,
+        s.price_unit
       FROM services s
       LEFT JOIN service_categories sc ON s.category_id = sc.category_id
       WHERE ${whereClause}
@@ -804,12 +863,18 @@ const getChemicalsCatalog = async (req, res) => {
       SELECT 
         chemical_id as id, 
         CONCAT(brand, ' - ', chemical_name) as name,
+        brand,
+        chemical_name,
         'chemical' as category,
         price as base_price,
         description,
         capacity,
         hazard_type,
-        uses
+        uses,
+        status,
+        stock_quantity,
+        supplier,
+        sds_available
       FROM chemicals 
       WHERE is_active = true
       ORDER BY brand, chemical_name
@@ -831,6 +896,177 @@ const getChemicalsCatalog = async (req, res) => {
   }
 };
 
+const getRefrigerantsCatalog = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        refrigerant_id as id, 
+        refrigerant_name as name,
+        'refrigerant' as category,
+        price as base_price,
+        description,
+        capacity,
+        hazard_type,
+        chemical_components,
+        status,
+        stock_quantity,
+        sds_file
+      FROM refrigerants 
+      WHERE is_active = true
+      ORDER BY refrigerant_name
+    `;
+
+    const result = await pool.query(query);
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+
+  } catch (error) {
+    console.error('Get refrigerants catalog error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch refrigerants catalog'
+    });
+  }
+};
+
+// Helper function to get service with related chemicals and refrigerants
+const getServiceWithRelatedItems = async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+
+    const serviceQuery = `
+      SELECT 
+        s.*,
+        sc.category_name
+      FROM services s
+      LEFT JOIN service_categories sc ON s.category_id = sc.category_id
+      WHERE s.service_id = $1 AND s.is_active = true
+    `;
+
+    const chemicalsQuery = `
+      SELECT 
+        c.*,
+        schem.quantity_required,
+        schem.is_primary,
+        schem.notes as junction_notes
+      FROM service_chemicals schem
+      JOIN chemicals c ON schem.chemical_id = c.chemical_id
+      WHERE schem.service_id = $1 AND c.is_active = true
+      ORDER BY schem.is_primary DESC, c.brand, c.chemical_name
+    `;
+
+    const refrigerantsQuery = `
+      SELECT 
+        r.*,
+        sr.quantity_required,
+        sr.is_alternative,
+        sr.notes as junction_notes
+      FROM service_refrigerants sr
+      JOIN refrigerants r ON sr.refrigerant_id = r.refrigerant_id
+      WHERE sr.service_id = $1 AND r.is_active = true
+      ORDER BY sr.is_alternative ASC, r.refrigerant_name
+    `;
+
+    const [serviceResult, chemicalsResult, refrigerantsResult] = await Promise.all([
+      pool.query(serviceQuery, [serviceId]),
+      pool.query(chemicalsQuery, [serviceId]),
+      pool.query(refrigerantsQuery, [serviceId])
+    ]);
+
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        service: serviceResult.rows[0],
+        relatedChemicals: chemicalsResult.rows,
+        relatedRefrigerants: refrigerantsResult.rows
+      }
+    });
+
+  } catch (error) {
+    console.error('Get service with related items error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch service details'
+    });
+  }
+};
+
+// Helper function to check stock availability
+const checkStockAvailability = async (req, res) => {
+  try {
+    const { items } = req.body; // Array of {type: 'chemical'|'refrigerant', id: number, quantity: number}
+
+    const stockChecks = [];
+
+    for (const item of items) {
+      if (item.type === 'chemical') {
+        const query = `
+          SELECT chemical_id, chemical_name, stock_quantity, status
+          FROM chemicals 
+          WHERE chemical_id = $1 AND is_active = true
+        `;
+        const result = await pool.query(query, [item.id]);
+        if (result.rows.length > 0) {
+          const chemical = result.rows[0];
+          stockChecks.push({
+            type: 'chemical',
+            id: item.id,
+            name: chemical.chemical_name,
+            requestedQuantity: item.quantity,
+            availableStock: chemical.stock_quantity,
+            status: chemical.status,
+            available: chemical.stock_quantity >= item.quantity && chemical.status === 'In stock'
+          });
+        }
+      } else if (item.type === 'refrigerant') {
+        const query = `
+          SELECT refrigerant_id, refrigerant_name, stock_quantity, status
+          FROM refrigerants 
+          WHERE refrigerant_id = $1 AND is_active = true
+        `;
+        const result = await pool.query(query, [item.id]);
+        if (result.rows.length > 0) {
+          const refrigerant = result.rows[0];
+          stockChecks.push({
+            type: 'refrigerant',
+            id: item.id,
+            name: refrigerant.refrigerant_name,
+            requestedQuantity: item.quantity,
+            availableStock: refrigerant.stock_quantity,
+            status: refrigerant.status,
+            available: refrigerant.stock_quantity >= item.quantity && refrigerant.status === 'In stock'
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        stockChecks: stockChecks,
+        allAvailable: stockChecks.every(check => check.available)
+      }
+    });
+
+  } catch (error) {
+    console.error('Check stock availability error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check stock availability'
+    });
+  }
+};
+
 module.exports = {
   createServiceRequest,
   getCustomerRequests,
@@ -840,5 +1076,8 @@ module.exports = {
   createQuotation,
   respondToQuotation,
   getServicesCatalog,
-  getChemicalsCatalog
+  getChemicalsCatalog,
+  getRefrigerantsCatalog,
+  getServiceWithRelatedItems,
+  checkStockAvailability
 };

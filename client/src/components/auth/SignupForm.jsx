@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Eye, EyeOff, Upload, ArrowLeft } from "lucide-react";
 import { Link } from 'react-router-dom';
 
-const SignupForm = ({ onSignup }) => {
+const SignupForm = ({ onSignup, isSubmitting }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     companyName: "",
@@ -15,7 +15,6 @@ const SignupForm = ({ onSignup }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
 
   const handleInputChange = (e) => {
@@ -62,19 +61,20 @@ const SignupForm = ({ onSignup }) => {
     } else if (formData.password.length < 12) {
       newErrors.password = "Password must be at least 12 characters";
     } else {
-      // Check password requirements
+      // Check password requirements (same as backend validation)
       const hasUppercase = /[A-Z]/.test(formData.password);
+      const hasLowercase = /[a-z]/.test(formData.password);
       const hasNumber = /\d/.test(formData.password);
-      const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password);
+      const hasSpecial = /[@$!%*?&]/.test(formData.password);
 
       if (!hasUppercase) {
-        newErrors.password =
-          "Password must contain at least 1 uppercase letter";
+        newErrors.password = "Password must contain at least 1 uppercase letter";
+      } else if (!hasLowercase) {
+        newErrors.password = "Password must contain at least 1 lowercase letter";
       } else if (!hasNumber) {
         newErrors.password = "Password must contain at least 1 number";
       } else if (!hasSpecial) {
-        newErrors.password =
-          "Password must contain at least 1 special character";
+        newErrors.password = "Password must contain at least 1 special character";
       }
     }
 
@@ -104,18 +104,7 @@ const SignupForm = ({ onSignup }) => {
 
     if (!validateStep1()) return;
 
-    setIsLoading(true);
-
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setCurrentStep(2);
-    } catch (error) {
-      console.error("Step 1 error:", error);
-      setErrors({ general: "Something went wrong. Please try again." });
-    } finally {
-      setIsLoading(false);
-    }
+    setCurrentStep(2);
   };
 
   const handleFileUpload = (e) => {
@@ -149,26 +138,19 @@ const SignupForm = ({ onSignup }) => {
 
     if (!validateStep2()) return;
 
-    setIsLoading(true);
+    setErrors({});
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Call the onSignup function passed from parent
-      if (onSignup) {
-        onSignup({ ...formData, verificationFile: uploadedFile });
-      }
-
-      console.log("Signup submitted:", {
+      // Prepare data for backend - use verificationDocument instead of verificationFile
+      const signupData = {
         ...formData,
-        verificationFile: uploadedFile,
-      });
+        verificationDocument: uploadedFile
+      };
+
+      await onSignup(signupData);
     } catch (error) {
-      console.error("Signup error:", error);
-      setErrors({ general: "Signup failed. Please try again." });
-    } finally {
-      setIsLoading(false);
+      console.error("Signup form error:", error);
+      setErrors({ general: error.message || "Signup failed. Please try again." });
     }
   };
 
@@ -222,7 +204,7 @@ const SignupForm = ({ onSignup }) => {
                 : "border-gray-300 bg-gray-50"
             }`}
             placeholder="Enter Company"
-            disabled={isLoading}
+            disabled={isSubmitting}
           />
           {errors.companyName && (
             <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>
@@ -249,7 +231,7 @@ const SignupForm = ({ onSignup }) => {
                 : "border-gray-300 bg-gray-50"
             }`}
             placeholder="Enter Customer"
-            disabled={isLoading}
+            disabled={isSubmitting}
           />
           {errors.customerName && (
             <p className="mt-1 text-xs text-red-600">{errors.customerName}</p>
@@ -276,7 +258,7 @@ const SignupForm = ({ onSignup }) => {
                 : "border-gray-300 bg-gray-50"
             }`}
             placeholder="Enter Email"
-            disabled={isLoading}
+            disabled={isSubmitting}
           />
           {errors.email && (
             <p className="mt-1 text-xs text-red-600">{errors.email}</p>
@@ -303,7 +285,7 @@ const SignupForm = ({ onSignup }) => {
                 : "border-gray-300 bg-gray-50"
             }`}
             placeholder="Enter Contact No."
-            disabled={isLoading}
+            disabled={isSubmitting}
           />
           {errors.contactNo && (
             <p className="mt-1 text-xs text-red-600">{errors.contactNo}</p>
@@ -331,13 +313,13 @@ const SignupForm = ({ onSignup }) => {
                   : "border-gray-300 bg-gray-50"
               }`}
               placeholder="Enter Password"
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
             <button
               type="button"
               onClick={() => togglePasswordVisibility("password")}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors duration-200"
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -362,21 +344,28 @@ const SignupForm = ({ onSignup }) => {
                   /[A-Z]/.test(formData.password) ? "text-green-600" : ""
                 }
               >
-                • Atleast 1 uppercase letter
+                • At least 1 uppercase letter
+              </span>
+              <span
+                className={
+                  /[a-z]/.test(formData.password) ? "text-green-600" : ""
+                }
+              >
+                • At least 1 lowercase letter
               </span>
               <span
                 className={/\d/.test(formData.password) ? "text-green-600" : ""}
               >
-                • Atleat 1 number
+                • At least 1 number
               </span>
               <span
                 className={
-                  /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
+                  /[@$!%*?&]/.test(formData.password)
                     ? "text-green-600"
                     : ""
                 }
               >
-                • Atleast 1 special character
+                • At least 1 special character
               </span>
             </div>
           </div>
@@ -401,15 +390,15 @@ const SignupForm = ({ onSignup }) => {
                 errors.confirmPassword
                   ? "border-red-300 bg-red-50"
                   : "border-gray-300 bg-gray-50"
-              }`}
+            }`}
               placeholder="Confirm Password"
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
             <button
               type="button"
               onClick={() => togglePasswordVisibility("confirmPassword")}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors duration-200"
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
               {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -424,17 +413,10 @@ const SignupForm = ({ onSignup }) => {
         {/* Next Button */}
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isSubmitting}
           className="w-full bg-[#004785] text-white text-xs lg:text-sm xl:text-base font-light py-2.5 lg:py-3 xl:py-3 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer mt-4"
         >
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Processing...
-            </div>
-          ) : (
-            "Next"
-          )}
+          Next
         </button>
       </form>
 
@@ -460,6 +442,7 @@ const SignupForm = ({ onSignup }) => {
           <button
             onClick={handleBackToStep1}
             className="text-[#004785] hover:text-[#0056A3] transition-colors duration-200"
+            disabled={isSubmitting}
           >
             <ArrowLeft size={24} />
           </button>
@@ -509,7 +492,7 @@ const SignupForm = ({ onSignup }) => {
               accept=".jpg,.jpeg,.png,.pdf"
               onChange={handleFileUpload}
               className="hidden"
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
 
             {!uploadedFile ? (
@@ -542,6 +525,7 @@ const SignupForm = ({ onSignup }) => {
                     setErrors({ ...errors, file: "" });
                   }}
                   className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                  disabled={isSubmitting}
                 >
                   Change file
                 </button>
@@ -571,16 +555,17 @@ const SignupForm = ({ onSignup }) => {
             <button
               type="button"
               onClick={handleBackToStep1}
-              className="flex-1 border-2 border-gray-200 text-gray-700 text-xs lg:text-sm xl:text-base font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-gray-300 transition-colors duration-200 cursor-pointer"
+              disabled={isSubmitting}
+              className="flex-1 border-2 border-gray-200 text-gray-700 text-xs lg:text-sm xl:text-base font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-gray-300 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Back
             </button>
             <button
               type="submit"
-              disabled={isLoading || !uploadedFile}
+              disabled={isSubmitting || !uploadedFile}
               className="flex-1 bg-[#004785] text-white text-xs lg:text-sm xl:text-base font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   Submitting...

@@ -1,23 +1,30 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { Link } from 'react-router-dom';
 
-const LoginForm = () => {
+const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+  // Set default email if provided
+  useEffect(() => {
+    if (defaultEmail) {
+      setFormData(prev => ({ ...prev, email: defaultEmail }));
+    }
+  }, [defaultEmail]);
 
-  // Get the page they tried to visit before login
-  const from = location.state?.from?.pathname || null;
+  // Clear local errors when parent error changes
+  useEffect(() => {
+    if (error) {
+      setErrors({ general: error });
+    } else {
+      setErrors({});
+    }
+  }, [error]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -59,45 +66,17 @@ const LoginForm = () => {
 
     if (!validateForm()) return;
 
-    setIsLoading(true);
     setErrors({});
 
     try {
-      const user = await login(formData);
-      
-      // Determine redirect path based on user role
-      let redirectPath;
-      if (from) {
-        redirectPath = from;
-      } else {
-        switch (user.role) {
-          case 'admin':
-            redirectPath = '/admin/service-tracker';
-            break;
-          case 'staff':
-            redirectPath = '/staff/service-tracker';
-            break;
-          case 'customer':
-            redirectPath = '/customer/company-overview';
-            break;
-          default:
-            redirectPath = '/';
-        }
-      }
-
-      navigate(redirectPath, { replace: true });
+      await onLogin(formData);
     } catch (error) {
-      console.error("Login error:", error);
-      setErrors({ general: error.message || "Login failed. Please try again." });
-    } finally {
-      setIsLoading(false);
+      console.error("Login form error:", error);
     }
   };
 
   const handleGoogleLogin = () => {
-    // Placeholder for Google OAuth integration
     console.log("Google login clicked");
-    // In a real app, this would integrate with Google OAuth
   };
 
   const togglePasswordVisibility = () => {
@@ -159,7 +138,8 @@ const LoginForm = () => {
           {/* Google Login Button */}
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white border-1 border-black rounded-4xl py-3 px-4 text-gray-700 font-medium text-sm xl:text-lg hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200 mb-6 cursor-pointer"
+            disabled={isSubmitting}
+            className="w-full flex items-center justify-center gap-3 bg-white border-1 border-black rounded-4xl py-3 px-4 text-gray-700 font-medium text-sm xl:text-lg hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200 mb-6 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -223,7 +203,7 @@ const LoginForm = () => {
                     : "border-gray-300 bg-gray-50"
                 }`}
                 placeholder="Enter your email"
-                disabled={isLoading}
+                disabled={isSubmitting}
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email}</p>
@@ -251,13 +231,13 @@ const LoginForm = () => {
                       : "border-gray-300 bg-gray-50"
                   }`}
                   placeholder="Enter your password"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors duration-200"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -273,6 +253,7 @@ const LoginForm = () => {
                 type="button"
                 className="text-xs lg:text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200 cursor-pointer"
                 onClick={() => console.log("Forgot password clicked")}
+                disabled={isSubmitting}
               >
                 Forgot your password?
               </button>
@@ -281,10 +262,10 @@ const LoginForm = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="w-full bg-[#004785] text-white text-xs lg:text-sm xl:text-md font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   Logging in...

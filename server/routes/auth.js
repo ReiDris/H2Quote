@@ -5,11 +5,13 @@ const { authenticateToken } = require('../middleware/auth');
 const authController = require('../controllers/authController');
 const { validateSignup } = require('../middleware/validation');
 
+// FIXED: File upload middleware should come BEFORE validation
+// This allows multer to parse the multipart form data first
 router.post('/signup',
-  validateSignup, 
-  uploadVerificationFile,
-  handleUploadError,
-  authController.signup
+  uploadVerificationFile,      // Parse multipart form data first
+  handleUploadError,          // Handle any upload errors
+  validateSignup,             // Then validate the parsed body
+  authController.signup       // Finally process the signup
 );
 
 router.post('/login', authController.login);

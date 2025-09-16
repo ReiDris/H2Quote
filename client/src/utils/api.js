@@ -2,13 +2,8 @@ import { useState, useContext, createContext, useEffect } from 'react';
 
 const AuthContext = createContext();
 
-// Safe way to access environment variables in React
-let API_BASE_URL;
-try {
-  API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-} catch (error) {
-  API_BASE_URL = 'http://localhost:5000/api';
-}
+// You'll need to set this to your backend URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
