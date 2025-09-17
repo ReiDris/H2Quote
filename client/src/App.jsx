@@ -7,8 +7,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import AboutUsPage from "./pages/AboutUsPage";
 import ServicesPage from "./pages/ServicesPage";
-import LoginForm from "./components/auth/LoginForm";
-import SignupForm from "./components/auth/SignupForm";
+import LoginPage from "./pages/LoginPage"; // CHANGED: Import LoginPage instead of LoginForm
+import SignupPage from "./pages/SignupPage"; // CHANGED: Import SignupPage instead of SignupForm
 
 // Admin Pages (these will be reused for staff)
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
@@ -43,8 +43,8 @@ function App() {
             <Route path="/services" element={<ServicesPage />} />
             
             {/* Authentication Routes */}
-            <Route path="/login" element={<LoginForm />} />
-            <Route path="/signup" element={<SignupForm />} />
+            <Route path="/login" element={<LoginPage />} /> {/* CHANGED: Use LoginPage instead of LoginForm */}
+            <Route path="/signup" element={<SignupPage />} /> {/* CHANGED: Use SignupPage instead of SignupForm */}
 
             {/* Protected Admin Routes */}
             <Route

@@ -1,27 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { X, Trash2 } from "lucide-react";
 
-const ServiceRequestModal = ({ onClose }) => {
-  const [selectedServices, setSelectedServices] = useState([
-    {
-      id: 1,
-      name: "Boiler Tube Cleaning",
-      category: "Chemical Cleaning",
-      basePrice: 20000,
-      quantity: 1,
-    },
-    {
-      id: 2,
-      name: "Cooling Water Treatment",
-      category: "Water Treatment",
-      basePrice: 15000,
-      quantity: 2,
-    },
-  ]);
+const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () => {}, onClose }) => {
   const [paymentMode, setPaymentMode] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [downpayment, setDownpayment] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [siteLocation, setSiteLocation] = useState("");
+  const [preferredSchedule, setPreferredSchedule] = useState("");
+  const [specialRequirements, setSpecialRequirements] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const updateQuantity = (serviceId, newQuantity) => {
     if (newQuantity <= 0) {
@@ -46,17 +35,138 @@ const ServiceRequestModal = ({ onClose }) => {
     );
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Placeholder for form submission
-    console.log("Form submitted:", {
-      selectedServices,
-      paymentMode,
-      paymentTerms,
-      downpayment,
-      remarks,
+  const estimatedDuration = useMemo(() => {
+    if (!selectedServices || selectedServices.length === 0) {
+      return "1 - 3 Days";
+    }
+    
+    let totalServiceDuration = 0;
+    let hasServices = false;
+    let hasChemicalsOrRefrigerants = false;
+    const serviceDurations = []; // For debugging
+    
+    selectedServices.forEach(service => {
+      if (service.type === 'Services') {
+        hasServices = true;
+        let serviceDuration = 3; // Default for services
+        
+        // Use the actual estimated_duration_hours from database
+        if (service.estimated_duration_hours && service.estimated_duration_hours > 0) {
+          // Convert hours to days (24 hours = 1 day for more realistic calculation)
+          serviceDuration = Math.ceil(service.estimated_duration_hours / 24);
+        } else if (service.duration && service.duration > 0) {
+          // Fallback to duration field if available
+          serviceDuration = service.duration;
+        }
+        
+        serviceDurations.push(`${service.name}: ${serviceDuration} days`);
+        
+        // Add service durations together (services performed sequentially)
+        totalServiceDuration += serviceDuration;
+      } else if (service.type === 'Chemicals' || service.type === 'Refrigerants') {
+        hasChemicalsOrRefrigerants = true;
+      }
     });
-    onClose();
+    
+    // For debugging: log the service durations
+    if (serviceDurations.length > 0) {
+      console.log('Service durations:', serviceDurations, 'Total service time:', totalServiceDuration);
+    }
+    
+    // Determine final duration based on what's selected
+    let finalDuration;
+    
+    if (hasServices) {
+      // If we have services, use the total service duration
+      // Chemicals/refrigerants don't add time (delivered during service)
+      finalDuration = totalServiceDuration;
+      if (hasChemicalsOrRefrigerants) {
+        console.log('Chemicals/refrigerants will be delivered during service time');
+      }
+    } else if (hasChemicalsOrRefrigerants) {
+      // Only chemicals/refrigerants selected (no services)
+      return "1 - 2 Days"; // Quick delivery/pickup for chemicals/refrigerants only
+    } else {
+      // Fallback
+      finalDuration = 1;
+    }
+    
+    // Add buffer days for services (1-2 days buffer)
+    const minDuration = finalDuration;
+    const maxWithBuffer = finalDuration + Math.min(2, Math.ceil(finalDuration * 0.2)); // 20% buffer, max 2 days
+    
+    console.log('Final duration calculation:', finalDuration, 'with buffer:', `${minDuration} - ${maxWithBuffer} Days`);
+    
+    return `${minDuration} - ${maxWithBuffer} Days`;
+  }, [selectedServices]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (selectedServices.length === 0) {
+      setError('Please select at least one service');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('h2quote_token');
+      
+      // Transform selectedServices to match backend format
+      const transformedServices = selectedServices.map(service => ({
+        id: service.id, // Keep original ID format (chem_, refrig_, or plain number)
+        quantity: service.quantity
+      }));
+
+      const requestData = {
+        selectedServices: transformedServices,
+        paymentMode,
+        paymentTerms,
+        downpayment,
+        remarks,
+        siteLocation,
+        preferredSchedule,
+        specialRequirements
+      };
+
+      console.log('Sending request data:', requestData);
+
+      const response = await fetch('http://localhost:5000/api/service-requests', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`Service request created successfully! Request Number: ${data.data.requestNumber}`);
+        
+        // Reset form
+        setSelectedServices([]);
+        setPaymentMode("");
+        setPaymentTerms("");
+        setDownpayment("");
+        setRemarks("");
+        setSiteLocation("");
+        setPreferredSchedule("");
+        setSpecialRequirements("");
+        
+        onClose();
+      } else {
+        setError(data.message || 'Failed to create service request');
+      }
+    } catch (error) {
+      console.error('Error submitting request:', error);
+      setError('Failed to submit service request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -70,6 +180,7 @@ const ServiceRequestModal = ({ onClose }) => {
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+            disabled={isSubmitting}
           >
             <X size={24} />
           </button>
@@ -78,6 +189,13 @@ const ServiceRequestModal = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto mt-5 pr-4 mr-2">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">
+                {error}
+              </div>
+            )}
+
             {/* Request Service Section */}
             <div>
               <h3 className="text-lg font-semibold text-[#004785] mb-4">
@@ -85,7 +203,7 @@ const ServiceRequestModal = ({ onClose }) => {
               </h3>
 
               {/* Selected Services Display */}
-              {selectedServices.length > 0 && (
+              {selectedServices.length > 0 ? (
                 <div className="space-y-3">
                   {selectedServices.map((service) => (
                     <div
@@ -112,17 +230,16 @@ const ServiceRequestModal = ({ onClose }) => {
                             updateQuantity(service.id, parseInt(e.target.value))
                           }
                           className="w-12 px-2 py-1 border border-gray-300 rounded text-center"
+                          disabled={isSubmitting}
                         />
                         <span className="text-sm font-semibold text-[#3C61A8]">
-                          ₱
-                          {(
-                            service.basePrice * service.quantity
-                          ).toLocaleString()}
+                          ₱{(service.basePrice * service.quantity).toLocaleString()}
                         </span>
                         <button
                           type="button"
                           onClick={() => removeService(service.id)}
                           className="p-1 text-red-500 hover:bg-red-50 rounded cursor-pointer"
+                          disabled={isSubmitting}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -130,7 +247,57 @@ const ServiceRequestModal = ({ onClose }) => {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  No services selected. Please go back and select services.
+                </div>
               )}
+            </div>
+
+            {/* Service Details */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-black mb-1">
+                  Site Location
+                </label>
+                <input
+                  type="text"
+                  value={siteLocation}
+                  onChange={(e) => setSiteLocation(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-sm"
+                  placeholder="Enter service location"
+                  required
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-black mb-1">
+                  Preferred Schedule
+                </label>
+                <input
+                  type="date"
+                  value={preferredSchedule}
+                  onChange={(e) => setPreferredSchedule(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-sm"
+                  min={new Date().toISOString().split('T')[0]}
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-black mb-1">
+                  Special Requirements
+                </label>
+                <textarea
+                  value={specialRequirements}
+                  onChange={(e) => setSpecialRequirements(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-sm"
+                  placeholder="Any special requirements or notes"
+                  rows={3}
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
 
             {/* Estimated Duration and Cost */}
@@ -140,7 +307,7 @@ const ServiceRequestModal = ({ onClose }) => {
                   Estimated Duration
                 </label>
                 <div className="text-lg font-semibold text-[#004785]">
-                  3 - 5 Days
+                  {estimatedDuration}
                 </div>
               </div>
               <div className="flex justify-between">
@@ -169,11 +336,13 @@ const ServiceRequestModal = ({ onClose }) => {
                     onChange={(e) => setPaymentMode(e.target.value)}
                     className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-400 text-sm"
                     required
+                    disabled={isSubmitting}
                   >
-                    <option value="">Choose Payment Terms</option>
+                    <option value="">Choose Payment Mode</option>
                     <option value="cash">Cash</option>
                     <option value="bank_transfer">Bank Transfer</option>
                     <option value="check">Check</option>
+                    <option value="gcash">GCash</option>
                   </select>
                 </div>
 
@@ -186,28 +355,33 @@ const ServiceRequestModal = ({ onClose }) => {
                     onChange={(e) => setPaymentTerms(e.target.value)}
                     className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-400 text-sm"
                     required
+                    disabled={isSubmitting}
                   >
                     <option value="">Choose Payment Terms</option>
-                    <option value="Full">Full Payment</option>
-                    <option value="Down">Down Payment</option>
+                    <option value="Full Payment">Full Payment</option>
+                    <option value="Down Payment">Down Payment</option>
                   </select>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-black">
-                    Downpayment
-                  </label>
-                  <select
-                    value={downpayment}
-                    onChange={(e) => setDownpayment(e.target.value)}
-                    className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-400 text-sm"
-                    required
-                  >
-                    <option value="">Choose Payment Terms</option>
-                    <option value="50%">50% DP, 50% Upon Completion</option>
-                    <option value="20%">20% DP, 50% Upon Completion</option>
-                  </select>
-                </div>
+                {paymentTerms === "Down Payment" && (
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-black">
+                      Downpayment
+                    </label>
+                    <select
+                      value={downpayment}
+                      onChange={(e) => setDownpayment(e.target.value)}
+                      className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-400 text-sm"
+                      required
+                      disabled={isSubmitting}
+                    >
+                      <option value="">Choose Downpayment</option>
+                      <option value="50%">50% DP, 50% Upon Completion</option>
+                      <option value="30%">30% DP, 70% Upon Completion</option>
+                      <option value="20%">20% DP, 80% Upon Completion</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -223,6 +397,7 @@ const ServiceRequestModal = ({ onClose }) => {
                   placeholder="Type remarks"
                   rows={4}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent resize-none text-sm"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
@@ -230,9 +405,17 @@ const ServiceRequestModal = ({ onClose }) => {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-[#004785] text-white rounded-lg hover:bg-[#003666] py-3 px-6 rounded-lg font-semibold transition-colors cursor-pointer"
+              disabled={isSubmitting || selectedServices.length === 0}
+              className="w-full bg-[#004785] text-white rounded-lg hover:bg-[#003666] py-3 px-6 font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Request
+              {isSubmitting ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Submitting...
+                </div>
+              ) : (
+                "Submit Request"
+              )}
             </button>
           </form>
         </div>
