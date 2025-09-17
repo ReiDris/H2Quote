@@ -2,7 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
 const fs = require('fs');
 const path = require('path');
-const { sendAccountApprovalEmail } = require('../services/emailService');
+const { sendAccountApprovalEmail } = require('../emailServices/emailService');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,

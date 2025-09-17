@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import ForgotPasswordModal from './ForgotPasswordModal';
 
 const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
+  const location = useLocation();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // Set default email if provided
   useEffect(() => {
@@ -17,14 +22,116 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     }
   }, [defaultEmail]);
 
+  // Handle messages from password reset or other pages
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+      if (location.state.email) {
+        setFormData(prev => ({ ...prev, email: location.state.email }));
+      }
+      // Clear the state to prevent showing message on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  // Load Google Identity Services script
+  useEffect(() => {
+    // DEBUG: Check environment variables (Vite uses import.meta.env)
+    console.log('=== DEBUG INFO ===');
+    console.log('All Vite env vars:', import.meta.env);
+    console.log('Google Client ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
+    console.log('Client ID type:', typeof import.meta.env.VITE_GOOGLE_CLIENT_ID);
+    console.log('Client ID length:', import.meta.env.VITE_GOOGLE_CLIENT_ID?.length);
+    console.log('Is Client ID defined?', import.meta.env.VITE_GOOGLE_CLIENT_ID !== undefined);
+    console.log('==================');
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    script.onload = () => {
+      if (window.google) {
+        const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        console.log('Initializing Google with Client ID:', clientId);
+        
+        if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID') {
+          console.error('❌ Google Client ID is missing or not set properly!');
+          console.log('Make sure you have VITE_GOOGLE_CLIENT_ID in your .env file');
+          console.log('And make sure you restarted your React dev server');
+          return;
+        }
+
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+        
+        console.log('✅ Google One Tap initialized successfully');
+      }
+    };
+
+    script.onerror = () => {
+      console.error('❌ Failed to load Google Identity Services script');
+    };
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
+
   // Clear local errors when parent error changes
   useEffect(() => {
     if (error) {
       setErrors({ general: error });
+      setSuccessMessage('');
     } else {
       setErrors({});
     }
   }, [error]);
+
+  const handleGoogleResponse = async (response) => {
+    try {
+      setIsGoogleLoading(true);
+      setErrors({});
+      setSuccessMessage('');
+
+      const result = await fetch('http://localhost:5000/api/auth/google-auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          credential: response.credential
+        }),
+      });
+
+      const data = await result.json();
+
+      if (data.success) {
+        // Store token and user data
+        localStorage.setItem('h2quote_token', data.data.token);
+        localStorage.setItem('h2quote_user', JSON.stringify(data.data.user));
+        
+        // Call the parent's onLogin function to handle success
+        if (onLogin) {
+          await onLogin(data.data);
+        }
+      } else {
+        setErrors({ general: data.message || 'Google login failed' });
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      setErrors({ general: 'Google login failed. Please try again.' });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -39,6 +146,10 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
         ...prev,
         [name]: "",
       }));
+    }
+    // Clear success message when user starts typing
+    if (successMessage) {
+      setSuccessMessage('');
     }
   };
 
@@ -67,6 +178,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     if (!validateForm()) return;
 
     setErrors({});
+    setSuccessMessage('');
 
     try {
       await onLogin(formData);
@@ -76,11 +188,28 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   };
 
   const handleGoogleLogin = () => {
-    console.log("Google login clicked");
+    console.log('Google login button clicked');
+    
+    if (window.google && window.google.accounts) {
+      console.log('Google accounts API available, prompting...');
+      window.google.accounts.id.prompt((notification) => {
+        console.log('Google prompt notification:', notification);
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          console.log('Google One Tap not displayed or skipped');
+        }
+      });
+    } else {
+      console.error('Google accounts API not available');
+      setErrors({ general: 'Google login is not available. Please try again.' });
+    }
   };
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
+  };
+
+  const handleForgotPassword = () => {
+    setShowForgotPassword(true);
   };
 
   return (
@@ -138,28 +267,32 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
           {/* Google Login Button */}
           <button
             onClick={handleGoogleLogin}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isGoogleLoading}
             className="w-full flex items-center justify-center gap-3 bg-white border-1 border-black rounded-4xl py-3 px-4 text-gray-700 font-medium text-sm xl:text-lg hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200 mb-6 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              />
-            </svg>
-            Continue with Google
+            {isGoogleLoading ? (
+              <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                />
+              </svg>
+            )}
+            {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
           </button>
 
           {/* Divider */}
@@ -173,6 +306,13 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
               </span>
             </div>
           </div>
+
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm">
+              {successMessage}
+            </div>
+          )}
 
           {/* Error Message */}
           {errors.general && (
@@ -203,7 +343,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
                     : "border-gray-300 bg-gray-50"
                 }`}
                 placeholder="Enter your email"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isGoogleLoading}
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email}</p>
@@ -231,13 +371,13 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
                       : "border-gray-300 bg-gray-50"
                   }`}
                   placeholder="Enter your password"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isGoogleLoading}
                 />
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors duration-200"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isGoogleLoading}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -252,8 +392,8 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
               <button
                 type="button"
                 className="text-xs lg:text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200 cursor-pointer"
-                onClick={() => console.log("Forgot password clicked")}
-                disabled={isSubmitting}
+                onClick={handleForgotPassword}
+                disabled={isSubmitting || isGoogleLoading}
               >
                 Forgot your password?
               </button>
@@ -262,7 +402,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isGoogleLoading}
               className="w-full bg-[#004785] text-white text-xs lg:text-sm xl:text-md font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer"
             >
               {isSubmitting ? (
@@ -290,6 +430,12 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal 
+        isOpen={showForgotPassword} 
+        onClose={() => setShowForgotPassword(false)} 
+      />
     </div>
   );
 };
