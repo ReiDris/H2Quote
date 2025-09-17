@@ -47,7 +47,7 @@ const generateUserWelcomeEmail = (customerName, companyName, email, contactNo) =
                 <div style="text-align: center; margin-top: 30px;">
                     <p style="color: #888; font-size: 14px;">
                         Best regards,<br>
-                        The H2Quote Team
+                        TRISHKAYE Enterprises
                     </p>
                 </div>
             </div>
