@@ -133,7 +133,7 @@ const Vincent = () => {
                 </div>
                 <div>
                   <h3 className="font-semibold text-sm italic">
-                    VINCENT CHATBOT
+                    CHAT WITH VINCENT
                   </h3>
                 </div>
               </div>

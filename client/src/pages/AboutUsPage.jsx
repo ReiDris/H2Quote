@@ -29,7 +29,7 @@ const AboutUsPage = () => {
 
       {/* Main Content */}
       <div className="py-16">
-        <div className="mx-18 lg:mx-25">
+        <div className="mx-18 lg:mx-30 xl:mx-60">
           {/* Company Profile Section */}
           <section id="company-profile" className="mb-16">
             <h2 className="text-4xl lg:text-5xl xl:text-6xl font-bold text-center mb-12 text-[#004785] lg:py-4 xl:py-5">

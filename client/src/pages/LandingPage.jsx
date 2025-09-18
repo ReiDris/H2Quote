@@ -121,8 +121,8 @@ const LandingPage = () => {
       />
 
       {/* Why Choose Us Section */}
-      <section id="about" className="py-16">
-        <div className="mx-18 lg:mx-25">
+      <section id="about" className="py-14">
+        <div className="mx-18 lg:mx-30 xl:mx-60">
           <h2 className="text-4xl lg:text-5xl xl:text-6xl font-bold text-center mb-16 text-[#004785]">
             Why Choose Us?
           </h2>
@@ -133,7 +133,7 @@ const LandingPage = () => {
               <img
                 src={slideImages[currentSlide]}
                 alt={`Office slide ${currentSlide + 1}`}
-                className="w-full h-100 lg:h-150 xl:h-200 object-cover"
+                className="w-full h-100 lg:h-120 xl:h-170 object-cover"
               />
             </div>
 
@@ -167,7 +167,7 @@ const LandingPage = () => {
 
           {/* Company Description */}
           <div className="text-justify">
-            <p className="lg:text-2xl xl:text-3xl text-gray-600 leading-relaxed">
+            <p className="lg:text-xl xl:text-2xl text-gray-600 leading-relaxed">
               Our company, TRISHKAYE ENTERPRISES & ALLIED SERVICES is equipped
               with more than 17 years of experience in the field of water
               treatment chemicals & services specializing on water filtration
@@ -183,7 +183,7 @@ const LandingPage = () => {
 
       {/* Products and Services Section */}
       <section id="services" className="pt-0 lg:pt-16 py-16 bg-white">
-        <div className="mx-25">
+        <div className="mx-18 lg:mx-30 xl:mx-60">
           <h2 className="text-4xl lg:text-5xl xl:text-6xl font-bold text-center mb-16 text-[#004785]">
             Products and Services
           </h2>

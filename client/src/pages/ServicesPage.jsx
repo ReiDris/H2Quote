@@ -241,7 +241,7 @@ const ServicesPage = () => {
 
       {/* Main Content */}
       <div className="py-16" id="services-content">
-        <div className="mx-18 lg:mx-25">
+        <div className="mx-18 lg:mx-30 xl:mx-60">
           {/* Services Introduction */}
           <section className="mb-12">
             <div className="text-justify mb-8">

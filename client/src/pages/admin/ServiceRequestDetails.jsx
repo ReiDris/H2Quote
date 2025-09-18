@@ -212,7 +212,7 @@ const ServiceRequestDetails = () => {
               {index < steps.length - 1 && (
                 <div className="flex items-center -mt-10">
                   <div
-                    className={`w-9 lg:w-22 xl:w-56 h-0.5 flex-shrink-0 ${
+                    className={`w-9 lg:w-22 xl:w-42 2xl:w-58 h-0.5 flex-shrink-0 ${
                       index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
                     }`}
                   />
