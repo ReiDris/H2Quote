@@ -43,8 +43,8 @@ function App() {
             <Route path="/services" element={<ServicesPage />} />
             
             {/* Authentication Routes */}
-            <Route path="/login" element={<LoginPage />} /> {/* CHANGED: Use LoginPage instead of LoginForm */}
-            <Route path="/signup" element={<SignupPage />} /> {/* CHANGED: Use SignupPage instead of SignupForm */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
 
             {/* Protected Admin Routes */}
             <Route
@@ -56,7 +56,7 @@ function App() {
               }
             />
             <Route
-              path="/admin/service-request/:id"
+              path="/admin/service-request/:requestNumber"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <ServiceRequestDetails />
@@ -130,7 +130,7 @@ function App() {
               }
             />
             <Route
-              path="/staff/service-request/:id"
+              path="/staff/service-request/:requestNumber"
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
                   <ServiceRequestDetails />

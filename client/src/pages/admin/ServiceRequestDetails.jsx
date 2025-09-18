@@ -1,68 +1,123 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Calendar, Eye } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
 
 const ServiceRequestDetails = () => {
+  const { requestNumber } = useParams();
+  const navigate = useNavigate();
+  
+  // State for editable fields
   const [serviceStatus, setServiceStatus] = useState("Pending");
   const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [warrantyStatus, setWarrantyStatus] = useState("Pending");
   const [serviceStartDate, setServiceStartDate] = useState("");
   const [serviceEndDate, setServiceEndDate] = useState("");
-  const navigate = useNavigate();
+  
+  // State for data loading
+  const [requestData, setRequestData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Mock data for the specific request (this would come from props or API)
-  const requestData = {
-    id: "#REQ01",
-    requestedAt: "May 07, 2025 - 10:34 AM",
-    customer: {
-      name: "John Doe",
-      company: "Company A",
-      email: "company@gmail.com",
-      contact: "09654840369",
-    },
-    services: [
-      {
-        category: "Services",
-        service: "Service A",
-        remarks: "-",
-        quantity: 1,
-        unitPrice: "₱50,000",
-        totalPrice: "₱50,000",
-      },
-      {
-        category: "Chemicals",
-        service: "Chemical A",
-        remarks: "-",
-        quantity: 1,
-        unitPrice: "₱40,000",
-        totalPrice: "₱40,000",
-      },
-    ],
-    paymentHistory: [
-      {
-        phase: "Down Payment",
-        percentage: "50%",
-        amount: "₱25,000",
-        proofOfPayment: "-",
-        paidOn: "Pending",
-        paymentStatus: "Pending",
-      },
-      {
-        phase: "Completion Balance",
-        percentage: "50%",
-        amount: "₱25,000",
-        proofOfPayment: "-",
-        paidOn: "Pending",
-        paymentStatus: "Pending",
-      },
-    ],
-    estimatedDuration: "3 - 7 Days",
-    totalCost: "₱ 50,000",
-    paymentMode: "Bank Transfer",
-    paymentTerms: "50% Exp. 30% upon Completion",
-    paymentDeadline: "Tomorrow",
-  };
+  // Fetch request details from backend
+  useEffect(() => {
+    const fetchRequestDetails = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('h2quote_token');
+        
+        // First, find the request by request_number to get request_id
+        const searchResponse = await fetch(`http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!searchResponse.ok) {
+          throw new Error('Failed to find service request');
+        }
+
+        const searchData = await searchResponse.json();
+        
+        if (!searchData.success || searchData.data.requests.length === 0) {
+          setError('Service request not found');
+          return;
+        }
+
+        const request = searchData.data.requests[0];
+        
+        // Now fetch full details using request_id
+        const detailResponse = await fetch(`http://localhost:5000/api/service-requests/${request.request_id}/details`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!detailResponse.ok) {
+          throw new Error('Failed to fetch request details');
+        }
+
+        const detailData = await detailResponse.json();
+
+        if (detailData.success) {
+          const { request: requestDetails, items, paymentHistory } = detailData.data;
+          
+          // Transform data to match existing component structure
+          const transformedData = {
+            id: requestDetails.request_number,
+            requestedAt: requestDetails.requested_at,
+            customer: {
+              name: requestDetails.customer_name,
+              company: requestDetails.company_name,
+              email: requestDetails.email || "company@gmail.com", // fallback
+              contact: requestDetails.phone || "09654840369", // fallback
+            },
+            services: items.map(item => ({
+              category: item.service_category || item.category,
+              service: item.name,
+              remarks: item.remarks || "-",
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+              totalPrice: item.total_price,
+            })),
+            paymentHistory: requestDetails.paymentHistory || [],
+            estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+            totalCost: requestDetails.totalCost,
+            paymentMode: requestDetails.payment_mode || "Bank Transfer",
+            paymentTerms: requestDetails.payment_terms || "50% Exp. 30% upon Completion",
+            paymentDeadline: requestDetails.payment_deadline || "Tomorrow",
+            assignedStaff: requestDetails.assigned_staff_name || "",
+            warranty: requestDetails.warranty || "Not yet decided",
+            warrantyStatus: requestDetails.warranty_status || "Pending",
+            remarks: requestDetails.remarks || "-"
+          };
+
+          setRequestData(transformedData);
+          
+          // Set initial status values
+          setServiceStatus(requestDetails.service_status || "Pending");
+          setPaymentStatus(requestDetails.payment_status || "Pending");
+          setWarrantyStatus(requestDetails.warranty_status || "Pending");
+          
+        } else {
+          setError(detailData.message || 'Failed to fetch request details');
+        }
+      } catch (error) {
+        console.error('Error fetching request details:', error);
+        setError('Failed to fetch request details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (requestNumber) {
+      fetchRequestDetails();
+    }
+  }, [requestNumber]);
 
   const getStatusBadge = (status, type) => {
     const statusStyles = {
@@ -170,6 +225,36 @@ const ServiceRequestDetails = () => {
     );
   };
 
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminLayout>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
+          {error}
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!requestData) {
+    return (
+      <AdminLayout>
+        <div className="text-center py-8 text-gray-500">
+          No request data found.
+        </div>
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout>
       <div>
@@ -205,7 +290,7 @@ const ServiceRequestDetails = () => {
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mb-1">
-                Email: company@gmail.com
+                Email: {requestData.customer.email}
               </label>
             </div>
             <div>
@@ -267,35 +352,25 @@ const ServiceRequestDetails = () => {
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Warranty: (In Months)
               </label>
-              <span className="text-sm text-gray-800">Not yet decided</span>
+              <span className="text-sm text-gray-800">{requestData.warranty}</span>
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Customer Remarks:
               </label>
-              <span className="text-sm text-gray-800">-</span>
+              <span className="text-sm text-gray-800">{requestData.remarks}</span>
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Warranty Fulfillment Status:
               </label>
-              <span className="text-sm text-gray-800">-</span>
+              <span className="text-sm text-gray-800">{requestData.warrantyStatus}</span>
             </div>
             <div className="col-span-2">
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Assigned Staff:
               </label>
-              <select
-                value={serviceStatus}
-                onChange={(e) => setServiceStatus(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-50 cursor-pointer"
-              >
-                <option value="Pending">Pending</option>
-                <option value="Processing">Processing</option>
-                <option value="Assigned">Assigned</option>
-                <option value="Ongoing">Ongoing</option>
-                <option value="Completed">Completed</option>
-              </select>
+              <span className="text-sm text-gray-800">{requestData.assignedStaff || "Not assigned"}</span>
             </div>
           </div>
 
