@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -9,114 +9,93 @@ import {
 import { CgMaximizeAlt } from "react-icons/cg";
 import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
-import { useAuth } from "../../hooks/useAuth"; // Assuming you have this hook
+import { useAuth } from "../../hooks/useAuth";
 
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [serviceRequests, setServiceRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [totalCount, setTotalCount] = useState(0);
   const navigate = useNavigate();
-  const { user } = useAuth(); // Get user role from auth context
+  const { user } = useAuth();
 
-  // Determine user role from auth context (this will work seamlessly with backend)
-  const userRole = user?.role || "admin"; // Fallback to admin if no role
+  const userRole = user?.role || "admin";
+  const itemsPerPage = 10;
 
-  const handleMoreActions = (requestId) => {
-    // Dynamic navigation based on user role from auth context
-    const basePath =
-      userRole === "admin"
-        ? "/admin"
-        : userRole === "staff"
-        ? "/staff"
-        : "/admin";
-    navigate(`${basePath}/service-request/${requestId.replace("#", "")}`);
+  // Fetch service requests from API
+  const fetchServiceRequests = async (page = 1, search = "") => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('h2quote_token');
+      
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: itemsPerPage.toString(),
+        ...(search && { search })
+      });
+
+      const response = await fetch(`http://localhost:5000/api/service-requests?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch service requests');
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setServiceRequests(data.data.requests);
+        setTotalCount(data.data.pagination.totalCount);
+      } else {
+        setError(data.message || 'Failed to fetch service requests');
+      }
+    } catch (error) {
+      console.error('Error fetching service requests:', error);
+      setError('Failed to fetch service requests');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Mock data for the service requests (this will be replaced with API calls)
-  const mockData = [
-    {
-      id: "#REQ01",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "John Doe",
-      serviceCategory: "Services, Chemicals",
-      requestedService: "Service A, Chemical A",
-      assignedStaff: "",
-      serviceStatus: "Pending",
-      paymentStatus: "Pending",
-      warrantyStatus: "Pending",
-    },
-    {
-      id: "#REQ02",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "Jane Doe",
-      serviceCategory: "Services, Chemicals",
-      requestedService: "Service A, Chemical A",
-      assignedStaff: "Staff 2",
-      serviceStatus: "Assigned",
-      paymentStatus: "Pending",
-      warrantyStatus: "Pending",
-    },
-    {
-      id: "#REQ03",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "Customer 1",
-      serviceCategory: "Services",
-      requestedService: "Service A",
-      assignedStaff: "Staff 2",
-      serviceStatus: "Ongoing",
-      paymentStatus: "Partial",
-      warrantyStatus: "Pending",
-    },
-    {
-      id: "#REQ04",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "Customer 2",
-      serviceCategory: "Services, Refrigerants",
-      requestedService: "Service A, Refrigerant A",
-      assignedStaff: "Staff 1",
-      serviceStatus: "Completed",
-      paymentStatus: "Paid",
-      warrantyStatus: "Valid",
-    },
-    {
-      id: "#REQ05",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "Customer 3",
-      serviceCategory: "Services, Refrigerants",
-      requestedService: "Service A, Refrigerant A",
-      assignedStaff: "Staff 3",
-      serviceStatus: "Completed",
-      paymentStatus: "Overdue",
-      warrantyStatus: "Expired",
-    },
-    {
-      id: "#REQ06",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "Customer 4",
-      serviceCategory: "Chemicals",
-      requestedService: "Chemical A",
-      assignedStaff: "Staff 3",
-      serviceStatus: "Ongoing",
-      paymentStatus: "Pending",
-      warrantyStatus: "Pending",
-    },
-    {
-      id: "#REQ07",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      customer: "Customer 5",
-      serviceCategory: "Refrigerants",
-      requestedService: "Refrigerant A",
-      assignedStaff: "",
-      serviceStatus: "Cancelled",
-      paymentStatus: "N/A",
-      warrantyStatus: "N/A",
-    },
-  ];
+  // Initial load
+  useEffect(() => {
+    fetchServiceRequests(currentPage, searchTerm);
+  }, [currentPage]);
+
+  // Search with debounce
+  useEffect(() => {
+    const delayedSearch = setTimeout(() => {
+      if (currentPage === 1) {
+        fetchServiceRequests(1, searchTerm);
+      } else {
+        setCurrentPage(1); // This will trigger the above useEffect
+      }
+    }, 300);
+
+    return () => clearTimeout(delayedSearch);
+  }, [searchTerm]);
+
+  const handleMoreActions = (requestNumber) => {
+    const basePath = userRole === "admin" ? "/admin" : userRole === "staff" ? "/staff" : "/admin";
+    // Remove # from request number if present
+    const cleanRequestNumber = requestNumber.replace("#", "");
+    navigate(`${basePath}/service-request/${cleanRequestNumber}`);
+  };
 
   const getStatusBadge = (status, type) => {
     const statusStyles = {
       serviceStatus: {
         Pending: "bg-gray-100 text-gray-800",
-        Assigned: "bg-orange-200 text-orange-600",
+        Assigned: "bg-orange-200 text-orange-600", 
+        Processing: "bg-blue-100 text-blue-800",
+        Approval: "bg-yellow-100 text-yellow-800",
         Ongoing: "bg-blue-100 text-blue-800",
         Completed: "bg-green-100 text-green-800",
         Cancelled: "bg-red-100 text-red-800",
@@ -145,19 +124,35 @@ const ServiceTracker = () => {
     );
   };
 
-  const filteredData = mockData.filter(
-    (item) =>
-      item.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Format date helper
+  const formatDate = (dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
 
-  const totalPages = Math.ceil(filteredData.length / 10);
-  const startIndex = (currentPage - 1) * 10;
-  const endIndex = startIndex + 10;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
+  // Calculate total pages
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-  // Choose layout based on user role from auth context
+  // Choose layout based on user role
   const Layout = userRole === "admin" ? AdminLayout : StaffLayout;
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -171,7 +166,7 @@ const ServiceTracker = () => {
             />
             <input
               type="text"
-              placeholder="Search"
+              placeholder="Search by customer name or request ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500 text-lg"
@@ -183,6 +178,13 @@ const ServiceTracker = () => {
             <span>Filters</span>
           </button>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
+            {error}
+          </div>
+        )}
 
         {/* Table Section */}
         <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
@@ -200,10 +202,10 @@ const ServiceTracker = () => {
                     Customer
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Service Category
+                    Company
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Requested Service
+                    Estimated Cost
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Assigned Staff
@@ -223,125 +225,99 @@ const ServiceTracker = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedData.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
-                      {item.id}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      {item.requestedAt}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.customer}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      {item.serviceCategory}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      {item.requestedService}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.assignedStaff || "-"}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
-                      {getStatusBadge(item.serviceStatus, "serviceStatus")}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
-                      {getStatusBadge(item.paymentStatus, "paymentStatus")}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
-                      {getStatusBadge(item.warrantyStatus, "warrantyStatus")}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-center">
-                      <button
-                        onClick={() => handleMoreActions(item.id)}
-                        className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
-                        title="View Details"
-                      >
-                        <CgMaximizeAlt size={20} />
-                      </button>
+                {serviceRequests.length > 0 ? (
+                  serviceRequests.map((item, index) => (
+                    <tr key={item.request_id} className="hover:bg-gray-50">
+                      <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                        {item.request_number}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                        {formatDate(item.created_at)}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.customer_name}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.company_name}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        ₱{parseFloat(item.estimated_cost || 0).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.assigned_staff_name || "-"}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        {getStatusBadge(item.service_status, "serviceStatus")}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        {getStatusBadge(item.payment_status, "paymentStatus")}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        {getStatusBadge(item.warranty_status, "warrantyStatus")}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-center">
+                        <button
+                          onClick={() => handleMoreActions(item.request_number)}
+                          className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
+                          title="View Details"
+                        >
+                          <CgMaximizeAlt size={20} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="10" className="px-6 py-8 text-center text-gray-500">
+                      {searchTerm ? 'No service requests found matching your search.' : 'No service requests found.'}
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Pagination */}
-          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
-            {/* Previous Button */}
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
-                currentPage === 1
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
-              }`}
-            >
-              <LucideArrowLeft className="w-4 mr-2" />
-              Previous
-            </button>
+          {totalPages > 1 && (
+            <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
+              {/* Previous Button */}
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
+                  currentPage === 1
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
+              >
+                <LucideArrowLeft className="w-4 mr-2" />
+                Previous
+              </button>
 
-            {/* Page Numbers - Centered */}
-            <div className="flex items-center space-x-3">
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
+              {/* Page Numbers - Centered */}
+              <div className="flex items-center space-x-3">
+                <span className="text-gray-600">
+                  Page {currentPage} of {totalPages} ({totalCount} total)
+                </span>
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                 }
-
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
-                      currentPage === pageNum
-                        ? "bg-gray-200 text-gray-600"
-                        : "text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-
-              {/* Ellipsis if needed */}
-              {totalPages > 5 && currentPage < totalPages - 2 && (
-                <>
-                  <span className="px-2 py-2 text-base text-gray-400">...</span>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              )}
+                disabled={currentPage === totalPages}
+                className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
+                  currentPage === totalPages
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
+              >
+                Next
+                <LucideArrowRight className="w-4 ms-2" />
+              </button>
             </div>
-
-            {/* Next Button */}
-            <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-              }
-              disabled={currentPage === totalPages}
-              className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
-                currentPage === totalPages
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
-              }`}
-            >
-              Next
-              <LucideArrowRight className="w-4 ms-2" />
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </Layout>
