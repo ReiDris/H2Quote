@@ -10,27 +10,72 @@ const supabase = createClient(
 
 const googleAuth = async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, code, redirect_uri } = req.body;
 
-    if (!credential) {
-      return res.status(400).json({
-        success: false,
-        message: 'Google credential is required'
+    // Handle both old (credential) and new (code) approaches
+    let googleUser;
+    
+    if (credential) {
+      // Old approach - JWT token verification
+      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+      googleUser = await response.json();
+
+      if (googleUser.error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Google token'
+        });
+      }
+    } else if (code && redirect_uri) {
+      // New approach - OAuth authorization code exchange
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          code: code,
+          grant_type: 'authorization_code',
+          redirect_uri: redirect_uri
+        }),
       });
-    }
 
-    // Verify Google JWT token
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
-    const googleUser = await response.json();
+      const tokenData = await tokenResponse.json();
 
-    if (googleUser.error) {
+      if (tokenData.error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to exchange authorization code: ' + tokenData.error
+        });
+      }
+
+      // Get user info using the access token
+      const userInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenData.access_token}`);
+      googleUser = await userInfoResponse.json();
+
+      if (googleUser.error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to get user info: ' + googleUser.error
+        });
+      }
+    } else {
       return res.status(400).json({
         success: false,
-        message: 'Invalid Google token'
+        message: 'Either Google credential or authorization code with redirect_uri is required'
       });
     }
 
     const { email, name, given_name, family_name, picture } = googleUser;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email not provided by Google'
+      });
+    }
 
     // Check if user exists in database
     const { data: userResults, error: userError } = await supabase.rpc(
@@ -47,7 +92,7 @@ const googleAuth = async (req, res) => {
       try {
         await client.query('BEGIN');
 
-        // Create a default company for Google users (you might want to modify this)
+        // Create a default company for Google users
         const insertCompanyQuery = `
           INSERT INTO companies 
           (company_name, email, status, created_at, updated_at) 
@@ -55,7 +100,7 @@ const googleAuth = async (req, res) => {
           RETURNING company_id
         `;
         const companyResult = await client.query(insertCompanyQuery, [
-          `${given_name || name}'s Company`,
+          `${given_name || name || 'User'}'s Company`,
           email
         ]);
         const companyId = companyResult.rows[0].company_id;
@@ -71,10 +116,10 @@ const googleAuth = async (req, res) => {
         
         const userResult = await client.query(insertUserQuery, [
           companyId,
-          given_name || name.split(' ')[0] || 'User',
-          family_name || name.split(' ').slice(1).join(' ') || '',
+          given_name || (name ? name.split(' ')[0] : 'User'),
+          family_name || (name ? name.split(' ').slice(1).join(' ') : ''),
           email,
-          googleUser.sub, // Google user ID
+          googleUser.id || googleUser.sub, // Google user ID (different field names in different APIs)
           picture
         ]);
 
@@ -106,10 +151,15 @@ const googleAuth = async (req, res) => {
         });
       }
 
-      // Update last login
+      // Update last login and profile picture if provided
+      const updateData = { last_login: new Date().toISOString() };
+      if (picture) {
+        updateData.profile_picture = picture;
+      }
+      
       await supabase
         .from('users')
-        .update({ last_login: new Date().toISOString() })
+        .update(updateData)
         .eq('user_id', user.user_id);
     }
 
@@ -157,7 +207,7 @@ const googleAuth = async (req, res) => {
       isPrimaryContact: user.is_primary_contact,
       permissions: user.permissions,
       lastLogin: user.last_login,
-      profilePicture: user.profile_picture,
+      profilePicture: user.profile_picture || picture,
     };
 
     // Log audit entry
@@ -166,7 +216,10 @@ const googleAuth = async (req, res) => {
         table_name: 'users',
         record_id: user.user_id,
         action: 'UPDATE',
-        new_values: { last_login: new Date().toISOString(), login_method: 'google' },
+        new_values: { 
+          last_login: new Date().toISOString(), 
+          login_method: credential ? 'google_jwt' : 'google_oauth'
+        },
         changed_by: user.email,
         change_reason: 'Google OAuth login',
         ip_address: req.ip || req.connection.remoteAddress,

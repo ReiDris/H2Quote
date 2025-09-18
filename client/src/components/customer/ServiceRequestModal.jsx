@@ -358,12 +358,12 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
                     disabled={isSubmitting}
                   >
                     <option value="">Choose Payment Terms</option>
-                    <option value="Full Payment">Full Payment</option>
-                    <option value="Down Payment">Down Payment</option>
+                    <option value="Full">Full Payment</option>
+                    <option value="Down">Down Payment</option>
                   </select>
                 </div>
 
-                {paymentTerms === "Down Payment" && (
+                {paymentTerms === "Down" && (
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-black">
                       Downpayment

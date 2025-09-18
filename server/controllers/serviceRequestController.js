@@ -57,6 +57,15 @@ const createServiceRequest = async (req, res) => {
     const customerId = req.user.id;
     const companyId = req.user.companyId;
 
+    console.log('Received request data:', {
+      selectedServices,
+      paymentMode,
+      paymentTerms,
+      downpayment,
+      customerId,
+      companyId
+    });
+
     if (!selectedServices || selectedServices.length === 0) {
       return res.status(400).json({
         success: false,
@@ -72,63 +81,74 @@ const createServiceRequest = async (req, res) => {
     const serviceDetails = [];
 
     for (const service of selectedServices) {
+      console.log('Processing service:', service);
+      
       // Handle different item types (services, chemicals, refrigerants)
       let itemQuery, itemData;
+      let actualId = service.id;
+      let itemType = 'service'; // default
       
       if (typeof service.id === 'string' && service.id.startsWith('chem_')) {
         // Chemical item
-        const chemicalId = parseInt(service.id.replace('chem_', ''));
+        actualId = parseInt(service.id.replace('chem_', ''));
+        itemType = 'chemical';
         itemQuery = `
           SELECT chemical_id as id, chemical_name as name, price as base_price, 'chemical' as type
           FROM chemicals 
           WHERE chemical_id = $1 AND is_active = true
         `;
-        const result = await client.query(itemQuery, [chemicalId]);
-        itemData = result.rows[0];
       } else if (typeof service.id === 'string' && service.id.startsWith('refrig_')) {
         // Refrigerant item
-        const refrigerantId = parseInt(service.id.replace('refrig_', ''));
+        actualId = parseInt(service.id.replace('refrig_', ''));
+        itemType = 'refrigerant';
         itemQuery = `
           SELECT refrigerant_id as id, refrigerant_name as name, price as base_price, 'refrigerant' as type
           FROM refrigerants 
           WHERE refrigerant_id = $1 AND is_active = true
         `;
-        const result = await client.query(itemQuery, [refrigerantId]);
-        itemData = result.rows[0];
       } else {
         // Service item
+        actualId = parseInt(service.id);
+        itemType = 'service';
         itemQuery = `
           SELECT service_id as id, service_name as name, base_price, estimated_duration_hours, 'service' as type
           FROM services 
           WHERE service_id = $1 AND is_active = true
         `;
-        const result = await client.query(itemQuery, [service.id]);
-        itemData = result.rows[0];
-        
-        if (itemData && itemData.estimated_duration_hours) {
-          const serviceDays = Math.ceil(itemData.estimated_duration_hours / 8);
-          estimatedDuration = Math.max(estimatedDuration, serviceDays);
-        }
       }
+
+      console.log('Executing query for item type:', itemType, 'with ID:', actualId);
+      
+      const result = await client.query(itemQuery, [actualId]);
+      itemData = result.rows[0];
       
       if (!itemData) {
         await client.query('ROLLBACK');
         return res.status(400).json({
           success: false,
-          message: `Item with ID ${service.id} not found`
+          message: `Item with ID ${service.id} not found or inactive`
         });
+      }
+
+      console.log('Found item data:', itemData);
+
+      // Calculate duration only for services
+      if (itemData.type === 'service' && itemData.estimated_duration_hours) {
+        const serviceDays = Math.ceil(itemData.estimated_duration_hours / 8);
+        estimatedDuration = Math.max(estimatedDuration, serviceDays);
       }
 
       const itemTotal = itemData.base_price * service.quantity;
       totalCost += itemTotal;
 
-      // For non-service items, add minimal duration
+      // For non-service items, add minimal duration if no services exist
       if (itemData.type !== 'service' && estimatedDuration === 0) {
-        estimatedDuration = 1; // Default 1 day for chemicals/refrigerants
+        estimatedDuration = 1; // Default 1 day for chemicals/refrigerants only
       }
 
       serviceDetails.push({
-        itemId: itemData.id,
+        originalId: service.id, // Keep original ID format for reference
+        itemId: actualId,
         itemType: itemData.type,
         quantity: service.quantity,
         unitPrice: itemData.base_price,
@@ -137,6 +157,9 @@ const createServiceRequest = async (req, res) => {
       });
     }
 
+    console.log('Service details processed:', serviceDetails);
+    console.log('Total cost:', totalCost, 'Estimated duration:', estimatedDuration);
+
     const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['New']);
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
@@ -144,6 +167,8 @@ const createServiceRequest = async (req, res) => {
     if (downpayment && downpayment.includes('%')) {
       downpaymentPercentage = parseFloat(downpayment.replace('%', ''));
     }
+
+    console.log('Downpayment percentage:', downpaymentPercentage);
 
     const insertRequestQuery = `
       INSERT INTO service_requests 
@@ -163,8 +188,9 @@ const createServiceRequest = async (req, res) => {
     ]);
 
     const requestId = requestResult.rows[0].request_id;
+    console.log('Created request with ID:', requestId);
 
-    // Insert items based on type
+    // Insert items into appropriate tables
     for (const item of serviceDetails) {
       if (item.itemType === 'service') {
         const insertItemQuery = `
@@ -176,29 +202,48 @@ const createServiceRequest = async (req, res) => {
           requestId, item.itemId, item.quantity, 
           item.unitPrice, item.totalPrice
         ]);
-      }
-      // Note: You may want to create separate tables for chemical_request_items and refrigerant_request_items
-      // For now, we'll store them in service_request_items with a note
-      else {
-        const insertItemQuery = `
-          INSERT INTO service_request_items 
-          (request_id, service_id, quantity, unit_price, line_total, notes)
-          VALUES ($1, $2, $3, $4, $5, $6)
+        console.log('Inserted service:', item.itemId);
+      } else if (item.itemType === 'chemical') {
+        const insertChemicalQuery = `
+          INSERT INTO service_request_chemicals 
+          (request_id, chemical_id, quantity, unit_price, line_total)
+          VALUES ($1, $2, $3, $4, $5)
         `;
-        await client.query(insertItemQuery, [
+        await client.query(insertChemicalQuery, [
           requestId, item.itemId, item.quantity, 
-          item.unitPrice, item.totalPrice, `${item.itemType}: ${item.name}`
+          item.unitPrice, item.totalPrice
         ]);
+        console.log('Inserted chemical:', item.itemId);
+      } else if (item.itemType === 'refrigerant') {
+        const insertRefrigerantQuery = `
+          INSERT INTO service_request_refrigerants 
+          (request_id, refrigerant_id, quantity, unit_price, line_total)
+          VALUES ($1, $2, $3, $4, $5)
+        `;
+        await client.query(insertRefrigerantQuery, [
+          requestId, item.itemId, item.quantity, 
+          item.unitPrice, item.totalPrice
+        ]);
+        console.log('Inserted refrigerant:', item.itemId);
       }
     }
 
     await client.query('COMMIT');
 
+    // Create default payments
     try {
       await createDefaultPayments(requestId);
+      console.log('Default payments created successfully');
     } catch (paymentError) {
       console.error('Failed to create default payments:', paymentError);
     }
+
+    console.log('Request created successfully:', {
+      requestId,
+      requestNumber,
+      totalCost,
+      estimatedDuration
+    });
 
     res.status(201).json({
       success: true,
@@ -214,9 +259,12 @@ const createServiceRequest = async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Create service request error:', error);
+    console.error('Error stack:', error.stack);
+    
     res.status(500).json({
       success: false,
-      message: 'Failed to create service request'
+      message: 'Failed to create service request',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     client.release();
@@ -355,10 +403,11 @@ const getRequestDetails = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    const itemsQuery = `
+    // Get services from service_request_items
+    const servicesQuery = `
       SELECT 
         sri.*, 
-        s.service_name, 
+        s.service_name as name, 
         sc.category_name as category,
         CASE 
           WHEN sc.category_name IS NOT NULL THEN sc.category_name
@@ -368,14 +417,68 @@ const getRequestDetails = async (req, res) => {
         COALESCE(sri.notes, '-') as remarks,
         sri.quantity,
         CONCAT('₱', sri.unit_price::text) as unit_price,
-        CONCAT('₱', sri.line_total::text) as total_price
+        CONCAT('₱', sri.line_total::text) as total_price,
+        'service' as item_type
       FROM service_request_items sri
       JOIN services s ON sri.service_id = s.service_id
       LEFT JOIN service_categories sc ON s.category_id = sc.category_id
       WHERE sri.request_id = $1
       ORDER BY sri.item_id
     `;
-    const itemsResult = await pool.query(itemsQuery, [requestId]);
+
+    // Get chemicals from service_request_chemicals
+    const chemicalsQuery = `
+      SELECT 
+        src.*,
+        c.chemical_name as name,
+        'Chemicals' as category,
+        'Chemicals' as service_category,
+        c.chemical_name as service,
+        COALESCE(src.notes, '-') as remarks,
+        src.quantity,
+        CONCAT('₱', src.unit_price::text) as unit_price,
+        CONCAT('₱', src.line_total::text) as total_price,
+        'chemical' as item_type,
+        src.item_id
+      FROM service_request_chemicals src
+      JOIN chemicals c ON src.chemical_id = c.chemical_id
+      WHERE src.request_id = $1
+      ORDER BY src.item_id
+    `;
+
+    // Get refrigerants from service_request_refrigerants
+    const refrigerantsQuery = `
+      SELECT 
+        srr.*,
+        r.refrigerant_name as name,
+        'Refrigerants' as category,
+        'Refrigerants' as service_category,
+        r.refrigerant_name as service,
+        COALESCE(srr.notes, '-') as remarks,
+        srr.quantity,
+        CONCAT('₱', srr.unit_price::text) as unit_price,
+        CONCAT('₱', srr.line_total::text) as total_price,
+        'refrigerant' as item_type,
+        srr.item_id
+      FROM service_request_refrigerants srr
+      JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+      WHERE srr.request_id = $1
+      ORDER BY srr.item_id
+    `;
+
+    // Execute all queries in parallel
+    const [servicesResult, chemicalsResult, refrigerantsResult] = await Promise.all([
+      pool.query(servicesQuery, [requestId]),
+      pool.query(chemicalsQuery, [requestId]),
+      pool.query(refrigerantsQuery, [requestId])
+    ]);
+
+    // Combine all items
+    const allItems = [
+      ...servicesResult.rows,
+      ...chemicalsResult.rows,
+      ...refrigerantsResult.rows
+    ];
 
     const historyQuery = `
       SELECT 
@@ -458,7 +561,7 @@ const getRequestDetails = async (req, res) => {
           totalCost: `₱ ${request.estimated_cost?.toLocaleString() || '0'}`,
           paymentHistory: paymentHistory
         },
-        items: itemsResult.rows,
+        items: allItems, // Now includes services, chemicals, and refrigerants
         statusHistory: historyResult.rows,
         quotation: quotationResult.rows[0] || null
       }
@@ -475,25 +578,55 @@ const getRequestDetails = async (req, res) => {
 
 const getAllRequests = async (req, res) => {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, page = 1, limit = 20, search } = req.query;
     const offset = (page - 1) * limit;
 
     let whereClause = '1=1';
     let queryParams = [];
     
     if (status) {
-      whereClause += ' AND rs.status_name = $1';
+      whereClause += ' AND rs.status_name = $' + (queryParams.length + 1);
       queryParams.push(status);
+    }
+
+    // Add search functionality
+    if (search) {
+      whereClause += ` AND (CONCAT(u.first_name, ' ', u.last_name) ILIKE $${queryParams.length + 1} OR sr.request_number ILIKE $${queryParams.length + 1} OR c.company_name ILIKE $${queryParams.length + 1})`;
+      queryParams.push(`%${search}%`);
     }
 
     const query = `
       SELECT 
-        sr.request_id, sr.request_number, rs.status_name as status,
-        sr.estimated_cost, sr.request_date as created_at,
+        sr.request_id, 
+        sr.request_number, 
+        rs.status_name as status,
+        sr.estimated_cost, 
+        sr.request_date as created_at,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
         c.company_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        sr.priority
+        sr.priority,
+        -- Add service status mapping for frontend
+        CASE 
+          WHEN rs.status_name = 'New' THEN 'Pending'
+          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+          WHEN rs.status_name = 'Completed' THEN 'Completed'
+          ELSE rs.status_name
+        END as service_status,
+        -- Add payment status calculation
+        CASE 
+          WHEN sr.payment_status IS NULL THEN 'Pending'
+          ELSE sr.payment_status
+        END as payment_status,
+        -- Add warranty status
+        CASE 
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
+          ELSE 'N/A'
+        END as warranty_status
       FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
       JOIN users u ON sr.requested_by_user_id = u.user_id
@@ -508,9 +641,12 @@ const getAllRequests = async (req, res) => {
 
     const result = await pool.query(query, queryParams);
 
+    // Count query for pagination
     const countQuery = `
       SELECT COUNT(*) FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      JOIN companies c ON sr.company_id = c.company_id
       WHERE ${whereClause}
     `;
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
