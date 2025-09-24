@@ -99,7 +99,7 @@ const CompanyOverview = () => {
       <div className="space-y-6">
         {/* Why Choose Us Section */}
         <section id="about" className="py-10">
-          <div className="mx-18 lg:mx-25">
+          <div className="mx-18 lg:mx-30 xl:mx-30">
             <h2 className="text-3xl lg:text-4xl xl:text-5xl font-bold text-center mb-8 lg:mb-10 xl:mb-16 text-[#004785]">
               Why Choose Us?
             </h2>
@@ -110,7 +110,7 @@ const CompanyOverview = () => {
                 <img
                   src={slideImages[currentSlide]}
                   alt={`Office slide ${currentSlide + 1}`}
-                  className="w-full h-80 lg:h-130 xl:h-180 object-cover"
+                  className="w-full h-80 lg:h-130 xl:h-150 object-cover"
                 />
               </div>
 

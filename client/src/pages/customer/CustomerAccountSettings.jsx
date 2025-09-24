@@ -40,7 +40,7 @@ const CustomerAccountSettings = () => {
           email: data.data.email || '',
           contactNo: data.data.contactNo || '',
           company: data.data.companyName || '',
-          password: '************', // Always show placeholder for password
+          password: '************',
         });
       } else {
         setErrors({ general: data.message || 'Failed to load account data' });
