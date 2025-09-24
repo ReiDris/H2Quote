@@ -266,7 +266,7 @@ const Services = () => {
     <CustomerLayout>
       <div className="space-y-6">
         {/* Main Content */}
-        <div className="py-8" id="services-content">
+        <div className="py-8 mx-18 lg:mx-30 xl:mx-30" id="services-content">
           <div>
             {/* Search Bar and Filter Buttons */}
             <section className="mb-8">
@@ -278,7 +278,7 @@ const Services = () => {
                       <button
                         key={filter}
                         onClick={() => handleFilterChange(filter)}
-                        className={`px-4 py-2 xl:text-lg transition-colors duration-300 ${
+                        className={`px-4 py-2 xl:text-md transition-colors duration-300 ${
                           activeFilter === filter
                             ? "text-[#004785] font-semibold border-b-2 border-b-[#004785] cursor-pointer"
                             : "text-gray-700 hover:border-b-2 hover:border-b-[#004785] hover:text-[#004785] cursor-pointer"
@@ -358,7 +358,7 @@ const Services = () => {
 
                       {/* Service Content */}
                       <div className="p-6">
-                        <h3 className="text-xl font-bold text-[#004785] mb-3">
+                        <h3 className="text-lg font-bold text-[#004785] mb-3">
                           {service.title}
                         </h3>
                         <p className="text-[#004785] text-sm leading-relaxed mb-4 font-light">
