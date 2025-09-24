@@ -18,6 +18,9 @@ const ServiceRequestDetails = () => {
   const [requestData, setRequestData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  
+  // State for payment breakdown individual status changes
+  const [paymentBreakdown, setPaymentBreakdown] = useState([]);
 
   // Fetch request details from backend
   useEffect(() => {
@@ -62,10 +65,26 @@ const ServiceRequestDetails = () => {
         }
 
         const detailData = await detailResponse.json();
+        console.log('Detailed response:', detailData); // Debug logging
 
         if (detailData.success) {
           const { request: requestDetails, items, paymentHistory } = detailData.data;
           
+          // Calculate actual total cost from items
+          const actualTotalCost = items.reduce((sum, item) => {
+            // Remove currency symbols and convert to number
+            const lineTotal = typeof item.line_total === 'string' 
+              ? parseFloat(item.line_total.replace(/[₱,]/g, '')) 
+              : parseFloat(item.line_total) || 0;
+            return sum + lineTotal;
+          }, 0);
+          
+          // Format total cost
+          const formattedTotalCost = `₱${actualTotalCost.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}`;
+
           // Transform data to match existing component structure
           const transformedData = {
             id: requestDetails.request_number,
@@ -73,8 +92,8 @@ const ServiceRequestDetails = () => {
             customer: {
               name: requestDetails.customer_name,
               company: requestDetails.company_name,
-              email: requestDetails.email || "company@gmail.com", // fallback
-              contact: requestDetails.phone || "09654840369", // fallback
+              email: requestDetails.email || "Not provided",
+              contact: requestDetails.phone || "Not provided",
             },
             services: items.map(item => ({
               category: item.service_category || item.category,
@@ -86,17 +105,18 @@ const ServiceRequestDetails = () => {
             })),
             paymentHistory: requestDetails.paymentHistory || [],
             estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-            totalCost: requestDetails.totalCost,
+            totalCost: formattedTotalCost, // Use calculated total cost
             paymentMode: requestDetails.payment_mode || "Bank Transfer",
-            paymentTerms: requestDetails.payment_terms || "50% Exp. 30% upon Completion",
-            paymentDeadline: requestDetails.payment_deadline || "Tomorrow",
-            assignedStaff: requestDetails.assigned_staff_name || "",
-            warranty: requestDetails.warranty || "Not yet decided",
+            paymentTerms: requestDetails.payment_terms || "50% Down, 50% upon Completion",
+            paymentDeadline: requestDetails.payment_deadline || "Not set",
+            assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
+            warranty: requestDetails.warranty || "6 months",
             warrantyStatus: requestDetails.warranty_status || "Pending",
             remarks: requestDetails.remarks || "-"
           };
 
           setRequestData(transformedData);
+          setPaymentBreakdown(requestDetails.paymentHistory || []);
           
           // Set initial status values
           setServiceStatus(requestDetails.service_status || "Pending");
@@ -118,6 +138,16 @@ const ServiceRequestDetails = () => {
       fetchRequestDetails();
     }
   }, [requestNumber]);
+
+  // Handle payment breakdown status changes
+  const handlePaymentStatusChange = (index, newStatus) => {
+    const updatedPayments = [...paymentBreakdown];
+    updatedPayments[index] = {
+      ...updatedPayments[index],
+      paymentStatus: newStatus
+    };
+    setPaymentBreakdown(updatedPayments);
+  };
 
   const getStatusBadge = (status, type) => {
     const statusStyles = {
@@ -370,7 +400,7 @@ const ServiceRequestDetails = () => {
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Assigned Staff:
               </label>
-              <span className="text-sm text-gray-800">{requestData.assignedStaff || "Not assigned"}</span>
+              <span className="text-sm text-gray-800">{requestData.assignedStaff}</span>
             </div>
           </div>
 
@@ -543,7 +573,7 @@ const ServiceRequestDetails = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {requestData.paymentHistory.map((payment, index) => (
+                {paymentBreakdown.map((payment, index) => (
                   <tr key={index} className="hover:bg-gray-50">
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {payment.phase}
@@ -570,6 +600,7 @@ const ServiceRequestDetails = () => {
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       <select
                         value={payment.paymentStatus}
+                        onChange={(e) => handlePaymentStatusChange(index, e.target.value)}
                         className="text-xs xl:text-sm border border-gray-300 rounded p-2"
                       >
                         <option value="Pending">Pending</option>

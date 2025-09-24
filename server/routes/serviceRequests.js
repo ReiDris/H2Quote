@@ -33,6 +33,8 @@ router.get('/my-requests', requireCustomer, serviceRequestController.getCustomer
 
 // Routes with parameters
 router.get('/:requestId/details', serviceRequestController.getRequestDetails);
+router.get('/:requestId/debug-items', requireAdminOrStaff, serviceRequestController.debugRequestItems); 
+router.put('/:requestId/update-status', requireAdminOrStaff, serviceRequestController.updateRequestStatus);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);

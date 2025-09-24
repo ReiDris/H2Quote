@@ -351,6 +351,8 @@ const getRequestDetails = async (req, res) => {
         sr.*, 
         rs.status_name,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+        u.email as customer_email,
+        u.phone as customer_phone,
         c.company_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         -- Add formatted fields for frontend
@@ -403,7 +405,6 @@ const getRequestDetails = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Get services from service_request_items
     const servicesQuery = `
       SELECT 
         sri.*, 
@@ -418,6 +419,7 @@ const getRequestDetails = async (req, res) => {
         sri.quantity,
         CONCAT('₱', sri.unit_price::text) as unit_price,
         CONCAT('₱', sri.line_total::text) as total_price,
+        sri.line_total as line_total_numeric,
         'service' as item_type
       FROM service_request_items sri
       JOIN services s ON sri.service_id = s.service_id
@@ -426,7 +428,6 @@ const getRequestDetails = async (req, res) => {
       ORDER BY sri.item_id
     `;
 
-    // Get chemicals from service_request_chemicals
     const chemicalsQuery = `
       SELECT 
         src.*,
@@ -438,6 +439,7 @@ const getRequestDetails = async (req, res) => {
         src.quantity,
         CONCAT('₱', src.unit_price::text) as unit_price,
         CONCAT('₱', src.line_total::text) as total_price,
+        src.line_total as line_total_numeric,
         'chemical' as item_type,
         src.item_id
       FROM service_request_chemicals src
@@ -445,8 +447,6 @@ const getRequestDetails = async (req, res) => {
       WHERE src.request_id = $1
       ORDER BY src.item_id
     `;
-
-    // Get refrigerants from service_request_refrigerants
     const refrigerantsQuery = `
       SELECT 
         srr.*,
@@ -458,6 +458,7 @@ const getRequestDetails = async (req, res) => {
         srr.quantity,
         CONCAT('₱', srr.unit_price::text) as unit_price,
         CONCAT('₱', srr.line_total::text) as total_price,
+        srr.line_total as line_total_numeric,
         'refrigerant' as item_type,
         srr.item_id
       FROM service_request_refrigerants srr
@@ -479,6 +480,11 @@ const getRequestDetails = async (req, res) => {
       ...chemicalsResult.rows,
       ...refrigerantsResult.rows
     ];
+
+    // Calculate actual total cost
+    const actualTotalCost = allItems.reduce((sum, item) => {
+      return sum + (parseFloat(item.line_total_numeric) || 0);
+    }, 0);
 
     const historyQuery = `
       SELECT 
@@ -527,8 +533,8 @@ const getRequestDetails = async (req, res) => {
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
-      const downpaymentAmount = Math.round((request.estimated_cost * downpaymentPercent) / 100);
-      const remainingAmount = request.estimated_cost - downpaymentAmount;
+      const downpaymentAmount = Math.round((actualTotalCost * downpaymentPercent) / 100);
+      const remainingAmount = actualTotalCost - downpaymentAmount;
 
       paymentHistory = [
         {
@@ -552,16 +558,27 @@ const getRequestDetails = async (req, res) => {
       paymentHistory = paymentResult.rows;
     }
 
+    // Format total cost
+    const formattedTotalCost = `₱${actualTotalCost.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}`;
+
+    // Add customer contact info to the response
+    const enhancedRequest = {
+      ...request,
+      id: request.request_number,
+      totalCost: formattedTotalCost,
+      email: request.customer_email,
+      phone: request.customer_phone,
+      paymentHistory: paymentHistory
+    };
+
     res.json({
       success: true,
       data: {
-        request: {
-          ...request,
-          id: request.request_number,
-          totalCost: `₱ ${request.estimated_cost?.toLocaleString() || '0'}`,
-          paymentHistory: paymentHistory
-        },
-        items: allItems, // Now includes services, chemicals, and refrigerants
+        request: enhancedRequest,
+        items: allItems,
         statusHistory: historyResult.rows,
         quotation: quotationResult.rows[0] || null
       }
@@ -600,7 +617,13 @@ const getAllRequests = async (req, res) => {
         sr.request_id, 
         sr.request_number, 
         rs.status_name as status,
-        sr.estimated_cost, 
+        -- FIXED: Calculate actual total cost from all item tables
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          sr.estimated_cost
+        ) as estimated_cost,
         sr.request_date as created_at,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
         c.company_name,
@@ -626,7 +649,53 @@ const getAllRequests = async (req, res) => {
           WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
           WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
           ELSE 'N/A'
-        END as warranty_status
+        END as warranty_status,
+        -- Add item counts for debugging
+        (
+          SELECT COUNT(*)::int 
+          FROM service_request_items sri 
+          WHERE sri.request_id = sr.request_id
+        ) as services_count,
+        (
+          SELECT COUNT(*)::int 
+          FROM service_request_chemicals src 
+          WHERE src.request_id = sr.request_id
+        ) as chemicals_count,
+        (
+          SELECT COUNT(*)::int 
+          FROM service_request_refrigerants srr 
+          WHERE srr.request_id = sr.request_id
+        ) as refrigerants_count,
+        -- Add item summary for display
+        (
+          SELECT STRING_AGG(
+            CASE 
+              WHEN item_type = 'service' THEN CONCAT(qty, 'x ', name, ' (Service)')
+              WHEN item_type = 'chemical' THEN CONCAT(qty, 'x ', name, ' (Chemical)')
+              WHEN item_type = 'refrigerant' THEN CONCAT(qty, 'x ', name, ' (Refrigerant)')
+            END, ', '
+          )
+          FROM (
+            SELECT 'service' as item_type, sri.quantity as qty, s.service_name as name
+            FROM service_request_items sri
+            JOIN services s ON sri.service_id = s.service_id
+            WHERE sri.request_id = sr.request_id
+            
+            UNION ALL
+            
+            SELECT 'chemical' as item_type, src.quantity as qty, c.chemical_name as name
+            FROM service_request_chemicals src
+            JOIN chemicals c ON src.chemical_id = c.chemical_id
+            WHERE src.request_id = sr.request_id
+            
+            UNION ALL
+            
+            SELECT 'refrigerant' as item_type, srr.quantity as qty, r.refrigerant_name as name
+            FROM service_request_refrigerants srr
+            JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+            WHERE srr.request_id = sr.request_id
+          ) items_summary
+        ) as items_summary
       FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
       JOIN users u ON sr.requested_by_user_id = u.user_id
@@ -651,6 +720,17 @@ const getAllRequests = async (req, res) => {
     `;
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
     const totalCount = parseInt(countResult.rows[0].count);
+
+    // Log debug info
+    console.log('Service requests with item counts:', result.rows.map(r => ({
+      id: r.request_id,
+      number: r.request_number,
+      services: r.services_count,
+      chemicals: r.chemicals_count,
+      refrigerants: r.refrigerants_count,
+      estimated_cost: r.estimated_cost,
+      items_summary: r.items_summary
+    })));
 
     res.json({
       success: true,
@@ -1203,10 +1283,263 @@ const checkStockAvailability = async (req, res) => {
   }
 };
 
+const debugRequestItems = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+
+    // Check all three tables for items
+    const servicesQuery = `
+      SELECT 'service' as type, sri.*, s.service_name as name
+      FROM service_request_items sri
+      JOIN services s ON sri.service_id = s.service_id
+      WHERE sri.request_id = $1
+    `;
+
+    const chemicalsQuery = `
+      SELECT 'chemical' as type, src.*, c.chemical_name as name
+      FROM service_request_chemicals src
+      JOIN chemicals c ON src.chemical_id = c.chemical_id
+      WHERE src.request_id = $1
+    `;
+
+    const refrigerantsQuery = `
+      SELECT 'refrigerant' as type, srr.*, r.refrigerant_name as name
+      FROM service_request_refrigerants srr
+      JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+      WHERE srr.request_id = $1
+    `;
+
+    const [servicesResult, chemicalsResult, refrigerantsResult] = await Promise.all([
+      pool.query(servicesQuery, [requestId]),
+      pool.query(chemicalsQuery, [requestId]),
+      pool.query(refrigerantsQuery, [requestId])
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        requestId: requestId,
+        services: servicesResult.rows,
+        chemicals: chemicalsResult.rows,
+        refrigerants: refrigerantsResult.rows,
+        totalItems: servicesResult.rows.length + chemicalsResult.rows.length + refrigerantsResult.rows.length,
+        summary: {
+          servicesCount: servicesResult.rows.length,
+          chemicalsCount: chemicalsResult.rows.length,
+          refrigerantsCount: refrigerantsResult.rows.length
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Debug request items error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to debug request items',
+      error: error.message
+    });
+  }
+};
+
+const updateRequestStatus = async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    const { requestId } = req.params;
+    const { 
+      serviceStatus, 
+      paymentStatus, 
+      warrantyStatus,
+      serviceStartDate,
+      serviceEndDate,
+      paymentBreakdown 
+    } = req.body;
+
+    const userId = req.user.id;
+    const userType = req.user.userType;
+
+    // Verify request exists and user has permission
+    let whereClause = 'request_id = $1';
+    let queryParams = [requestId];
+
+    if (userType === 'client') {
+      whereClause += ' AND requested_by_user_id = $2';
+      queryParams.push(userId);
+    }
+
+    const requestCheck = await client.query(
+      `SELECT request_id, status_id FROM service_requests WHERE ${whereClause}`,
+      queryParams
+    );
+
+    if (requestCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service request not found or access denied'
+      });
+    }
+
+    const currentRequest = requestCheck.rows[0];
+
+    // Map frontend status to backend status
+    const statusMapping = {
+      'Pending': 'New',
+      'Assigned': 'Under Review',
+      'Processing': 'Quote Prepared',
+      'Approval': 'Quote Approved',
+      'Ongoing': 'In Progress',
+      'Completed': 'Completed'
+    };
+
+    const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+
+    // Get status ID from database
+    let newStatusId = currentRequest.status_id;
+    if (serviceStatus) {
+      const statusResult = await client.query(
+        'SELECT status_id FROM request_statuses WHERE status_name = $1',
+        [backendStatus]
+      );
+      
+      if (statusResult.rows.length > 0) {
+        newStatusId = statusResult.rows[0].status_id;
+      }
+    }
+
+    // Build update query dynamically
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+
+    // Update status if changed
+    if (newStatusId !== currentRequest.status_id) {
+      updateFields.push(`status_id = $${paramCount++}`);
+      updateValues.push(newStatusId);
+    }
+
+    // Update payment status
+    if (paymentStatus) {
+      updateFields.push(`payment_status = $${paramCount++}`);
+      updateValues.push(paymentStatus);
+    }
+
+    // Update service dates
+    if (serviceStartDate) {
+      updateFields.push(`service_start_date = $${paramCount++}`);
+      updateValues.push(serviceStartDate);
+    }
+
+    if (serviceEndDate) {
+      updateFields.push(`actual_completion_date = $${paramCount++}`);
+      updateValues.push(serviceEndDate);
+    }
+
+    // Set warranty start date if completed
+    if (serviceStatus === 'Completed' && !serviceEndDate) {
+      updateFields.push(`warranty_start_date = $${paramCount++}`);
+      updateValues.push(new Date().toISOString().split('T')[0]);
+    }
+
+    // Always update the updated_at field
+    updateFields.push(`updated_at = $${paramCount++}`);
+    updateValues.push(new Date());
+
+    // Add request ID as last parameter
+    updateValues.push(requestId);
+
+    // Execute update if there are fields to update
+    if (updateFields.length > 1) { // More than just updated_at
+      const updateQuery = `
+        UPDATE service_requests 
+        SET ${updateFields.join(', ')}
+        WHERE request_id = $${paramCount}
+      `;
+
+      await client.query(updateQuery, updateValues);
+
+      // Log status change in history if status changed
+      if (newStatusId !== currentRequest.status_id) {
+        await client.query(`
+          INSERT INTO request_status_history 
+          (request_id, from_status_id, to_status_id, changed_by, change_reason, changed_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())
+        `, [
+          requestId, 
+          currentRequest.status_id, 
+          newStatusId, 
+          userId, 
+          'Status updated by admin/staff'
+        ]);
+      }
+    }
+
+    // Update individual payment statuses if provided
+    if (paymentBreakdown && Array.isArray(paymentBreakdown)) {
+      for (let i = 0; i < paymentBreakdown.length; i++) {
+        const payment = paymentBreakdown[i];
+        if (payment.paymentStatus) {
+          await client.query(`
+            UPDATE payments 
+            SET status = $1, updated_at = NOW()
+            WHERE request_id = $2 AND payment_phase = $3
+          `, [payment.paymentStatus, requestId, payment.phase]);
+        }
+      }
+    }
+
+    // Log audit entry
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'service_requests',
+        record_id: requestId,
+        action: 'UPDATE',
+        new_values: { 
+          service_status: serviceStatus,
+          payment_status: paymentStatus,
+          warranty_status: warrantyStatus,
+          service_start_date: serviceStartDate,
+          service_end_date: serviceEndDate
+        },
+        changed_by: req.user.email,
+        change_reason: 'Service request status update',
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: 'Service request updated successfully',
+      data: {
+        requestId: requestId,
+        updatedStatus: serviceStatus,
+        updatedPaymentStatus: paymentStatus
+      }
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Update request status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update service request'
+    });
+  } finally {
+    client.release();
+  }
+};
+
+
 module.exports = {
   createServiceRequest,
   getCustomerRequests,
   getRequestDetails,
+  debugRequestItems,
   getAllRequests,
   addServicesToRequest,
   createQuotation,
@@ -1215,5 +1548,6 @@ module.exports = {
   getChemicalsCatalog,
   getRefrigerantsCatalog,
   getServiceWithRelatedItems,
-  checkStockAvailability
+  checkStockAvailability,
+  updateRequestStatus
 };

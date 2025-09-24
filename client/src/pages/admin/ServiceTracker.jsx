@@ -51,6 +51,7 @@ const ServiceTracker = () => {
       const data = await response.json();
 
       if (data.success) {
+        console.log('Fetched service requests:', data.data.requests);
         setServiceRequests(data.data.requests);
         setTotalCount(data.data.pagination.totalCount);
       } else {
@@ -138,6 +139,34 @@ const ServiceTracker = () => {
     });
   };
 
+  // Format items summary with debugging
+  const formatItemsSummary = (item) => {
+    const servicesCount = item.services_count || 0;
+    const chemicalsCount = item.chemicals_count || 0;
+    const refrigerantsCount = item.refrigerants_count || 0;
+    const totalItems = servicesCount + chemicalsCount + refrigerantsCount;
+    
+    // Debug logging
+    console.log(`Request ${item.request_number}:`, {
+      services: servicesCount,
+      chemicals: chemicalsCount,
+      refrigerants: refrigerantsCount,
+      total: totalItems,
+      summary: item.items_summary
+    });
+    
+    if (totalItems === 0) {
+      return "No items found";
+    }
+
+    const itemCounts = [];
+    if (servicesCount > 0) itemCounts.push(`${servicesCount} Service${servicesCount > 1 ? 's' : ''}`);
+    if (chemicalsCount > 0) itemCounts.push(`${chemicalsCount} Chemical${chemicalsCount > 1 ? 's' : ''}`);
+    if (refrigerantsCount > 0) itemCounts.push(`${refrigerantsCount} Refrigerant${refrigerantsCount > 1 ? 's' : ''}`);
+
+    return `${totalItems} Item${totalItems > 1 ? 's' : ''}: ${itemCounts.join(', ')}`;
+  };
+
   // Calculate total pages
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
@@ -205,6 +234,9 @@ const ServiceTracker = () => {
                     Company
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Items Requested
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Estimated Cost
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-black">
@@ -240,6 +272,9 @@ const ServiceTracker = () => {
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
                         {item.company_name}
                       </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                        {formatItemsSummary(item)}
+                      </td>
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
                         ₱{parseFloat(item.estimated_cost || 0).toLocaleString()}
                       </td>
@@ -268,7 +303,7 @@ const ServiceTracker = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="10" className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan="11" className="px-6 py-8 text-center text-gray-500">
                       {searchTerm ? 'No service requests found matching your search.' : 'No service requests found.'}
                     </td>
                   </tr>
