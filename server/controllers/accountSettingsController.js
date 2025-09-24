@@ -1,4 +1,3 @@
-// controllers/accountSettingsController.js
 const bcrypt = require('bcryptjs');
 const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
