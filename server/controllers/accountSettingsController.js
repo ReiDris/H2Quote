@@ -61,7 +61,6 @@ const updateUserAccount = async (req, res) => {
     const userId = req.user.id;
     const { name, email, contactNo, password, firstName, lastName } = req.body;
 
-    // Validate input
     if (!name && !email && !contactNo && !password && !firstName && !lastName) {
       return res.status(400).json({
         success: false,

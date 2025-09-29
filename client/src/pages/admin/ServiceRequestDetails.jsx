@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Calendar, Eye } from "lucide-react";
+import { ArrowLeft, Calendar, Eye, Package } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import ManageRequestItemsModal from "../../components/admin/ManageRequestItemsModal";
 
 const ServiceRequestDetails = () => {
   const { requestNumber } = useParams();
@@ -18,126 +19,137 @@ const ServiceRequestDetails = () => {
   const [requestData, setRequestData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [requestId, setRequestId] = useState(null);
   
   // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
 
+  // NEW: State for manage items modal
+  const [isManageItemsModalOpen, setIsManageItemsModalOpen] = useState(false);
+
   // Fetch request details from backend
-  useEffect(() => {
-    const fetchRequestDetails = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('h2quote_token');
-        
-        // First, find the request by request_number to get request_id
-        const searchResponse = await fetch(`http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!searchResponse.ok) {
-          throw new Error('Failed to find service request');
+  const fetchRequestDetails = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('h2quote_token');
+      
+      // First, find the request by request_number to get request_id
+      const searchResponse = await fetch(`http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
+      });
 
-        const searchData = await searchResponse.json();
-        
-        if (!searchData.success || searchData.data.requests.length === 0) {
-          setError('Service request not found');
-          return;
-        }
-
-        const request = searchData.data.requests[0];
-        
-        // Now fetch full details using request_id
-        const detailResponse = await fetch(`http://localhost:5000/api/service-requests/${request.request_id}/details`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!detailResponse.ok) {
-          throw new Error('Failed to fetch request details');
-        }
-
-        const detailData = await detailResponse.json();
-        console.log('Detailed response:', detailData); // Debug logging
-
-        if (detailData.success) {
-          const { request: requestDetails, items, paymentHistory } = detailData.data;
-          
-          // Calculate actual total cost from items
-          const actualTotalCost = items.reduce((sum, item) => {
-            // Remove currency symbols and convert to number
-            const lineTotal = typeof item.line_total === 'string' 
-              ? parseFloat(item.line_total.replace(/[₱,]/g, '')) 
-              : parseFloat(item.line_total) || 0;
-            return sum + lineTotal;
-          }, 0);
-          
-          // Format total cost
-          const formattedTotalCost = `₱${actualTotalCost.toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          })}`;
-
-          // Transform data to match existing component structure
-          const transformedData = {
-            id: requestDetails.request_number,
-            requestedAt: requestDetails.requested_at,
-            customer: {
-              name: requestDetails.customer_name,
-              company: requestDetails.company_name,
-              email: requestDetails.email || "Not provided",
-              contact: requestDetails.phone || "Not provided",
-            },
-            services: items.map(item => ({
-              category: item.service_category || item.category,
-              service: item.name,
-              remarks: item.remarks || "-",
-              quantity: item.quantity,
-              unitPrice: item.unit_price,
-              totalPrice: item.total_price,
-            })),
-            paymentHistory: requestDetails.paymentHistory || [],
-            estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-            totalCost: formattedTotalCost, // Use calculated total cost
-            paymentMode: requestDetails.payment_mode || "Bank Transfer",
-            paymentTerms: requestDetails.payment_terms || "50% Down, 50% upon Completion",
-            paymentDeadline: requestDetails.payment_deadline || "Not set",
-            assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
-            warranty: requestDetails.warranty || "6 months",
-            warrantyStatus: requestDetails.warranty_status || "Pending",
-            remarks: requestDetails.remarks || "-"
-          };
-
-          setRequestData(transformedData);
-          setPaymentBreakdown(requestDetails.paymentHistory || []);
-          
-          // Set initial status values
-          setServiceStatus(requestDetails.service_status || "Pending");
-          setPaymentStatus(requestDetails.payment_status || "Pending");
-          setWarrantyStatus(requestDetails.warranty_status || "Pending");
-          
-        } else {
-          setError(detailData.message || 'Failed to fetch request details');
-        }
-      } catch (error) {
-        console.error('Error fetching request details:', error);
-        setError('Failed to fetch request details');
-      } finally {
-        setLoading(false);
+      if (!searchResponse.ok) {
+        throw new Error('Failed to find service request');
       }
-    };
 
+      const searchData = await searchResponse.json();
+      
+      if (!searchData.success || searchData.data.requests.length === 0) {
+        setError('Service request not found');
+        return;
+      }
+
+      const request = searchData.data.requests[0];
+      setRequestId(request.request_id); // Store request_id for modal
+      
+      // Now fetch full details using request_id
+      const detailResponse = await fetch(`http://localhost:5000/api/service-requests/${request.request_id}/details`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!detailResponse.ok) {
+        throw new Error('Failed to fetch request details');
+      }
+
+      const detailData = await detailResponse.json();
+      console.log('Detailed response:', detailData);
+
+      if (detailData.success) {
+        const { request: requestDetails, items, paymentHistory } = detailData.data;
+        
+        // Calculate actual total cost from items
+        const actualTotalCost = items.reduce((sum, item) => {
+          const lineTotal = typeof item.line_total === 'string' 
+            ? parseFloat(item.line_total.replace(/[₱,]/g, '')) 
+            : parseFloat(item.line_total) || 0;
+          return sum + lineTotal;
+        }, 0);
+        
+        // Format total cost
+        const formattedTotalCost = `₱${actualTotalCost.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })}`;
+
+        // Transform data to match existing component structure
+        const transformedData = {
+          id: requestDetails.request_number,
+          requestedAt: requestDetails.requested_at,
+          customer: {
+            name: requestDetails.customer_name,
+            company: requestDetails.company_name,
+            email: requestDetails.email || "Not provided",
+            contact: requestDetails.phone || "Not provided",
+          },
+          services: items.map(item => ({
+            category: item.service_category || item.category,
+            service: item.name,
+            remarks: item.remarks || "-",
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            totalPrice: item.total_price,
+            itemType: item.item_type, // Store item type for reference
+          })),
+          paymentHistory: requestDetails.paymentHistory || [],
+          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+          totalCost: formattedTotalCost,
+          paymentMode: requestDetails.payment_mode || "Bank Transfer",
+          paymentTerms: requestDetails.payment_terms || "50% Down, 50% upon Completion",
+          paymentDeadline: requestDetails.payment_deadline || "Not set",
+          assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
+          warranty: requestDetails.warranty || "6 months",
+          warrantyStatus: requestDetails.warranty_status || "Pending",
+          remarks: requestDetails.remarks || "-",
+          serviceStatus: requestDetails.service_status || "Pending",
+        };
+
+        setRequestData(transformedData);
+        setPaymentBreakdown(requestDetails.paymentHistory || []);
+        
+        // Set initial status values
+        setServiceStatus(requestDetails.service_status || "Pending");
+        setPaymentStatus(requestDetails.payment_status || "Pending");
+        setWarrantyStatus(requestDetails.warranty_status || "Pending");
+        
+      } else {
+        setError(detailData.message || 'Failed to fetch request details');
+      }
+    } catch (error) {
+      console.error('Error fetching request details:', error);
+      setError('Failed to fetch request details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (requestNumber) {
       fetchRequestDetails();
     }
   }, [requestNumber]);
+
+  // NEW: Handle items updated callback
+  const handleItemsUpdated = () => {
+    fetchRequestDetails(); // Refresh the entire request details
+  };
 
   // Handle payment breakdown status changes
   const handlePaymentStatusChange = (index, newStatus) => {
@@ -285,6 +297,9 @@ const ServiceRequestDetails = () => {
     );
   }
 
+  // NEW: Check if request is editable
+  const isEditable = ['Pending', 'Assigned', 'Processing'].includes(requestData.serviceStatus);
+
   return (
     <AdminLayout>
       <div>
@@ -404,10 +419,22 @@ const ServiceRequestDetails = () => {
             </div>
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-4">
+          {/* NEW: Header with Manage Items button */}
+          <div className="flex items-center justify-between mb-4">
+            <label className="block text-sm font-medium text-gray-700">
               List of Requested Services:
             </label>
+            
+            {/* Show manage items button only if request is editable */}
+            {isEditable && requestId && (
+              <button
+                onClick={() => setIsManageItemsModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Package size={18} />
+                Manage Items
+              </button>
+            )}
           </div>
 
           {/* Services Table */}
@@ -666,6 +693,16 @@ const ServiceRequestDetails = () => {
             Save Changes
           </button>
         </div>
+
+        {/* NEW: Manage Items Modal */}
+        {requestId && (
+          <ManageRequestItemsModal
+            isOpen={isManageItemsModalOpen}
+            onClose={() => setIsManageItemsModalOpen(false)}
+            requestId={requestId}
+            onSuccess={handleItemsUpdated}
+          />
+        )}
       </div>
     </AdminLayout>
   );

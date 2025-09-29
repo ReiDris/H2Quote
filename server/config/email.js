@@ -5,16 +5,14 @@ if (!process.env.EMAIL_USER) {
     process.exit(1);
 }
 
-// Option 1: App Password Configuration (for development)
 const appPasswordConfig = {
     service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD // Use App Password here
+        pass: process.env.EMAIL_PASSWORD 
     }
 };
 
-// Option 2: OAuth2 Configuration (for production)
 const oauth2Config = {
     service: 'gmail',
     auth: {
@@ -27,7 +25,6 @@ const oauth2Config = {
     }
 };
 
-// Use OAuth2 if all OAuth credentials are provided, otherwise use App Password
 const useOAuth2 = process.env.GMAIL_CLIENT_ID && 
                   process.env.GMAIL_CLIENT_SECRET && 
                   process.env.GMAIL_REFRESH_TOKEN;

@@ -1,5 +1,5 @@
-const { createClient } = require('@supabase/supabase-js');
-const pool = require('../config/database');
+const { createClient } = require("@supabase/supabase-js");
+const pool = require("../config/database");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -9,8 +9,8 @@ const supabase = createClient(
 const createDefaultPayments = async (requestId) => {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    
+    await client.query("BEGIN");
+
     const requestQuery = `
       SELECT estimated_cost, downpayment_percentage 
       FROM service_requests 
@@ -18,19 +18,24 @@ const createDefaultPayments = async (requestId) => {
     `;
     const request = await client.query(requestQuery, [requestId]);
     const { estimated_cost, downpayment_percentage } = request.rows[0];
-    
+
     const downpaymentPercent = downpayment_percentage || 50;
-    const downpaymentAmount = Math.round((estimated_cost * downpaymentPercent) / 100);
+    const downpaymentAmount = Math.round(
+      (estimated_cost * downpaymentPercent) / 100
+    );
     const remainingAmount = estimated_cost - downpaymentAmount;
-    
-    await client.query(`
+
+    await client.query(
+      `
       INSERT INTO payments (request_id, payment_phase, amount, status)
       VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
-    `, [requestId, downpaymentAmount, remainingAmount]);
-    
-    await client.query('COMMIT');
+    `,
+      [requestId, downpaymentAmount, remainingAmount]
+    );
+
+    await client.query("COMMIT");
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -39,41 +44,43 @@ const createDefaultPayments = async (requestId) => {
 
 const createServiceRequest = async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const {
-      selectedServices, 
+      selectedServices,
       paymentMode,
       paymentTerms,
       downpayment,
       remarks,
       siteLocation,
       preferredSchedule,
-      specialRequirements
+      specialRequirements,
     } = req.body;
 
     const customerId = req.user.id;
     const companyId = req.user.companyId;
 
-    console.log('Received request data:', {
+    console.log("Received request data:", {
       selectedServices,
       paymentMode,
       paymentTerms,
       downpayment,
       customerId,
-      companyId
+      companyId,
     });
 
     if (!selectedServices || selectedServices.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'At least one service must be selected'
+        message: "At least one service must be selected",
       });
     }
 
-    const requestNumberResult = await client.query('SELECT generate_request_number() as request_number');
+    const requestNumberResult = await client.query(
+      "SELECT generate_request_number() as request_number"
+    );
     const requestNumber = requestNumberResult.rows[0].request_number;
 
     let totalCost = 0;
@@ -81,35 +88,34 @@ const createServiceRequest = async (req, res) => {
     const serviceDetails = [];
 
     for (const service of selectedServices) {
-      console.log('Processing service:', service);
-      
-      // Handle different item types (services, chemicals, refrigerants)
+      console.log("Processing service:", service);
+
       let itemQuery, itemData;
       let actualId = service.id;
-      let itemType = 'service'; // default
-      
-      if (typeof service.id === 'string' && service.id.startsWith('chem_')) {
-        // Chemical item
-        actualId = parseInt(service.id.replace('chem_', ''));
-        itemType = 'chemical';
+      let itemType = "service"; 
+
+      if (typeof service.id === "string" && service.id.startsWith("chem_")) {
+        actualId = parseInt(service.id.replace("chem_", ""));
+        itemType = "chemical";
         itemQuery = `
           SELECT chemical_id as id, chemical_name as name, price as base_price, 'chemical' as type
           FROM chemicals 
           WHERE chemical_id = $1 AND is_active = true
         `;
-      } else if (typeof service.id === 'string' && service.id.startsWith('refrig_')) {
-        // Refrigerant item
-        actualId = parseInt(service.id.replace('refrig_', ''));
-        itemType = 'refrigerant';
+      } else if (
+        typeof service.id === "string" &&
+        service.id.startsWith("refrig_")
+      ) {
+        actualId = parseInt(service.id.replace("refrig_", ""));
+        itemType = "refrigerant";
         itemQuery = `
           SELECT refrigerant_id as id, refrigerant_name as name, price as base_price, 'refrigerant' as type
           FROM refrigerants 
           WHERE refrigerant_id = $1 AND is_active = true
         `;
       } else {
-        // Service item
         actualId = parseInt(service.id);
-        itemType = 'service';
+        itemType = "service";
         itemQuery = `
           SELECT service_id as id, service_name as name, base_price, estimated_duration_hours, 'service' as type
           FROM services 
@@ -117,23 +123,27 @@ const createServiceRequest = async (req, res) => {
         `;
       }
 
-      console.log('Executing query for item type:', itemType, 'with ID:', actualId);
-      
+      console.log(
+        "Executing query for item type:",
+        itemType,
+        "with ID:",
+        actualId
+      );
+
       const result = await client.query(itemQuery, [actualId]);
       itemData = result.rows[0];
-      
+
       if (!itemData) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return res.status(400).json({
           success: false,
-          message: `Item with ID ${service.id} not found or inactive`
+          message: `Item with ID ${service.id} not found or inactive`,
         });
       }
 
-      console.log('Found item data:', itemData);
+      console.log("Found item data:", itemData);
 
-      // Calculate duration only for services
-      if (itemData.type === 'service' && itemData.estimated_duration_hours) {
+      if (itemData.type === "service" && itemData.estimated_duration_hours) {
         const serviceDays = Math.ceil(itemData.estimated_duration_hours / 8);
         estimatedDuration = Math.max(estimatedDuration, serviceDays);
       }
@@ -141,34 +151,41 @@ const createServiceRequest = async (req, res) => {
       const itemTotal = itemData.base_price * service.quantity;
       totalCost += itemTotal;
 
-      // For non-service items, add minimal duration if no services exist
-      if (itemData.type !== 'service' && estimatedDuration === 0) {
-        estimatedDuration = 1; // Default 1 day for chemicals/refrigerants only
+      if (itemData.type !== "service" && estimatedDuration === 0) {
+        estimatedDuration = 1; 
       }
 
       serviceDetails.push({
-        originalId: service.id, // Keep original ID format for reference
+        originalId: service.id, 
         itemId: actualId,
         itemType: itemData.type,
         quantity: service.quantity,
         unitPrice: itemData.base_price,
         totalPrice: itemTotal,
-        name: itemData.name
+        name: itemData.name,
       });
     }
 
-    console.log('Service details processed:', serviceDetails);
-    console.log('Total cost:', totalCost, 'Estimated duration:', estimatedDuration);
+    console.log("Service details processed:", serviceDetails);
+    console.log(
+      "Total cost:",
+      totalCost,
+      "Estimated duration:",
+      estimatedDuration
+    );
 
-    const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['New']);
+    const statusResult = await client.query(
+      "SELECT status_id FROM request_statuses WHERE status_name = $1",
+      ["New"]
+    );
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
     let downpaymentPercentage = 0;
-    if (downpayment && downpayment.includes('%')) {
-      downpaymentPercentage = parseFloat(downpayment.replace('%', ''));
+    if (downpayment && downpayment.includes("%")) {
+      downpaymentPercentage = parseFloat(downpayment.replace("%", ""));
     }
 
-    console.log('Downpayment percentage:', downpaymentPercentage);
+    console.log("Downpayment percentage:", downpaymentPercentage);
 
     const insertRequestQuery = `
       INSERT INTO service_requests 
@@ -181,90 +198,106 @@ const createServiceRequest = async (req, res) => {
     `;
 
     const requestResult = await client.query(insertRequestQuery, [
-      requestNumber, companyId, customerId, initialStatusId,
-      'Service request from customer portal', siteLocation, preferredSchedule,
-      specialRequirements, remarks, totalCost, estimatedDuration,
-      paymentMode, paymentTerms, downpaymentPercentage
+      requestNumber,
+      companyId,
+      customerId,
+      initialStatusId,
+      "Service request from customer portal",
+      siteLocation,
+      preferredSchedule,
+      specialRequirements,
+      remarks,
+      totalCost,
+      estimatedDuration,
+      paymentMode,
+      paymentTerms,
+      downpaymentPercentage,
     ]);
 
     const requestId = requestResult.rows[0].request_id;
-    console.log('Created request with ID:', requestId);
+    console.log("Created request with ID:", requestId);
 
-    // Insert items into appropriate tables
     for (const item of serviceDetails) {
-      if (item.itemType === 'service') {
+      if (item.itemType === "service") {
         const insertItemQuery = `
           INSERT INTO service_request_items 
           (request_id, service_id, quantity, unit_price, line_total)
           VALUES ($1, $2, $3, $4, $5)
         `;
         await client.query(insertItemQuery, [
-          requestId, item.itemId, item.quantity, 
-          item.unitPrice, item.totalPrice
+          requestId,
+          item.itemId,
+          item.quantity,
+          item.unitPrice,
+          item.totalPrice,
         ]);
-        console.log('Inserted service:', item.itemId);
-      } else if (item.itemType === 'chemical') {
+        console.log("Inserted service:", item.itemId);
+      } else if (item.itemType === "chemical") {
         const insertChemicalQuery = `
           INSERT INTO service_request_chemicals 
           (request_id, chemical_id, quantity, unit_price, line_total)
           VALUES ($1, $2, $3, $4, $5)
         `;
         await client.query(insertChemicalQuery, [
-          requestId, item.itemId, item.quantity, 
-          item.unitPrice, item.totalPrice
+          requestId,
+          item.itemId,
+          item.quantity,
+          item.unitPrice,
+          item.totalPrice,
         ]);
-        console.log('Inserted chemical:', item.itemId);
-      } else if (item.itemType === 'refrigerant') {
+        console.log("Inserted chemical:", item.itemId);
+      } else if (item.itemType === "refrigerant") {
         const insertRefrigerantQuery = `
           INSERT INTO service_request_refrigerants 
           (request_id, refrigerant_id, quantity, unit_price, line_total)
           VALUES ($1, $2, $3, $4, $5)
         `;
         await client.query(insertRefrigerantQuery, [
-          requestId, item.itemId, item.quantity, 
-          item.unitPrice, item.totalPrice
+          requestId,
+          item.itemId,
+          item.quantity,
+          item.unitPrice,
+          item.totalPrice,
         ]);
-        console.log('Inserted refrigerant:', item.itemId);
+        console.log("Inserted refrigerant:", item.itemId);
       }
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
-    // Create default payments
     try {
       await createDefaultPayments(requestId);
-      console.log('Default payments created successfully');
+      console.log("Default payments created successfully");
     } catch (paymentError) {
-      console.error('Failed to create default payments:', paymentError);
+      console.error("Failed to create default payments:", paymentError);
     }
 
-    console.log('Request created successfully:', {
+    console.log("Request created successfully:", {
       requestId,
       requestNumber,
       totalCost,
-      estimatedDuration
+      estimatedDuration,
     });
 
     res.status(201).json({
       success: true,
-      message: 'Service request created successfully',
+      message: "Service request created successfully",
       data: {
         requestId: requestId,
         requestNumber: requestNumber,
         totalCost: totalCost,
-        estimatedDuration: estimatedDuration
-      }
+        estimatedDuration: estimatedDuration,
+      },
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Create service request error:', error);
-    console.error('Error stack:', error.stack);
-    
+    await client.query("ROLLBACK");
+    console.error("Create service request error:", error);
+    console.error("Error stack:", error.stack);
+
     res.status(500).json({
       success: false,
-      message: 'Failed to create service request',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: "Failed to create service request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
     client.release();
@@ -274,7 +307,7 @@ const createServiceRequest = async (req, res) => {
 const getCustomerRequests = async (req, res) => {
   try {
     const customerId = req.user.id;
-    
+
     const query = `
       SELECT 
         sr.request_id, 
@@ -320,14 +353,13 @@ const getCustomerRequests = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
-
   } catch (error) {
-    console.error('Get customer requests error:', error);
+    console.error("Get customer requests error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch service requests'
+      message: "Failed to fetch service requests",
     });
   }
 };
@@ -338,11 +370,11 @@ const getRequestDetails = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType;
 
-    let whereClause = 'sr.request_id = $1';
+    let whereClause = "sr.request_id = $1";
     let queryParams = [requestId];
 
-    if (userType === 'client') {
-      whereClause += ' AND sr.requested_by_user_id = $2';
+    if (userType === "client") {
+      whereClause += " AND sr.requested_by_user_id = $2";
       queryParams.push(userId);
     }
 
@@ -399,7 +431,7 @@ const getRequestDetails = async (req, res) => {
     if (requestResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Service request not found'
+        message: "Service request not found",
       });
     }
 
@@ -447,6 +479,7 @@ const getRequestDetails = async (req, res) => {
       WHERE src.request_id = $1
       ORDER BY src.item_id
     `;
+
     const refrigerantsQuery = `
       SELECT 
         srr.*,
@@ -467,21 +500,19 @@ const getRequestDetails = async (req, res) => {
       ORDER BY srr.item_id
     `;
 
-    // Execute all queries in parallel
-    const [servicesResult, chemicalsResult, refrigerantsResult] = await Promise.all([
-      pool.query(servicesQuery, [requestId]),
-      pool.query(chemicalsQuery, [requestId]),
-      pool.query(refrigerantsQuery, [requestId])
-    ]);
+    const [servicesResult, chemicalsResult, refrigerantsResult] =
+      await Promise.all([
+        pool.query(servicesQuery, [requestId]),
+        pool.query(chemicalsQuery, [requestId]),
+        pool.query(refrigerantsQuery, [requestId]),
+      ]);
 
-    // Combine all items
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
-      ...refrigerantsResult.rows
+      ...refrigerantsResult.rows,
     ];
 
-    // Calculate actual total cost
     const actualTotalCost = allItems.reduce((sum, item) => {
       return sum + (parseFloat(item.line_total_numeric) || 0);
     }, 0);
@@ -533,7 +564,9 @@ const getRequestDetails = async (req, res) => {
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
-      const downpaymentAmount = Math.round((actualTotalCost * downpaymentPercent) / 100);
+      const downpaymentAmount = Math.round(
+        (actualTotalCost * downpaymentPercent) / 100
+      );
       const remainingAmount = actualTotalCost - downpaymentAmount;
 
       paymentHistory = [
@@ -543,7 +576,7 @@ const getRequestDetails = async (req, res) => {
           amount: `₱${downpaymentAmount.toLocaleString()}`,
           proofOfPayment: "-",
           paidOn: "Pending",
-          paymentStatus: "Pending"
+          paymentStatus: "Pending",
         },
         {
           phase: "Completion Balance",
@@ -551,27 +584,25 @@ const getRequestDetails = async (req, res) => {
           amount: `₱${remainingAmount.toLocaleString()}`,
           proofOfPayment: "-",
           paidOn: "Pending",
-          paymentStatus: "Pending"
-        }
+          paymentStatus: "Pending",
+        },
       ];
     } else {
       paymentHistory = paymentResult.rows;
     }
 
-    // Format total cost
-    const formattedTotalCost = `₱${actualTotalCost.toLocaleString('en-US', {
+    const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      maximumFractionDigits: 2,
     })}`;
 
-    // Add customer contact info to the response
     const enhancedRequest = {
       ...request,
       id: request.request_number,
       totalCost: formattedTotalCost,
       email: request.customer_email,
       phone: request.customer_phone,
-      paymentHistory: paymentHistory
+      paymentHistory: paymentHistory,
     };
 
     res.json({
@@ -580,15 +611,14 @@ const getRequestDetails = async (req, res) => {
         request: enhancedRequest,
         items: allItems,
         statusHistory: historyResult.rows,
-        quotation: quotationResult.rows[0] || null
-      }
+        quotation: quotationResult.rows[0] || null,
+      },
     });
-
   } catch (error) {
-    console.error('Get request details error:', error);
+    console.error("Get request details error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch request details'
+      message: "Failed to fetch request details",
     });
   }
 };
@@ -598,17 +628,20 @@ const getAllRequests = async (req, res) => {
     const { status, page = 1, limit = 20, search } = req.query;
     const offset = (page - 1) * limit;
 
-    let whereClause = '1=1';
+    let whereClause = "1=1";
     let queryParams = [];
-    
+
     if (status) {
-      whereClause += ' AND rs.status_name = $' + (queryParams.length + 1);
+      whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
       queryParams.push(status);
     }
 
-    // Add search functionality
     if (search) {
-      whereClause += ` AND (CONCAT(u.first_name, ' ', u.last_name) ILIKE $${queryParams.length + 1} OR sr.request_number ILIKE $${queryParams.length + 1} OR c.company_name ILIKE $${queryParams.length + 1})`;
+      whereClause += ` AND (CONCAT(u.first_name, ' ', u.last_name) ILIKE $${
+        queryParams.length + 1
+      } OR sr.request_number ILIKE $${
+        queryParams.length + 1
+      } OR c.company_name ILIKE $${queryParams.length + 1})`;
       queryParams.push(`%${search}%`);
     }
 
@@ -710,7 +743,6 @@ const getAllRequests = async (req, res) => {
 
     const result = await pool.query(query, queryParams);
 
-    // Count query for pagination
     const countQuery = `
       SELECT COUNT(*) FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
@@ -721,17 +753,6 @@ const getAllRequests = async (req, res) => {
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
     const totalCount = parseInt(countResult.rows[0].count);
 
-    // Log debug info
-    console.log('Service requests with item counts:', result.rows.map(r => ({
-      id: r.request_id,
-      number: r.request_number,
-      services: r.services_count,
-      chemicals: r.chemicals_count,
-      refrigerants: r.refrigerants_count,
-      estimated_cost: r.estimated_cost,
-      items_summary: r.items_summary
-    })));
-
     res.json({
       success: true,
       data: {
@@ -740,25 +761,24 @@ const getAllRequests = async (req, res) => {
           page: parseInt(page),
           limit: parseInt(limit),
           totalCount: totalCount,
-          totalPages: Math.ceil(totalCount / limit)
-        }
-      }
+          totalPages: Math.ceil(totalCount / limit),
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Get all requests error:', error);
+    console.error("Get all requests error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch service requests'
+      message: "Failed to fetch service requests",
     });
   }
 };
 
 const addServicesToRequest = async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const { requestId } = req.params;
     const { additionalServices, adminNotes } = req.body;
@@ -771,20 +791,22 @@ const addServicesToRequest = async (req, res) => {
       WHERE sr.request_id = $1
     `;
     const requestResult = await client.query(requestQuery, [requestId]);
-    
+
     if (requestResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Service request not found'
+        message: "Service request not found",
       });
     }
 
     const request = requestResult.rows[0];
 
-    if (!['New', 'Under Review', 'Quote Prepared'].includes(request.status_name)) {
+    if (
+      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
+    ) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot modify request in current status'
+        message: "Cannot modify request in current status",
       });
     }
 
@@ -796,12 +818,12 @@ const addServicesToRequest = async (req, res) => {
         WHERE service_id = $1 AND is_active = true
       `;
       const serviceResult = await client.query(serviceQuery, [service.id]);
-      
+
       if (serviceResult.rows.length === 0) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return res.status(400).json({
           success: false,
-          message: `Service with ID ${service.id} not found`
+          message: `Service with ID ${service.id} not found`,
         });
       }
 
@@ -809,46 +831,64 @@ const addServicesToRequest = async (req, res) => {
       const itemTotal = serviceData.base_price * service.quantity;
       additionalCost += itemTotal;
 
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO service_request_items 
         (request_id, service_id, quantity, unit_price, line_total, notes)
         VALUES ($1, $2, $3, $4, $5, $6)
-      `, [requestId, service.id, service.quantity, serviceData.base_price, itemTotal, 'Added by admin']);
+      `,
+        [
+          requestId,
+          service.id,
+          service.quantity,
+          serviceData.base_price,
+          itemTotal,
+          "Added by admin",
+        ]
+      );
     }
 
-    await client.query(`
+    await client.query(
+      `
       UPDATE service_requests 
       SET updated_at = NOW()
       WHERE request_id = $1
-    `, [requestId]);
+    `,
+      [requestId]
+    );
 
-    const quoteStatusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['Quote Prepared']);
+    const quoteStatusResult = await client.query(
+      "SELECT status_id FROM request_statuses WHERE status_name = $1",
+      ["Quote Prepared"]
+    );
     const quoteStatusId = quoteStatusResult.rows[0]?.status_id;
 
     if (quoteStatusId) {
-      await client.query(`
+      await client.query(
+        `
         UPDATE service_requests 
         SET status_id = $1
         WHERE request_id = $2
-      `, [quoteStatusId, requestId]);
+      `,
+        [quoteStatusId, requestId]
+      );
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: 'Additional services added successfully',
+      message: "Additional services added successfully",
       data: {
-        additionalCost: additionalCost
-      }
+        additionalCost: additionalCost,
+      },
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Add services to request error:', error);
+    await client.query("ROLLBACK");
+    console.error("Add services to request error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to add services to request'
+      message: "Failed to add services to request",
     });
   } finally {
     client.release();
@@ -857,19 +897,19 @@ const addServicesToRequest = async (req, res) => {
 
 const createQuotation = async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { 
-      discountAmount = 0, 
-      taxRate = 0.12, 
-      paymentTerms, 
+    const {
+      discountAmount = 0,
+      taxRate = 0.12,
+      paymentTerms,
       paymentMode,
       validUntil,
       termsConditions,
-      notes
+      notes,
     } = req.body;
     const adminId = req.user.id;
 
@@ -879,11 +919,11 @@ const createQuotation = async (req, res) => {
       WHERE sr.request_id = $1
     `;
     const requestResult = await client.query(requestQuery, [requestId]);
-    
+
     if (requestResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Service request not found'
+        message: "Service request not found",
       });
     }
 
@@ -893,7 +933,9 @@ const createQuotation = async (req, res) => {
     const taxAmount = discountedSubtotal * parseFloat(taxRate);
     const totalAmount = discountedSubtotal + taxAmount;
 
-    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+      Date.now()
+    ).slice(-6)}`;
 
     const insertQuotationQuery = `
       INSERT INTO quotations 
@@ -905,9 +947,18 @@ const createQuotation = async (req, res) => {
     `;
 
     const quotationResult = await client.query(insertQuotationQuery, [
-      requestId, quotationNumber, subtotal, taxRate, taxAmount,
-      discountAmount, totalAmount, paymentTerms, paymentMode,
-      validUntil, termsConditions, adminId
+      requestId,
+      quotationNumber,
+      subtotal,
+      taxRate,
+      taxAmount,
+      discountAmount,
+      totalAmount,
+      paymentTerms,
+      paymentMode,
+      validUntil,
+      termsConditions,
+      adminId,
     ]);
 
     const quotationId = quotationResult.rows[0].quotation_id;
@@ -921,36 +972,41 @@ const createQuotation = async (req, res) => {
     `;
     await client.query(copyItemsQuery, [quotationId, requestId]);
 
-    const quoteStatusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', ['Quote Prepared']);
+    const quoteStatusResult = await client.query(
+      "SELECT status_id FROM request_statuses WHERE status_name = $1",
+      ["Quote Prepared"]
+    );
     const quoteStatusId = quoteStatusResult.rows[0]?.status_id;
 
     if (quoteStatusId) {
-      await client.query(`
+      await client.query(
+        `
         UPDATE service_requests 
         SET status_id = $1, quote_sent_date = NOW()
         WHERE request_id = $2
-      `, [quoteStatusId, requestId]);
+      `,
+        [quoteStatusId, requestId]
+      );
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: 'Quotation created successfully',
+      message: "Quotation created successfully",
       data: {
         quotationId: quotationId,
         quotationNumber: quotationNumber,
         totalAmount: totalAmount,
-        discountAmount: discountAmount
-      }
+        discountAmount: discountAmount,
+      },
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Create quotation error:', error);
+    await client.query("ROLLBACK");
+    console.error("Create quotation error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to create quotation'
+      message: "Failed to create quotation",
     });
   } finally {
     client.release();
@@ -959,9 +1015,9 @@ const createQuotation = async (req, res) => {
 
 const respondToQuotation = async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const { quotationId } = req.params;
     const { approved, customerNotes } = req.body;
@@ -973,53 +1029,71 @@ const respondToQuotation = async (req, res) => {
       JOIN service_requests sr ON q.request_id = sr.request_id
       WHERE q.quotation_id = $1 AND sr.requested_by_user_id = $2
     `;
-    const quotationResult = await client.query(quotationQuery, [quotationId, customerId]);
-    
+    const quotationResult = await client.query(quotationQuery, [
+      quotationId,
+      customerId,
+    ]);
+
     if (quotationResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Quotation not found'
+        message: "Quotation not found",
       });
     }
 
     const quotation = quotationResult.rows[0];
-    const newQuotationStatus = approved ? 'Approved' : 'Rejected';
-    const newRequestStatus = approved ? 'Quote Approved' : 'Under Review';
+    const newQuotationStatus = approved ? "Approved" : "Rejected";
+    const newRequestStatus = approved ? "Quote Approved" : "Under Review";
 
-    await client.query(`
+    await client.query(
+      `
       UPDATE quotations 
       SET status = $1, approved_date = $2, approved_by_user_id = $3
       WHERE quotation_id = $4
-    `, [newQuotationStatus, approved ? 'NOW()' : null, approved ? customerId : null, quotationId]);
+    `,
+      [
+        newQuotationStatus,
+        approved ? "NOW()" : null,
+        approved ? customerId : null,
+        quotationId,
+      ]
+    );
 
-    const statusResult = await client.query('SELECT status_id FROM request_statuses WHERE status_name = $1', [newRequestStatus]);
+    const statusResult = await client.query(
+      "SELECT status_id FROM request_statuses WHERE status_name = $1",
+      [newRequestStatus]
+    );
     const statusId = statusResult.rows[0]?.status_id;
 
     if (statusId) {
-      await client.query(`
+      await client.query(
+        `
         UPDATE service_requests 
         SET status_id = $1, client_approved_date = $2
         WHERE request_id = $3
-      `, [statusId, approved ? 'NOW()' : null, quotation.request_id]);
+      `,
+        [statusId, approved ? "NOW()" : null, quotation.request_id]
+      );
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: approved ? 'Quotation approved successfully' : 'Quotation rejected',
+      message: approved
+        ? "Quotation approved successfully"
+        : "Quotation rejected",
       data: {
         approved: approved,
-        quotationStatus: newQuotationStatus
-      }
+        quotationStatus: newQuotationStatus,
+      },
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Respond to quotation error:', error);
+    await client.query("ROLLBACK");
+    console.error("Respond to quotation error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to process quotation response'
+      message: "Failed to process quotation response",
     });
   } finally {
     client.release();
@@ -1029,12 +1103,12 @@ const respondToQuotation = async (req, res) => {
 const getServicesCatalog = async (req, res) => {
   try {
     const { category } = req.query;
-    
-    let whereClause = 's.is_active = true';
+
+    let whereClause = "s.is_active = true";
     let queryParams = [];
-    
+
     if (category) {
-      whereClause += ' AND sc.category_name = $1';
+      whereClause += " AND sc.category_name = $1";
       queryParams.push(category);
     }
 
@@ -1061,14 +1135,13 @@ const getServicesCatalog = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
-
   } catch (error) {
-    console.error('Get services catalog error:', error);
+    console.error("Get services catalog error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch services catalog'
+      message: "Failed to fetch services catalog",
     });
   }
 };
@@ -1100,14 +1173,13 @@ const getChemicalsCatalog = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
-
   } catch (error) {
-    console.error('Get chemicals catalog error:', error);
+    console.error("Get chemicals catalog error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch chemicals catalog'
+      message: "Failed to fetch chemicals catalog",
     });
   }
 };
@@ -1136,19 +1208,17 @@ const getRefrigerantsCatalog = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
-
   } catch (error) {
-    console.error('Get refrigerants catalog error:', error);
+    console.error("Get refrigerants catalog error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch refrigerants catalog'
+      message: "Failed to fetch refrigerants catalog",
     });
   }
 };
 
-// Helper function to get service with related chemicals and refrigerants
 const getServiceWithRelatedItems = async (req, res) => {
   try {
     const { serviceId } = req.params;
@@ -1186,16 +1256,17 @@ const getServiceWithRelatedItems = async (req, res) => {
       ORDER BY sr.is_alternative ASC, r.refrigerant_name
     `;
 
-    const [serviceResult, chemicalsResult, refrigerantsResult] = await Promise.all([
-      pool.query(serviceQuery, [serviceId]),
-      pool.query(chemicalsQuery, [serviceId]),
-      pool.query(refrigerantsQuery, [serviceId])
-    ]);
+    const [serviceResult, chemicalsResult, refrigerantsResult] =
+      await Promise.all([
+        pool.query(serviceQuery, [serviceId]),
+        pool.query(chemicalsQuery, [serviceId]),
+        pool.query(refrigerantsQuery, [serviceId]),
+      ]);
 
     if (serviceResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Service not found'
+        message: "Service not found",
       });
     }
 
@@ -1204,28 +1275,26 @@ const getServiceWithRelatedItems = async (req, res) => {
       data: {
         service: serviceResult.rows[0],
         relatedChemicals: chemicalsResult.rows,
-        relatedRefrigerants: refrigerantsResult.rows
-      }
+        relatedRefrigerants: refrigerantsResult.rows,
+      },
     });
-
   } catch (error) {
-    console.error('Get service with related items error:', error);
+    console.error("Get service with related items error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch service details'
+      message: "Failed to fetch service details",
     });
   }
 };
 
-// Helper function to check stock availability
 const checkStockAvailability = async (req, res) => {
   try {
-    const { items } = req.body; // Array of {type: 'chemical'|'refrigerant', id: number, quantity: number}
+    const { items } = req.body;
 
     const stockChecks = [];
 
     for (const item of items) {
-      if (item.type === 'chemical') {
+      if (item.type === "chemical") {
         const query = `
           SELECT chemical_id, chemical_name, stock_quantity, status
           FROM chemicals 
@@ -1235,16 +1304,18 @@ const checkStockAvailability = async (req, res) => {
         if (result.rows.length > 0) {
           const chemical = result.rows[0];
           stockChecks.push({
-            type: 'chemical',
+            type: "chemical",
             id: item.id,
             name: chemical.chemical_name,
             requestedQuantity: item.quantity,
             availableStock: chemical.stock_quantity,
             status: chemical.status,
-            available: chemical.stock_quantity >= item.quantity && chemical.status === 'In stock'
+            available:
+              chemical.stock_quantity >= item.quantity &&
+              chemical.status === "In stock",
           });
         }
-      } else if (item.type === 'refrigerant') {
+      } else if (item.type === "refrigerant") {
         const query = `
           SELECT refrigerant_id, refrigerant_name, stock_quantity, status
           FROM refrigerants 
@@ -1254,13 +1325,15 @@ const checkStockAvailability = async (req, res) => {
         if (result.rows.length > 0) {
           const refrigerant = result.rows[0];
           stockChecks.push({
-            type: 'refrigerant',
+            type: "refrigerant",
             id: item.id,
             name: refrigerant.refrigerant_name,
             requestedQuantity: item.quantity,
             availableStock: refrigerant.stock_quantity,
             status: refrigerant.status,
-            available: refrigerant.stock_quantity >= item.quantity && refrigerant.status === 'In stock'
+            available:
+              refrigerant.stock_quantity >= item.quantity &&
+              refrigerant.status === "In stock",
           });
         }
       }
@@ -1270,15 +1343,14 @@ const checkStockAvailability = async (req, res) => {
       success: true,
       data: {
         stockChecks: stockChecks,
-        allAvailable: stockChecks.every(check => check.available)
-      }
+        allAvailable: stockChecks.every((check) => check.available),
+      },
     });
-
   } catch (error) {
-    console.error('Check stock availability error:', error);
+    console.error("Check stock availability error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to check stock availability'
+      message: "Failed to check stock availability",
     });
   }
 };
@@ -1287,7 +1359,6 @@ const debugRequestItems = async (req, res) => {
   try {
     const { requestId } = req.params;
 
-    // Check all three tables for items
     const servicesQuery = `
       SELECT 'service' as type, sri.*, s.service_name as name
       FROM service_request_items sri
@@ -1309,11 +1380,12 @@ const debugRequestItems = async (req, res) => {
       WHERE srr.request_id = $1
     `;
 
-    const [servicesResult, chemicalsResult, refrigerantsResult] = await Promise.all([
-      pool.query(servicesQuery, [requestId]),
-      pool.query(chemicalsQuery, [requestId]),
-      pool.query(refrigerantsQuery, [requestId])
-    ]);
+    const [servicesResult, chemicalsResult, refrigerantsResult] =
+      await Promise.all([
+        pool.query(servicesQuery, [requestId]),
+        pool.query(chemicalsQuery, [requestId]),
+        pool.query(refrigerantsQuery, [requestId]),
+      ]);
 
     res.json({
       success: true,
@@ -1322,50 +1394,51 @@ const debugRequestItems = async (req, res) => {
         services: servicesResult.rows,
         chemicals: chemicalsResult.rows,
         refrigerants: refrigerantsResult.rows,
-        totalItems: servicesResult.rows.length + chemicalsResult.rows.length + refrigerantsResult.rows.length,
+        totalItems:
+          servicesResult.rows.length +
+          chemicalsResult.rows.length +
+          refrigerantsResult.rows.length,
         summary: {
           servicesCount: servicesResult.rows.length,
           chemicalsCount: chemicalsResult.rows.length,
-          refrigerantsCount: refrigerantsResult.rows.length
-        }
-      }
+          refrigerantsCount: refrigerantsResult.rows.length,
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Debug request items error:', error);
+    console.error("Debug request items error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to debug request items',
-      error: error.message
+      message: "Failed to debug request items",
+      error: error.message,
     });
   }
 };
 
 const updateRequestStatus = async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { 
-      serviceStatus, 
-      paymentStatus, 
+    const {
+      serviceStatus,
+      paymentStatus,
       warrantyStatus,
       serviceStartDate,
       serviceEndDate,
-      paymentBreakdown 
+      paymentBreakdown,
     } = req.body;
 
     const userId = req.user.id;
     const userType = req.user.userType;
 
-    // Verify request exists and user has permission
-    let whereClause = 'request_id = $1';
+    let whereClause = "request_id = $1";
     let queryParams = [requestId];
 
-    if (userType === 'client') {
-      whereClause += ' AND requested_by_user_id = $2';
+    if (userType === "client") {
+      whereClause += " AND requested_by_user_id = $2";
       queryParams.push(userId);
     }
 
@@ -1377,55 +1450,49 @@ const updateRequestStatus = async (req, res) => {
     if (requestCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Service request not found or access denied'
+        message: "Service request not found or access denied",
       });
     }
 
     const currentRequest = requestCheck.rows[0];
 
-    // Map frontend status to backend status
     const statusMapping = {
-      'Pending': 'New',
-      'Assigned': 'Under Review',
-      'Processing': 'Quote Prepared',
-      'Approval': 'Quote Approved',
-      'Ongoing': 'In Progress',
-      'Completed': 'Completed'
+      Pending: "New",
+      Assigned: "Under Review",
+      Processing: "Quote Prepared",
+      Approval: "Quote Approved",
+      Ongoing: "In Progress",
+      Completed: "Completed",
     };
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
-    // Get status ID from database
     let newStatusId = currentRequest.status_id;
     if (serviceStatus) {
       const statusResult = await client.query(
-        'SELECT status_id FROM request_statuses WHERE status_name = $1',
+        "SELECT status_id FROM request_statuses WHERE status_name = $1",
         [backendStatus]
       );
-      
+
       if (statusResult.rows.length > 0) {
         newStatusId = statusResult.rows[0].status_id;
       }
     }
 
-    // Build update query dynamically
     const updateFields = [];
     const updateValues = [];
     let paramCount = 1;
 
-    // Update status if changed
     if (newStatusId !== currentRequest.status_id) {
       updateFields.push(`status_id = $${paramCount++}`);
       updateValues.push(newStatusId);
     }
 
-    // Update payment status
     if (paymentStatus) {
       updateFields.push(`payment_status = $${paramCount++}`);
       updateValues.push(paymentStatus);
     }
 
-    // Update service dates
     if (serviceStartDate) {
       updateFields.push(`service_start_date = $${paramCount++}`);
       updateValues.push(serviceStartDate);
@@ -1436,104 +1503,713 @@ const updateRequestStatus = async (req, res) => {
       updateValues.push(serviceEndDate);
     }
 
-    // Set warranty start date if completed
-    if (serviceStatus === 'Completed' && !serviceEndDate) {
+    if (serviceStatus === "Completed" && !serviceEndDate) {
       updateFields.push(`warranty_start_date = $${paramCount++}`);
-      updateValues.push(new Date().toISOString().split('T')[0]);
+      updateValues.push(new Date().toISOString().split("T")[0]);
     }
 
-    // Always update the updated_at field
     updateFields.push(`updated_at = $${paramCount++}`);
     updateValues.push(new Date());
 
-    // Add request ID as last parameter
     updateValues.push(requestId);
 
-    // Execute update if there are fields to update
-    if (updateFields.length > 1) { // More than just updated_at
+    if (updateFields.length > 1) {
       const updateQuery = `
         UPDATE service_requests 
-        SET ${updateFields.join(', ')}
+        SET ${updateFields.join(", ")}
         WHERE request_id = $${paramCount}
       `;
 
       await client.query(updateQuery, updateValues);
 
-      // Log status change in history if status changed
       if (newStatusId !== currentRequest.status_id) {
-        await client.query(`
+        await client.query(
+          `
           INSERT INTO request_status_history 
           (request_id, from_status_id, to_status_id, changed_by, change_reason, changed_at)
           VALUES ($1, $2, $3, $4, $5, NOW())
-        `, [
-          requestId, 
-          currentRequest.status_id, 
-          newStatusId, 
-          userId, 
-          'Status updated by admin/staff'
-        ]);
+        `,
+          [
+            requestId,
+            currentRequest.status_id,
+            newStatusId,
+            userId,
+            "Status updated by admin/staff",
+          ]
+        );
       }
     }
 
-    // Update individual payment statuses if provided
     if (paymentBreakdown && Array.isArray(paymentBreakdown)) {
       for (let i = 0; i < paymentBreakdown.length; i++) {
         const payment = paymentBreakdown[i];
         if (payment.paymentStatus) {
-          await client.query(`
+          await client.query(
+            `
             UPDATE payments 
             SET status = $1, updated_at = NOW()
             WHERE request_id = $2 AND payment_phase = $3
-          `, [payment.paymentStatus, requestId, payment.phase]);
+          `,
+            [payment.paymentStatus, requestId, payment.phase]
+          );
         }
       }
     }
 
-    // Log audit entry
     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'service_requests',
+      await supabase.from("audit_log").insert({
+        table_name: "service_requests",
         record_id: requestId,
-        action: 'UPDATE',
-        new_values: { 
+        action: "UPDATE",
+        new_values: {
           service_status: serviceStatus,
           payment_status: paymentStatus,
           warranty_status: warrantyStatus,
           service_start_date: serviceStartDate,
-          service_end_date: serviceEndDate
+          service_end_date: serviceEndDate,
         },
         changed_by: req.user.email,
-        change_reason: 'Service request status update',
+        change_reason: "Service request status update",
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: 'Service request updated successfully',
+      message: "Service request updated successfully",
       data: {
         requestId: requestId,
         updatedStatus: serviceStatus,
-        updatedPaymentStatus: paymentStatus
-      }
+        updatedPaymentStatus: paymentStatus,
+      },
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Update request status error:', error);
+    await client.query("ROLLBACK");
+    console.error("Update request status error:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update service request'
+      message: "Failed to update service request",
     });
   } finally {
     client.release();
   }
 };
 
+const addChemicalToRequest = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const { chemicalId, quantity, notes } = req.body;
+
+    if (!chemicalId || !quantity || quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Chemical ID and valid quantity are required",
+      });
+    }
+
+    const requestQuery = `
+      SELECT sr.*, rs.status_name 
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (
+      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify request in current status",
+      });
+    }
+
+    const chemicalQuery = `
+      SELECT chemical_id, chemical_name, brand, price, stock_quantity, status
+      FROM chemicals 
+      WHERE chemical_id = $1 AND is_active = true
+    `;
+    const chemicalResult = await client.query(chemicalQuery, [chemicalId]);
+
+    if (chemicalResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Chemical not found or inactive",
+      });
+    }
+
+    const chemical = chemicalResult.rows[0];
+
+    if (chemical.stock_quantity < quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient stock. Available: ${chemical.stock_quantity}`,
+      });
+    }
+
+    const existingQuery = `
+      SELECT item_id, quantity FROM service_request_chemicals
+      WHERE request_id = $1 AND chemical_id = $2
+    `;
+    const existingResult = await client.query(existingQuery, [
+      requestId,
+      chemicalId,
+    ]);
+
+    if (existingResult.rows.length > 0) {
+      const newQuantity = parseInt(existingResult.rows[0].quantity) + parseInt(quantity);
+      const newTotal = chemical.price * newQuantity;
+
+      await client.query(
+        `
+        UPDATE service_request_chemicals
+        SET quantity = $1, line_total = $2, notes = $3, updated_at = NOW()
+        WHERE item_id = $4
+      `,
+        [
+          newQuantity,
+          newTotal,
+          notes || "Updated by staff",
+          existingResult.rows[0].item_id,
+        ]
+      );
+    } else {
+      const lineTotal = chemical.price * quantity;
+
+      await client.query(
+        `
+        INSERT INTO service_request_chemicals 
+        (request_id, chemical_id, quantity, unit_price, line_total, notes)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+        [
+          requestId,
+          chemicalId,
+          quantity,
+          chemical.price,
+          lineTotal,
+          notes || "Added by staff",
+        ]
+      );
+    }
+
+    const totalResult = await client.query(
+      'SELECT calculate_request_total($1) as new_total',
+      [requestId]
+    );
+    const newTotal = totalResult.rows[0].new_total;
+
+    await client.query(
+      `
+      UPDATE service_requests 
+      SET estimated_cost = $1, updated_at = NOW()
+      WHERE request_id = $2
+    `,
+      [newTotal, requestId]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, change_reason, ip_address)
+      VALUES ('service_request_chemicals', $1, 'CREATE', $2, $3, 'Chemical added by staff', $4)
+    `,
+      [
+        requestId,
+        JSON.stringify({
+          chemical_id: chemicalId,
+          quantity,
+          price: chemical.price,
+        }),
+        req.user.email,
+        req.ip || req.connection.remoteAddress,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Chemical added successfully",
+      data: {
+        chemicalName: `${chemical.brand} - ${chemical.chemical_name}`,
+        quantity,
+        unitPrice: chemical.price,
+        lineTotal: chemical.price * quantity,
+        newRequestTotal: newTotal,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Add chemical error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to add chemical to request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const addRefrigerantToRequest = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const { refrigerantId, quantity, notes } = req.body;
+
+    if (!refrigerantId || !quantity || quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Refrigerant ID and valid quantity are required",
+      });
+    }
+
+    const requestQuery = `
+      SELECT sr.*, rs.status_name 
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (
+      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify request in current status",});
+    }
+
+    const refrigerantQuery = `
+      SELECT refrigerant_id, refrigerant_name, price, stock_quantity, status
+      FROM refrigerants 
+      WHERE refrigerant_id = $1 AND is_active = true
+    `;
+    const refrigerantResult = await client.query(refrigerantQuery, [
+      refrigerantId,
+    ]);
+
+    if (refrigerantResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Refrigerant not found or inactive",
+      });
+    }
+
+    const refrigerant = refrigerantResult.rows[0];
+
+    if (refrigerant.stock_quantity < quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient stock. Available: ${refrigerant.stock_quantity}`,
+      });
+    }
+
+    const existingQuery = `
+      SELECT item_id, quantity FROM service_request_refrigerants
+      WHERE request_id = $1 AND refrigerant_id = $2
+    `;
+    const existingResult = await client.query(existingQuery, [
+      requestId,
+      refrigerantId,
+    ]);
+
+    if (existingResult.rows.length > 0) {
+      const newQuantity = parseInt(existingResult.rows[0].quantity) + parseInt(quantity);
+      const newTotal = refrigerant.price * newQuantity;
+
+      await client.query(
+        `
+        UPDATE service_request_refrigerants
+        SET quantity = $1, line_total = $2, notes = $3, updated_at = NOW()
+        WHERE item_id = $4
+      `,
+        [
+          newQuantity,
+          newTotal,
+          notes || "Updated by staff",
+          existingResult.rows[0].item_id,
+        ]
+      );
+    } else {
+      const lineTotal = refrigerant.price * quantity;
+
+      await client.query(
+        `
+        INSERT INTO service_request_refrigerants 
+        (request_id, refrigerant_id, quantity, unit_price, line_total, notes)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+        [
+          requestId,
+          refrigerantId,
+          quantity,
+          refrigerant.price,
+          lineTotal,
+          notes || "Added by staff",
+        ]
+      );
+    }
+
+    const totalResult = await client.query(
+      'SELECT calculate_request_total($1) as new_total',
+      [requestId]
+    );
+    const newTotal = totalResult.rows[0].new_total;
+
+    await client.query(
+      `
+      UPDATE service_requests 
+      SET estimated_cost = $1, updated_at = NOW()
+      WHERE request_id = $2
+    `,
+      [newTotal, requestId]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, change_reason, ip_address)
+      VALUES ('service_request_refrigerants', $1, 'CREATE', $2, $3, 'Refrigerant added by staff', $4)
+    `,
+      [
+        requestId,
+        JSON.stringify({
+          refrigerant_id: refrigerantId,
+          quantity,
+          price: refrigerant.price,
+        }),
+        req.user.email,
+        req.ip || req.connection.remoteAddress,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Refrigerant added successfully",
+      data: {
+        refrigerantName: refrigerant.refrigerant_name,
+        quantity,
+        unitPrice: refrigerant.price,
+        lineTotal: refrigerant.price * quantity,
+        newRequestTotal: newTotal,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Add refrigerant error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to add refrigerant to request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const removeItemFromRequest = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId, itemId } = req.params;
+    const { itemType } = req.body;
+
+    if (
+      !itemType ||
+      !["chemical", "refrigerant", "service"].includes(itemType)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Valid item type is required (chemical, refrigerant, or service)",
+      });
+    }
+
+    const requestQuery = `
+      SELECT sr.*, rs.status_name 
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (
+      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify request in current status",
+      });
+    }
+
+    let deleteQuery;
+    let tableName;
+
+    if (itemType === "chemical") {
+      deleteQuery =
+        "DELETE FROM service_request_chemicals WHERE item_id = $1 AND request_id = $2 RETURNING *";
+      tableName = "service_request_chemicals";
+    } else if (itemType === "refrigerant") {
+      deleteQuery =
+        "DELETE FROM service_request_refrigerants WHERE item_id = $1 AND request_id = $2 RETURNING *";
+      tableName = "service_request_refrigerants";
+    } else {
+      deleteQuery =
+        "DELETE FROM service_request_items WHERE item_id = $1 AND request_id = $2 RETURNING *";
+      tableName = "service_request_items";
+    }
+
+    const deleteResult = await client.query(deleteQuery, [itemId, requestId]);
+
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found in this request",
+      });
+    }
+
+    const totalResult = await client.query(
+      'SELECT calculate_request_total($1) as new_total',
+      [requestId]
+    );
+    const newTotal = totalResult.rows[0].new_total || 0;
+
+    await client.query(
+      `
+      UPDATE service_requests 
+      SET estimated_cost = $1, updated_at = NOW()
+      WHERE request_id = $2
+    `,
+      [newTotal, requestId]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by, change_reason, ip_address)
+      VALUES ($1, $2, 'DELETE', $3, $4, 'Item removed by staff', $5)
+    `,
+      [
+        tableName,
+        requestId,
+        JSON.stringify(deleteResult.rows[0]),
+        req.user.email,
+        req.ip || req.connection.remoteAddress,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Item removed successfully",
+      data: {
+        newRequestTotal: newTotal,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Remove item error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove item from request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const updateItemQuantity = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId, itemId } = req.params;
+    const { itemType, quantity } = req.body;
+
+    if (
+      !itemType ||
+      !["chemical", "refrigerant", "service"].includes(itemType)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid item type is required",
+      });
+    }
+
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid quantity is required",
+      });
+    }
+
+    const requestQuery = `
+      SELECT sr.*, rs.status_name 
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (
+      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify request in current status",
+      });
+    }
+
+    let updateQuery;
+    let tableName;
+
+    if (itemType === "chemical") {
+      updateQuery = `
+        UPDATE service_request_chemicals
+        SET quantity = $1, line_total = unit_price * $1, updated_at = NOW()
+        WHERE item_id = $2 AND request_id = $3
+        RETURNING *
+      `;
+      tableName = "service_request_chemicals";
+    } else if (itemType === "refrigerant") {
+      updateQuery = `
+        UPDATE service_request_refrigerants
+        SET quantity = $1, line_total = unit_price * $1, updated_at = NOW()
+        WHERE item_id = $2 AND request_id = $3
+        RETURNING *
+      `;
+      tableName = "service_request_refrigerants";
+    } else {
+      updateQuery = `
+        UPDATE service_request_items
+        SET quantity = $1, line_total = unit_price * $1
+        WHERE item_id = $2 AND request_id = $3
+        RETURNING *
+      `;
+      tableName = "service_request_items";
+    }
+
+    const updateResult = await client.query(updateQuery, [
+      quantity,
+      itemId,
+      requestId,
+    ]);
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found in this request",
+      });
+    }
+
+    const totalResult = await client.query(
+      'SELECT calculate_request_total($1) as new_total',
+      [requestId]
+    );
+    const newTotal = totalResult.rows[0].new_total;
+
+    await client.query(
+      `
+      UPDATE service_requests 
+      SET estimated_cost = $1, updated_at = NOW()
+      WHERE request_id = $2
+    `,
+      [newTotal, requestId]
+    );
+
+    await client.query(
+      `
+      INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, change_reason, ip_address)
+      VALUES ($1, $2, 'UPDATE', $3, $4, 'Quantity updated by staff', $5)
+    `,
+      [
+        tableName,
+        requestId,
+        JSON.stringify({
+          quantity,
+          line_total: updateResult.rows[0].line_total,
+        }),
+        req.user.email,
+        req.ip || req.connection.remoteAddress,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Quantity updated successfully",
+      data: {
+        newQuantity: quantity,
+        newLineTotal: updateResult.rows[0].line_total,
+        newRequestTotal: newTotal,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Update quantity error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update item quantity",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
 
 module.exports = {
   createServiceRequest,
@@ -1549,5 +2225,9 @@ module.exports = {
   getRefrigerantsCatalog,
   getServiceWithRelatedItems,
   checkStockAvailability,
-  updateRequestStatus
+  updateRequestStatus,
+  addChemicalToRequest,
+  addRefrigerantToRequest,
+  removeItemFromRequest,
+  updateItemQuantity,
 };

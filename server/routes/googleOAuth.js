@@ -3,20 +3,18 @@ const router = express.Router();
 const { uploadVerificationFile, handleUploadError } = require('../middleware/fileUpload');
 const { authenticateToken } = require('../middleware/auth');
 const authController = require('../controllers/authController');
-const googleAuthController = require('../controllers/googleAuthController');
+const googleAuthController = require('../controllers/GoogleAuthController');
 const { validateSignup } = require('../middleware/validation');
 
-// FIXED: File upload middleware should come BEFORE validation
-// This allows multer to parse the multipart form data first
 router.post('/signup',
-  uploadVerificationFile,      // Parse multipart form data first
-  handleUploadError,          // Handle any upload errors
-  validateSignup,             // Then validate the parsed body
-  authController.signup       // Finally process the signup
+  uploadVerificationFile,      
+  handleUploadError,        
+  validateSignup,             
+  authController.signup       
 );
 
 router.post('/login', authController.login);
-router.post('/google-auth', googleAuthController.googleAuth); // Google OAuth endpoint
+router.post('/google-auth', googleAuthController.googleAuth); 
 router.get('/me', authenticateToken, authController.getCurrentUser);
 router.post('/logout', authenticateToken, authController.logout);
 router.post('/forgot-password', authController.forgotPassword);

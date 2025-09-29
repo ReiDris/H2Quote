@@ -25,21 +25,21 @@ const requireCustomer = (req, res, next) => {
 
 router.use(authenticateToken);
 
-// Specific routes FIRST
 router.get('/services/catalog', serviceRequestController.getServicesCatalog);
 router.get('/chemicals/catalog', serviceRequestController.getChemicalsCatalog);
 router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCatalog);
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
 
-// Routes with parameters
+router.post('/:requestId/add-chemical', requireAdminOrStaff, serviceRequestController.addChemicalToRequest);
+router.post('/:requestId/add-refrigerant', requireAdminOrStaff, serviceRequestController.addRefrigerantToRequest);
+router.delete('/:requestId/items/:itemId', requireAdminOrStaff, serviceRequestController.removeItemFromRequest);
+router.put('/:requestId/items/:itemId/quantity', requireAdminOrStaff, serviceRequestController.updateItemQuantity);
+
 router.get('/:requestId/details', serviceRequestController.getRequestDetails);
-router.get('/:requestId/debug-items', requireAdminOrStaff, serviceRequestController.debugRequestItems); 
-router.put('/:requestId/update-status', requireAdminOrStaff, serviceRequestController.updateRequestStatus);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 
-// Generic routes LAST
 router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
 router.post('/', requireCustomer, serviceRequestController.createServiceRequest);
 

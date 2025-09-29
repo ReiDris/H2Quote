@@ -17,18 +17,16 @@ const pool = new Pool({
     connectionTimeoutMillis: 2000
 });
 
-// Test connection (your version is better)
 pool.connect((err, client, release) => {
     if (err) {
         console.error('Error connecting to PostgreSQL:', err.stack);
-        process.exit(1); // Add this to fail fast
+        process.exit(1); 
     } else {
         console.log('Connected to PostgreSQL successfully');
         release();
     }
 });
 
-// Add error handling for ongoing connections
 pool.on('error', (err) => {
     console.error('Unexpected error on idle client', err);
 });

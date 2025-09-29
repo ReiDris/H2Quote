@@ -44,7 +44,6 @@ const approveUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // First get user details before updating
     const { data: userData, error: getUserError } = await supabase
       .from('users')
       .select(`
@@ -61,7 +60,6 @@ const approveUser = async (req, res) => {
       });
     }
 
-    // Update user status to Active
     const { error: userError } = await supabase
       .from('users')
       .update({ 
@@ -74,7 +72,6 @@ const approveUser = async (req, res) => {
       throw userError;
     }
 
-    // Update company status if user is primary contact
     if (userData.is_primary_contact) {
       await supabase
         .from('companies')
@@ -85,7 +82,6 @@ const approveUser = async (req, res) => {
         .eq('company_id', userData.company_id);
     }
 
-    // Add audit log
     await supabase
       .from('audit_log')
       .insert({
@@ -98,7 +94,6 @@ const approveUser = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress
       });
 
-    // Send approval email
     try {
       const customerName = `${userData.first_name} ${userData.last_name}`;
       const companyName = userData.companies?.company_name || 'Your Company';
@@ -116,7 +111,6 @@ const approveUser = async (req, res) => {
       }
     } catch (emailError) {
       console.error('Email sending error:', emailError);
-      // Don't fail the approval if email fails
     }
 
     res.json({
