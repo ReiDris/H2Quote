@@ -13,12 +13,12 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-router.use(authenticateToken);
-router.use(requireAdmin);
+// Apply authentication to most routes (but not all)
+router.get('/pending-users', authenticateToken, requireAdmin, adminController.getPendingUsers);
+router.post('/approve-user/:userId', authenticateToken, requireAdmin, adminController.approveUser);
+router.post('/reject-user/:userId', authenticateToken, requireAdmin, adminController.rejectUser);
 
-router.get('/pending-users', adminController.getPendingUsers);
-router.post('/approve-user/:userId', adminController.approveUser);
-router.post('/reject-user/:userId', adminController.rejectUser);
+// This route handles its own authentication internally (via query parameter token)
 router.get('/verification-file/:userId', adminController.serveVerificationFile);
 
 module.exports = router;

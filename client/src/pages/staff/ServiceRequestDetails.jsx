@@ -1,18 +1,18 @@
 import React from "react";
 import { useParams } from "react-router-dom";
-import AdminLayout from "../../layouts/AdminLayout";
+import StaffLayout from "../../layouts/StaffLayout"; // You'll need to create this if it doesn't exist
 import ServiceRequestDetailsView from "../../components/shared/ServiceRequestDetailsView";
 
 const ServiceRequestDetails = () => {
   const { requestNumber } = useParams();
 
   return (
-    <AdminLayout>
+    <StaffLayout>
       <ServiceRequestDetailsView 
         requestNumber={requestNumber} 
-        userRole="admin" 
+        userRole="staff" 
       />
-    </AdminLayout>
+    </StaffLayout>
   );
 };
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Search, AlertCircle } from 'lucide-react';
 
 const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
-  const [activeTab, setActiveTab] = useState('chemicals'); // 'chemicals' or 'refrigerants'
+  const [activeTab, setActiveTab] = useState('chemicals');
   const [items, setItems] = useState([]);
   const [currentItems, setCurrentItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -13,7 +13,6 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Fetch available items (chemicals or refrigerants)
   useEffect(() => {
     if (isOpen) {
       fetchAvailableItems();
@@ -77,20 +76,31 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
       return;
     }
 
-    // Check stock
-    if (selectedItem.stock_quantity < quantity) {
-      setError(`Insufficient stock. Available: ${selectedItem.stock_quantity}`);
-      return;
-    }
-
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
       const token = localStorage.getItem('h2quote_token');
-      const endpoint = activeTab === 'chemicals' ? 'add-chemical' : 'add-refrigerant';
-      const idField = activeTab === 'chemicals' ? 'chemicalId' : 'refrigerantId';
+      // FIXED: Correct endpoint paths (plural)
+      const endpoint = activeTab === 'chemicals' ? 'add-chemicals' : 'add-refrigerants';
+      
+      // FIXED: Correct request body format (arrays)
+      const requestBody = activeTab === 'chemicals' 
+        ? {
+            chemicals: [{
+              id: selectedItem.id,
+              quantity: parseInt(quantity)
+            }],
+            adminNotes: notes || undefined
+          }
+        : {
+            refrigerants: [{
+              id: selectedItem.id,
+              quantity: parseInt(quantity)
+            }],
+            adminNotes: notes || undefined
+          };
 
       const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/${endpoint}`, {
         method: 'POST',
@@ -98,11 +108,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          [idField]: selectedItem.id,
-          quantity: parseInt(quantity),
-          notes: notes || undefined
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
@@ -112,12 +118,10 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
         setSelectedItem(null);
         setQuantity(1);
         setNotes('');
-        fetchCurrentItems();
+        fetchCurrentItems(); // Refresh the current items list in the modal
         
-        // Notify parent to refresh
-        if (onSuccess) {
-          onSuccess();
-        }
+        // DON'T call onSuccess here - only call it when modal closes
+        // This allows multiple additions without closing the modal
 
         setTimeout(() => setSuccess(''), 3000);
       } else {
@@ -131,7 +135,59 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     }
   };
 
-  const handleRemoveItem = async (itemId, itemType) => {
+  const handleQuickAdd = async (item) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const token = localStorage.getItem('h2quote_token');
+      const endpoint = activeTab === 'chemicals' ? 'add-chemicals' : 'add-refrigerants';
+      
+      const requestBody = activeTab === 'chemicals' 
+        ? {
+            chemicals: [{
+              id: item.id,
+              quantity: 1 // Default quantity
+            }],
+            adminNotes: 'Quick add'
+          }
+        : {
+            refrigerants: [{
+              id: item.id,
+              quantity: 1 // Default quantity
+            }],
+            adminNotes: 'Quick add'
+          };
+
+      const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccess(`✓ Added ${item.name}`);
+        fetchCurrentItems();
+        
+        setTimeout(() => setSuccess(''), 2000);
+      } else {
+        setError(data.message || 'Failed to add item');
+      }
+    } catch (error) {
+      console.error('Error quick adding item:', error);
+      setError('Failed to add item. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveItem = async (itemId) => {
     if (!confirm('Are you sure you want to remove this item?')) {
       return;
     }
@@ -141,26 +197,30 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
 
     try {
       const token = localStorage.getItem('h2quote_token');
+      // FIXED: Correct endpoint path
+      const endpoint = activeTab === 'chemicals' ? 'remove-chemicals' : 'remove-refrigerants';
+      
+      // FIXED: Correct request body format (array of item IDs)
+      const requestBody = activeTab === 'chemicals'
+        ? { chemicalItemIds: [itemId] }
+        : { refrigerantItemIds: [itemId] };
 
-      const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/items/${itemId}`, {
+      const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/${endpoint}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ itemType })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
         setSuccess('Item removed successfully');
-        fetchCurrentItems();
+        fetchCurrentItems(); // Refresh the current items list in the modal
         
-        // Notify parent to refresh
-        if (onSuccess) {
-          onSuccess();
-        }
+        // DON'T call onSuccess here - only call it when modal closes
 
         setTimeout(() => setSuccess(''), 3000);
       } else {
@@ -169,53 +229,6 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     } catch (error) {
       console.error('Error removing item:', error);
       setError('Failed to remove item. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdateQuantity = async (itemId, itemType, newQuantity) => {
-    if (newQuantity <= 0) {
-      setError('Quantity must be greater than 0');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const token = localStorage.getItem('h2quote_token');
-
-      const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/items/${itemId}/quantity`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          itemType,
-          quantity: parseInt(newQuantity)
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setSuccess('Quantity updated successfully');
-        fetchCurrentItems();
-        
-        // Notify parent to refresh
-        if (onSuccess) {
-          onSuccess();
-        }
-
-        setTimeout(() => setSuccess(''), 2000);
-      } else {
-        setError(data.message || 'Failed to update quantity');
-      }
-    } catch (error) {
-      console.error('Error updating quantity:', error);
-      setError('Failed to update quantity. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -236,9 +249,16 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
 
   if (!isOpen) return null;
 
+  const handleClose = () => {
+    if (onSuccess) {
+      onSuccess(); // Trigger parent to refresh data
+    }
+    onClose(); // Close the modal
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-2xl font-bold text-gray-900">
@@ -311,33 +331,21 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{item.name}</p>
                       <p className="text-sm text-gray-600">
-                        ₱{parseFloat(item.unit_price).toLocaleString()} × {item.quantity} = 
-                        ₱{parseFloat(item.line_total || item.total_price).toLocaleString()}
+                        Quantity: {item.quantity} | Line Total: ₱{parseFloat(item.line_total_numeric || 0).toLocaleString()}
                       </p>
+                      {item.notes && item.notes !== '-' && (
+                        <p className="text-xs text-gray-500 mt-1">Note: {item.notes}</p>
+                      )}
                     </div>
                     
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600">Qty:</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => handleUpdateQuantity(item.item_id, item.item_type, e.target.value)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                          disabled={loading}
-                        />
-                      </div>
-                      
-                      <button
-                        onClick={() => handleRemoveItem(item.item_id, item.item_type)}
-                        className="text-red-600 hover:text-red-800 transition-colors p-1"
-                        disabled={loading}
-                        title="Remove item"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handleRemoveItem(item.item_id)}
+                      className="text-red-600 hover:text-red-800 transition-colors p-2"
+                      disabled={loading}
+                      title="Remove item"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -373,32 +381,36 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
                   {filteredItems.map((item) => (
                     <div
                       key={item.id}
-                      onClick={() => setSelectedItem(item)}
-                      className={`p-3 cursor-pointer transition-colors ${
+                      className={`p-3 transition-colors ${
                         selectedItem?.id === item.id
                           ? 'bg-blue-50 border-l-4 border-blue-600'
                           : 'hover:bg-gray-50'
                       }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{item.name}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => handleQuickAdd(item)}
+                        >
+                          <p className="font-medium text-gray-900 hover:text-blue-600 transition-colors">
+                            {item.name}
+                          </p>
                           {item.description && (
                             <p className="text-sm text-gray-600 mt-1">{item.description}</p>
                           )}
-                          <div className="flex items-center gap-4 mt-2 text-sm">
-                            <span className="text-gray-600">
-                              Price: <span className="font-medium">₱{parseFloat(item.base_price).toLocaleString()}</span>
-                            </span>
-                            <span className={`font-medium ${
-                              item.stock_quantity > 10 ? 'text-green-600' :
-                              item.stock_quantity > 0 ? 'text-orange-600' :
-                              'text-red-600'
-                            }`}>
-                              Stock: {item.stock_quantity}
-                            </span>
-                          </div>
+                          <p className="text-sm text-gray-600 mt-2">
+                            Price: <span className="font-medium">₱{parseFloat(item.base_price).toLocaleString()}</span>
+                          </p>
                         </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(item);
+                          }}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap"
+                        >
+                          Customize
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -406,9 +418,19 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
               )}
             </div>
 
-            {/* Quantity and Notes */}
+            {/* Quantity and Notes - Only show when item is selected for customization */}
             {selectedItem && (
-              <div className="space-y-4 mb-4">
+              <div className="space-y-4 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-gray-900">Customize: {selectedItem.name}</h4>
+                  <button
+                    onClick={() => setSelectedItem(null)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Quantity
@@ -416,14 +438,10 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
                   <input
                     type="number"
                     min="1"
-                    max={selectedItem.stock_quantity}
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                  <p className="text-sm text-gray-600 mt-1">
-                    Available stock: {selectedItem.stock_quantity}
-                  </p>
                 </div>
 
                 <div>
@@ -439,30 +457,45 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
                   />
                 </div>
 
-                <div className="p-3 bg-gray-50 rounded-lg">
+                <div className="p-3 bg-white rounded-lg border border-gray-300">
                   <p className="text-sm text-gray-600">
                     Line Total: <span className="font-semibold text-gray-900">
                       ₱{(selectedItem.base_price * quantity).toLocaleString()}
                     </span>
                   </p>
                 </div>
+
+                <button
+                  onClick={handleAddItem}
+                  disabled={loading}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                    loading
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  <Plus size={20} />
+                  {loading ? 'Adding...' : 'Add with Custom Settings'}
+                </button>
               </div>
             )}
-
-            {/* Add Button */}
-            <button
-              onClick={handleAddItem}
-              disabled={!selectedItem || loading}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
-                !selectedItem || loading
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              <Plus size={20} />
-              {loading ? 'Adding...' : `Add ${activeTab === 'chemicals' ? 'Chemical' : 'Refrigerant'}`}
-            </button>
           </div>
+        </div>
+
+        {/* Footer with Done Button */}
+        <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleClose}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>

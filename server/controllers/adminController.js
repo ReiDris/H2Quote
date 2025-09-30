@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 const { sendAccountApprovalEmail } = require('../emailServices/emailService');
 
 const supabase = createClient(
@@ -15,7 +16,7 @@ const getPendingUsers = async (req, res) => {
       .from('users')
       .select(`
         user_id, first_name, last_name, email, phone, 
-        verification_file_original_name, created_at,
+        verification_file_original_name, verification_file_path, created_at,
         companies (company_name, phone, email)
       `)
       .eq('status', 'Inactive')
@@ -43,6 +44,15 @@ const getPendingUsers = async (req, res) => {
 const approveUser = async (req, res) => {
   try {
     const { userId } = req.params;
+    const { role } = req.body;
+
+    const validRoles = ['admin', 'staff', 'client'];
+    if (!role || !validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid role is required (admin, staff, or client)'
+      });
+    }
 
     const { data: userData, error: getUserError } = await supabase
       .from('users')
@@ -60,19 +70,30 @@ const approveUser = async (req, res) => {
       });
     }
 
+    // Prepare update data based on role
+    const updateData = {
+      status: 'Active',
+      user_type: role,
+      updated_at: new Date().toISOString()
+    };
+
+    // If changing to staff or admin, set company_id to NULL (required by constraint)
+    if (role === 'staff' || role === 'admin') {
+      updateData.company_id = null;
+      updateData.is_primary_contact = false;
+    }
+
     const { error: userError } = await supabase
       .from('users')
-      .update({ 
-        status: 'Active',
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('user_id', userId);
 
     if (userError) {
       throw userError;
     }
 
-    if (userData.is_primary_contact) {
+    // Only update company status if user is approved as client and is primary contact
+    if (role === 'client' && userData.is_primary_contact && userData.company_id) {
       await supabase
         .from('companies')
         .update({ 
@@ -88,9 +109,9 @@ const approveUser = async (req, res) => {
         table_name: 'users',
         record_id: userId,
         action: 'UPDATE',
-        new_values: { status: 'Active' },
+        new_values: { status: 'Active', user_type: role },
         changed_by: req.user.email,
-        change_reason: 'User approved by admin',
+        change_reason: `User approved by admin with role: ${role}`,
         ip_address: req.ip || req.connection.remoteAddress
       });
 
@@ -115,7 +136,7 @@ const approveUser = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'User approved successfully and notification email sent'
+      message: `User approved successfully as ${role} and notification email sent`
     });
 
   } catch (error) {
@@ -174,6 +195,34 @@ const rejectUser = async (req, res) => {
 const serveVerificationFile = async (req, res) => {
   try {
     const { userId } = req.params;
+    
+    // Get token from query parameter for iframe access
+    const token = req.query.token || req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access token required'
+      });
+    }
+
+    // Verify the token
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Check if user is admin
+      if (decoded.userType !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required'
+        });
+      }
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token'
+      });
+    }
 
     const { data: user, error } = await supabase
       .from('users')
@@ -198,7 +247,18 @@ const serveVerificationFile = async (req, res) => {
       });
     }
 
-    res.setHeader('Content-Disposition', `attachment; filename="${originalName}"`);
+    // Set appropriate headers for inline viewing
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
+    } else if (['.jpg', '.jpeg', '.png'].includes(ext)) {
+      res.setHeader('Content-Type', `image/${ext.substring(1)}`);
+      res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${originalName}"`);
+    }
+    
     res.sendFile(path.resolve(filePath));
     
   } catch (error) {

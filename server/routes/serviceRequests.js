@@ -25,21 +25,25 @@ const requireCustomer = (req, res, next) => {
 
 router.use(authenticateToken);
 
+// Specific routes FIRST
 router.get('/services/catalog', serviceRequestController.getServicesCatalog);
 router.get('/chemicals/catalog', serviceRequestController.getChemicalsCatalog);
 router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCatalog);
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
 
-router.post('/:requestId/add-chemical', requireAdminOrStaff, serviceRequestController.addChemicalToRequest);
-router.post('/:requestId/add-refrigerant', requireAdminOrStaff, serviceRequestController.addRefrigerantToRequest);
-router.delete('/:requestId/items/:itemId', requireAdminOrStaff, serviceRequestController.removeItemFromRequest);
-router.put('/:requestId/items/:itemId/quantity', requireAdminOrStaff, serviceRequestController.updateItemQuantity);
-
+// Routes with parameters
 router.get('/:requestId/details', serviceRequestController.getRequestDetails);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
+
+// NEW ROUTES - Add/Remove chemicals and refrigerants
+router.post('/:requestId/add-chemicals', requireAdminOrStaff, serviceRequestController.addChemicalsToRequest);
+router.delete('/:requestId/remove-chemicals', requireAdminOrStaff, serviceRequestController.removeChemicalsFromRequest);
+router.post('/:requestId/add-refrigerants', requireAdminOrStaff, serviceRequestController.addRefrigerantsToRequest);
+router.delete('/:requestId/remove-refrigerants', requireAdminOrStaff, serviceRequestController.removeRefrigerantsFromRequest);
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 
+// Generic routes LAST
 router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
 router.post('/', requireCustomer, serviceRequestController.createServiceRequest);
 

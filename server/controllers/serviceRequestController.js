@@ -92,7 +92,7 @@ const createServiceRequest = async (req, res) => {
 
       let itemQuery, itemData;
       let actualId = service.id;
-      let itemType = "service"; 
+      let itemType = "service";
 
       if (typeof service.id === "string" && service.id.startsWith("chem_")) {
         actualId = parseInt(service.id.replace("chem_", ""));
@@ -152,11 +152,11 @@ const createServiceRequest = async (req, res) => {
       totalCost += itemTotal;
 
       if (itemData.type !== "service" && estimatedDuration === 0) {
-        estimatedDuration = 1; 
+        estimatedDuration = 1;
       }
 
       serviceDetails.push({
-        originalId: service.id, 
+        originalId: service.id,
         itemId: actualId,
         itemType: itemData.type,
         quantity: service.quantity,
@@ -461,44 +461,50 @@ const getRequestDetails = async (req, res) => {
     `;
 
     const chemicalsQuery = `
-      SELECT 
-        src.*,
-        c.chemical_name as name,
-        'Chemicals' as category,
-        'Chemicals' as service_category,
-        c.chemical_name as service,
-        COALESCE(src.notes, '-') as remarks,
-        src.quantity,
-        CONCAT('₱', src.unit_price::text) as unit_price,
-        CONCAT('₱', src.line_total::text) as total_price,
-        src.line_total as line_total_numeric,
-        'chemical' as item_type,
-        src.item_id
-      FROM service_request_chemicals src
-      JOIN chemicals c ON src.chemical_id = c.chemical_id
-      WHERE src.request_id = $1
-      ORDER BY src.item_id
-    `;
+  SELECT 
+    src.*,
+    c.chemical_name as name,
+    'Chemicals' as category,
+    'Chemicals' as service_category,
+    c.chemical_name as service,
+    CASE 
+      WHEN src.notes IS NULL OR src.notes = '' THEN 'Added by customer'
+      ELSE src.notes
+    END as remarks,
+    src.quantity,
+    CONCAT('₱', src.unit_price::text) as unit_price,
+    CONCAT('₱', src.line_total::text) as total_price,
+    src.line_total as line_total_numeric,
+    'chemical' as item_type,
+    src.item_id
+  FROM service_request_chemicals src
+  JOIN chemicals c ON src.chemical_id = c.chemical_id
+  WHERE src.request_id = $1
+  ORDER BY src.item_id
+`;
 
     const refrigerantsQuery = `
-      SELECT 
-        srr.*,
-        r.refrigerant_name as name,
-        'Refrigerants' as category,
-        'Refrigerants' as service_category,
-        r.refrigerant_name as service,
-        COALESCE(srr.notes, '-') as remarks,
-        srr.quantity,
-        CONCAT('₱', srr.unit_price::text) as unit_price,
-        CONCAT('₱', srr.line_total::text) as total_price,
-        srr.line_total as line_total_numeric,
-        'refrigerant' as item_type,
-        srr.item_id
-      FROM service_request_refrigerants srr
-      JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
-      WHERE srr.request_id = $1
-      ORDER BY srr.item_id
-    `;
+  SELECT 
+    srr.*,
+    r.refrigerant_name as name,
+    'Refrigerants' as category,
+    'Refrigerants' as service_category,
+    r.refrigerant_name as service,
+    CASE 
+      WHEN srr.notes IS NULL OR srr.notes = '' THEN 'Added by customer'
+      ELSE srr.notes
+    END as remarks,
+    srr.quantity,
+    CONCAT('₱', srr.unit_price::text) as unit_price,
+    CONCAT('₱', srr.line_total::text) as total_price,
+    srr.line_total as line_total_numeric,
+    'refrigerant' as item_type,
+    srr.item_id
+  FROM service_request_refrigerants srr
+  JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+  WHERE srr.request_id = $1
+  ORDER BY srr.item_id
+`;
 
     const [servicesResult, chemicalsResult, refrigerantsResult] =
       await Promise.all([
@@ -1599,22 +1605,17 @@ const updateRequestStatus = async (req, res) => {
   }
 };
 
-const addChemicalToRequest = async (req, res) => {
+const addChemicalsToRequest = async (req, res) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { chemicalId, quantity, notes } = req.body;
+    const { chemicals, adminNotes } = req.body;
+    const adminId = req.user.id;
 
-    if (!chemicalId || !quantity || quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Chemical ID and valid quantity are required",
-      });
-    }
-
+    // Verify request exists and get current status
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -1624,6 +1625,7 @@ const addChemicalToRequest = async (req, res) => {
     const requestResult = await client.query(requestQuery, [requestId]);
 
     if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Service request not found",
@@ -1632,135 +1634,114 @@ const addChemicalToRequest = async (req, res) => {
 
     const request = requestResult.rows[0];
 
+    // Allow modifications in these statuses
     if (
       !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
     ) {
+      await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
         message: "Cannot modify request in current status",
       });
     }
 
-    const chemicalQuery = `
-      SELECT chemical_id, chemical_name, brand, price, stock_quantity, status
-      FROM chemicals 
-      WHERE chemical_id = $1 AND is_active = true
-    `;
-    const chemicalResult = await client.query(chemicalQuery, [chemicalId]);
+    let additionalCost = 0;
+    const addedChemicals = [];
 
-    if (chemicalResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Chemical not found or inactive",
-      });
-    }
+    // Process each chemical
+    for (const chemical of chemicals) {
+      // Get chemical details - NO STOCK CHECK
+      const chemicalQuery = `
+        SELECT chemical_id, chemical_name, brand, price 
+        FROM chemicals 
+        WHERE chemical_id = $1 AND is_active = true
+      `;
+      const chemicalResult = await client.query(chemicalQuery, [chemical.id]);
 
-    const chemical = chemicalResult.rows[0];
+      if (chemicalResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Chemical with ID ${chemical.id} not found or inactive`,
+        });
+      }
 
-    if (chemical.stock_quantity < quantity) {
-      return res.status(400).json({
-        success: false,
-        message: `Insufficient stock. Available: ${chemical.stock_quantity}`,
-      });
-    }
+      const chemicalData = chemicalResult.rows[0];
+      const itemTotal = chemicalData.price * chemical.quantity;
+      additionalCost += itemTotal;
 
-    const existingQuery = `
-      SELECT item_id, quantity FROM service_request_chemicals
-      WHERE request_id = $1 AND chemical_id = $2
-    `;
-    const existingResult = await client.query(existingQuery, [
-      requestId,
-      chemicalId,
-    ]);
-
-    if (existingResult.rows.length > 0) {
-      const newQuantity = parseInt(existingResult.rows[0].quantity) + parseInt(quantity);
-      const newTotal = chemical.price * newQuantity;
-
-      await client.query(
-        `
-        UPDATE service_request_chemicals
-        SET quantity = $1, line_total = $2, notes = $3, updated_at = NOW()
-        WHERE item_id = $4
-      `,
-        [
-          newQuantity,
-          newTotal,
-          notes || "Updated by staff",
-          existingResult.rows[0].item_id,
-        ]
-      );
-    } else {
-      const lineTotal = chemical.price * quantity;
-
-      await client.query(
-        `
+      // Insert into service_request_chemicals table
+      const insertQuery = `
         INSERT INTO service_request_chemicals 
         (request_id, chemical_id, quantity, unit_price, line_total, notes)
         VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-        [
-          requestId,
-          chemicalId,
-          quantity,
-          chemical.price,
-          lineTotal,
-          notes || "Added by staff",
-        ]
-      );
+        RETURNING item_id
+      `;
+
+      const insertResult = await client.query(insertQuery, [
+        requestId,
+        chemical.id,
+        chemical.quantity,
+        chemicalData.price,
+        itemTotal,
+        adminNotes || `Added by ${req.user.email}`, // CHANGED THIS LINE
+      ]);
+
+      addedChemicals.push({
+        itemId: insertResult.rows[0].item_id,
+        chemicalId: chemical.id,
+        name: `${chemicalData.brand} - ${chemicalData.chemical_name}`,
+        quantity: chemical.quantity,
+        unitPrice: chemicalData.price,
+        totalPrice: itemTotal,
+      });
     }
 
-    const totalResult = await client.query(
-      'SELECT calculate_request_total($1) as new_total',
-      [requestId]
-    );
-    const newTotal = totalResult.rows[0].new_total;
-
-    await client.query(
-      `
+    // Update request total cost
+    const updateCostQuery = `
       UPDATE service_requests 
-      SET estimated_cost = $1, updated_at = NOW()
+      SET estimated_cost = estimated_cost + $1,
+          updated_at = NOW()
       WHERE request_id = $2
-    `,
-      [newTotal, requestId]
-    );
+    `;
+    await client.query(updateCostQuery, [additionalCost, requestId]);
 
-    await client.query(
-      `
-      INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, change_reason, ip_address)
-      VALUES ('service_request_chemicals', $1, 'CREATE', $2, $3, 'Chemical added by staff', $4)
-    `,
-      [
-        requestId,
-        JSON.stringify({
-          chemical_id: chemicalId,
-          quantity,
-          price: chemical.price,
-        }),
-        req.user.email,
-        req.ip || req.connection.remoteAddress,
-      ]
-    );
+    // Log in audit_log
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_chemicals",
+        record_id: requestId,
+        action: "CREATE",
+        new_values: {
+          chemicals_added: addedChemicals.length,
+          additional_cost: additionalCost,
+          admin_notes: adminNotes,
+        },
+        changed_by: req.user.email,
+        change_reason: "Chemicals added to service request",
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
 
     await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: "Chemical added successfully",
+      message: `Successfully added ${addedChemicals.length} chemical(s) to request`,
       data: {
-        chemicalName: `${chemical.brand} - ${chemical.chemical_name}`,
-        quantity,
-        unitPrice: chemical.price,
-        lineTotal: chemical.price * quantity,
-        newRequestTotal: newTotal,
+        addedChemicals: addedChemicals,
+        additionalCost: additionalCost,
+        newTotalCost: request.estimated_cost + additionalCost,
       },
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Add chemical error:", error);
+    console.error("Add chemicals to request error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to add chemical to request",
+      message: "Failed to add chemicals to request",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
@@ -1768,21 +1749,16 @@ const addChemicalToRequest = async (req, res) => {
   }
 };
 
-const addRefrigerantToRequest = async (req, res) => {
+// Similarly for refrigerants
+const addRefrigerantsToRequest = async (req, res) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { refrigerantId, quantity, notes } = req.body;
-
-    if (!refrigerantId || !quantity || quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Refrigerant ID and valid quantity are required",
-      });
-    }
+    const { refrigerants, adminNotes } = req.body;
+    const adminId = req.user.id;
 
     const requestQuery = `
       SELECT sr.*, rs.status_name 
@@ -1793,6 +1769,7 @@ const addRefrigerantToRequest = async (req, res) => {
     const requestResult = await client.query(requestQuery, [requestId]);
 
     if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Service request not found",
@@ -1804,133 +1781,108 @@ const addRefrigerantToRequest = async (req, res) => {
     if (
       !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
     ) {
+      await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
-        message: "Cannot modify request in current status",});
-    }
-
-    const refrigerantQuery = `
-      SELECT refrigerant_id, refrigerant_name, price, stock_quantity, status
-      FROM refrigerants 
-      WHERE refrigerant_id = $1 AND is_active = true
-    `;
-    const refrigerantResult = await client.query(refrigerantQuery, [
-      refrigerantId,
-    ]);
-
-    if (refrigerantResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Refrigerant not found or inactive",
+        message: "Cannot modify request in current status",
       });
     }
 
-    const refrigerant = refrigerantResult.rows[0];
+    let additionalCost = 0;
+    const addedRefrigerants = [];
 
-    if (refrigerant.stock_quantity < quantity) {
-      return res.status(400).json({
-        success: false,
-        message: `Insufficient stock. Available: ${refrigerant.stock_quantity}`,
-      });
-    }
+    for (const refrigerant of refrigerants) {
+      // Get refrigerant details - NO STOCK CHECK
+      const refrigerantQuery = `
+        SELECT refrigerant_id, refrigerant_name, price 
+        FROM refrigerants 
+        WHERE refrigerant_id = $1 AND is_active = true
+      `;
+      const refrigerantResult = await client.query(refrigerantQuery, [
+        refrigerant.id,
+      ]);
 
-    const existingQuery = `
-      SELECT item_id, quantity FROM service_request_refrigerants
-      WHERE request_id = $1 AND refrigerant_id = $2
-    `;
-    const existingResult = await client.query(existingQuery, [
-      requestId,
-      refrigerantId,
-    ]);
+      if (refrigerantResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Refrigerant with ID ${refrigerant.id} not found or inactive`,
+        });
+      }
 
-    if (existingResult.rows.length > 0) {
-      const newQuantity = parseInt(existingResult.rows[0].quantity) + parseInt(quantity);
-      const newTotal = refrigerant.price * newQuantity;
+      const refrigerantData = refrigerantResult.rows[0];
+      const itemTotal = refrigerantData.price * refrigerant.quantity;
+      additionalCost += itemTotal;
 
-      await client.query(
-        `
-        UPDATE service_request_refrigerants
-        SET quantity = $1, line_total = $2, notes = $3, updated_at = NOW()
-        WHERE item_id = $4
-      `,
-        [
-          newQuantity,
-          newTotal,
-          notes || "Updated by staff",
-          existingResult.rows[0].item_id,
-        ]
-      );
-    } else {
-      const lineTotal = refrigerant.price * quantity;
-
-      await client.query(
-        `
+      const insertQuery = `
         INSERT INTO service_request_refrigerants 
         (request_id, refrigerant_id, quantity, unit_price, line_total, notes)
         VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-        [
-          requestId,
-          refrigerantId,
-          quantity,
-          refrigerant.price,
-          lineTotal,
-          notes || "Added by staff",
-        ]
-      );
+        RETURNING item_id
+      `;
+
+      const insertResult = await client.query(insertQuery, [
+        requestId,
+        refrigerant.id,
+        refrigerant.quantity,
+        refrigerantData.price,
+        itemTotal,
+        adminNotes || `Added by ${req.user.email}`, // CHANGED THIS LINE
+      ]);
+
+      addedRefrigerants.push({
+        itemId: insertResult.rows[0].item_id,
+        refrigerantId: refrigerant.id,
+        name: refrigerantData.refrigerant_name,
+        quantity: refrigerant.quantity,
+        unitPrice: refrigerantData.price,
+        totalPrice: itemTotal,
+      });
     }
 
-    const totalResult = await client.query(
-      'SELECT calculate_request_total($1) as new_total',
-      [requestId]
-    );
-    const newTotal = totalResult.rows[0].new_total;
-
-    await client.query(
-      `
+    const updateCostQuery = `
       UPDATE service_requests 
-      SET estimated_cost = $1, updated_at = NOW()
+      SET estimated_cost = estimated_cost + $1,
+          updated_at = NOW()
       WHERE request_id = $2
-    `,
-      [newTotal, requestId]
-    );
+    `;
+    await client.query(updateCostQuery, [additionalCost, requestId]);
 
-    await client.query(
-      `
-      INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, change_reason, ip_address)
-      VALUES ('service_request_refrigerants', $1, 'CREATE', $2, $3, 'Refrigerant added by staff', $4)
-    `,
-      [
-        requestId,
-        JSON.stringify({
-          refrigerant_id: refrigerantId,
-          quantity,
-          price: refrigerant.price,
-        }),
-        req.user.email,
-        req.ip || req.connection.remoteAddress,
-      ]
-    );
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_refrigerants",
+        record_id: requestId,
+        action: "CREATE",
+        new_values: {
+          refrigerants_added: addedRefrigerants.length,
+          additional_cost: additionalCost,
+          admin_notes: adminNotes,
+        },
+        changed_by: req.user.email,
+        change_reason: "Refrigerants added to service request",
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
 
     await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: "Refrigerant added successfully",
+      message: `Successfully added ${addedRefrigerants.length} refrigerant(s) to request`,
       data: {
-        refrigerantName: refrigerant.refrigerant_name,
-        quantity,
-        unitPrice: refrigerant.price,
-        lineTotal: refrigerant.price * quantity,
-        newRequestTotal: newTotal,
+        addedRefrigerants: addedRefrigerants,
+        additionalCost: additionalCost,
+        newTotalCost: request.estimated_cost + additionalCost,
       },
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Add refrigerant error:", error);
+    console.error("Add refrigerants to request error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to add refrigerant to request",
+      message: "Failed to add refrigerants to request",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
@@ -1938,26 +1890,25 @@ const addRefrigerantToRequest = async (req, res) => {
   }
 };
 
-const removeItemFromRequest = async (req, res) => {
+// Remove chemicals from service request
+const removeChemicalsFromRequest = async (req, res) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    const { requestId, itemId } = req.params;
-    const { itemType } = req.body;
+    const { requestId } = req.params;
+    const { chemicalItemIds } = req.body; // Array of item_ids to remove
+    const adminId = req.user.id;
 
-    if (
-      !itemType ||
-      !["chemical", "refrigerant", "service"].includes(itemType)
-    ) {
+    if (!Array.isArray(chemicalItemIds) || chemicalItemIds.length === 0) {
       return res.status(400).json({
         success: false,
-        message:
-          "Valid item type is required (chemical, refrigerant, or service)",
+        message: "Chemical item IDs array is required",
       });
     }
 
+    // Verify request exists and get current status
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -1967,6 +1918,7 @@ const removeItemFromRequest = async (req, res) => {
     const requestResult = await client.query(requestQuery, [requestId]);
 
     if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Service request not found",
@@ -1978,232 +1930,234 @@ const removeItemFromRequest = async (req, res) => {
     if (
       !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
     ) {
+      await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
         message: "Cannot modify request in current status",
       });
     }
 
-    let deleteQuery;
-    let tableName;
-
-    if (itemType === "chemical") {
-      deleteQuery =
-        "DELETE FROM service_request_chemicals WHERE item_id = $1 AND request_id = $2 RETURNING *";
-      tableName = "service_request_chemicals";
-    } else if (itemType === "refrigerant") {
-      deleteQuery =
-        "DELETE FROM service_request_refrigerants WHERE item_id = $1 AND request_id = $2 RETURNING *";
-      tableName = "service_request_refrigerants";
-    } else {
-      deleteQuery =
-        "DELETE FROM service_request_items WHERE item_id = $1 AND request_id = $2 RETURNING *";
-      tableName = "service_request_items";
-    }
-
-    const deleteResult = await client.query(deleteQuery, [itemId, requestId]);
-
-    if (deleteResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Item not found in this request",
-      });
-    }
-
-    const totalResult = await client.query(
-      'SELECT calculate_request_total($1) as new_total',
-      [requestId]
-    );
-    const newTotal = totalResult.rows[0].new_total || 0;
-
-    await client.query(
-      `
-      UPDATE service_requests 
-      SET estimated_cost = $1, updated_at = NOW()
-      WHERE request_id = $2
-    `,
-      [newTotal, requestId]
-    );
-
-    await client.query(
-      `
-      INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by, change_reason, ip_address)
-      VALUES ($1, $2, 'DELETE', $3, $4, 'Item removed by staff', $5)
-    `,
-      [
-        tableName,
-        requestId,
-        JSON.stringify(deleteResult.rows[0]),
-        req.user.email,
-        req.ip || req.connection.remoteAddress,
-      ]
-    );
-
-    await client.query("COMMIT");
-
-    res.json({
-      success: true,
-      message: "Item removed successfully",
-      data: {
-        newRequestTotal: newTotal,
-      },
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error("Remove item error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to remove item from request",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  } finally {
-    client.release();
-  }
-};
-
-const updateItemQuantity = async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const { requestId, itemId } = req.params;
-    const { itemType, quantity } = req.body;
-
-    if (
-      !itemType ||
-      !["chemical", "refrigerant", "service"].includes(itemType)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid item type is required",
-      });
-    }
-
-    if (!quantity || quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid quantity is required",
-      });
-    }
-
-    const requestQuery = `
-      SELECT sr.*, rs.status_name 
-      FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      WHERE sr.request_id = $1
+    // Get the chemicals to be removed and calculate cost reduction
+    const getChemicalsQuery = `
+      SELECT item_id, chemical_id, quantity, line_total
+      FROM service_request_chemicals
+      WHERE request_id = $1 AND item_id = ANY($2)
     `;
-    const requestResult = await client.query(requestQuery, [requestId]);
+    const chemicalsResult = await client.query(getChemicalsQuery, [
+      requestId,
+      chemicalItemIds,
+    ]);
 
-    if (requestResult.rows.length === 0) {
+    if (chemicalsResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
-        message: "Service request not found",
+        message: "No chemicals found with provided IDs",
       });
     }
 
-    const request = requestResult.rows[0];
+    const costReduction = chemicalsResult.rows.reduce(
+      (sum, item) => sum + parseFloat(item.line_total),
+      0
+    );
 
-    if (
-      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot modify request in current status",
-      });
-    }
+    // Delete the chemicals
+    const deleteQuery = `
+      DELETE FROM service_request_chemicals
+      WHERE request_id = $1 AND item_id = ANY($2)
+      RETURNING item_id
+    `;
+    const deleteResult = await client.query(deleteQuery, [
+      requestId,
+      chemicalItemIds,
+    ]);
 
-    let updateQuery;
-    let tableName;
-
-    if (itemType === "chemical") {
-      updateQuery = `
-        UPDATE service_request_chemicals
-        SET quantity = $1, line_total = unit_price * $1, updated_at = NOW()
-        WHERE item_id = $2 AND request_id = $3
-        RETURNING *
-      `;
-      tableName = "service_request_chemicals";
-    } else if (itemType === "refrigerant") {
-      updateQuery = `
-        UPDATE service_request_refrigerants
-        SET quantity = $1, line_total = unit_price * $1, updated_at = NOW()
-        WHERE item_id = $2 AND request_id = $3
-        RETURNING *
-      `;
-      tableName = "service_request_refrigerants";
-    } else {
-      updateQuery = `
-        UPDATE service_request_items
-        SET quantity = $1, line_total = unit_price * $1
-        WHERE item_id = $2 AND request_id = $3
-        RETURNING *
-      `;
-      tableName = "service_request_items";
-    }
-
-    const updateResult = await client.query(updateQuery, [
-      quantity,
-      itemId,
+    // Update request total cost
+    const updateCostQuery = `
+      UPDATE service_requests 
+      SET estimated_cost = GREATEST(estimated_cost - $1, 0),
+          updated_at = NOW()
+      WHERE request_id = $2
+      RETURNING estimated_cost
+    `;
+    const updateResult = await client.query(updateCostQuery, [
+      costReduction,
       requestId,
     ]);
 
-    if (updateResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Item not found in this request",
+    // Log in audit_log
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_chemicals",
+        record_id: requestId,
+        action: "DELETE",
+        old_values: {
+          chemicals_removed: deleteResult.rows.length,
+          cost_reduction: costReduction,
+          item_ids: chemicalItemIds,
+        },
+        changed_by: req.user.email,
+        change_reason: "Chemicals removed from service request",
+        ip_address: req.ip || req.connection.remoteAddress,
       });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
     }
-
-    const totalResult = await client.query(
-      'SELECT calculate_request_total($1) as new_total',
-      [requestId]
-    );
-    const newTotal = totalResult.rows[0].new_total;
-
-    await client.query(
-      `
-      UPDATE service_requests 
-      SET estimated_cost = $1, updated_at = NOW()
-      WHERE request_id = $2
-    `,
-      [newTotal, requestId]
-    );
-
-    await client.query(
-      `
-      INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, change_reason, ip_address)
-      VALUES ($1, $2, 'UPDATE', $3, $4, 'Quantity updated by staff', $5)
-    `,
-      [
-        tableName,
-        requestId,
-        JSON.stringify({
-          quantity,
-          line_total: updateResult.rows[0].line_total,
-        }),
-        req.user.email,
-        req.ip || req.connection.remoteAddress,
-      ]
-    );
 
     await client.query("COMMIT");
 
     res.json({
       success: true,
-      message: "Quantity updated successfully",
+      message: `Successfully removed ${deleteResult.rows.length} chemical(s) from request`,
       data: {
-        newQuantity: quantity,
-        newLineTotal: updateResult.rows[0].line_total,
-        newRequestTotal: newTotal,
+        removedCount: deleteResult.rows.length,
+        costReduction: costReduction,
+        newTotalCost: updateResult.rows[0].estimated_cost,
       },
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Update quantity error:", error);
+    console.error("Remove chemicals from request error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to update item quantity",
+      message: "Failed to remove chemicals from request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// Remove refrigerants from service request
+const removeRefrigerantsFromRequest = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const { refrigerantItemIds } = req.body; // Array of item_ids to remove
+    const adminId = req.user.id;
+
+    if (!Array.isArray(refrigerantItemIds) || refrigerantItemIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Refrigerant item IDs array is required",
+      });
+    }
+
+    const requestQuery = `
+      SELECT sr.*, rs.status_name 
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (
+      !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
+    ) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify request in current status",
+      });
+    }
+
+    // Get the refrigerants to be removed and calculate cost reduction
+    const getRefrigerantsQuery = `
+      SELECT item_id, refrigerant_id, quantity, line_total
+      FROM service_request_refrigerants
+      WHERE request_id = $1 AND item_id = ANY($2)
+    `;
+    const refrigerantsResult = await client.query(getRefrigerantsQuery, [
+      requestId,
+      refrigerantItemIds,
+    ]);
+
+    if (refrigerantsResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        success: false,
+        message: "No refrigerants found with provided IDs",
+      });
+    }
+
+    const costReduction = refrigerantsResult.rows.reduce(
+      (sum, item) => sum + parseFloat(item.line_total),
+      0
+    );
+
+    // Delete the refrigerants
+    const deleteQuery = `
+      DELETE FROM service_request_refrigerants
+      WHERE request_id = $1 AND item_id = ANY($2)
+      RETURNING item_id
+    `;
+    const deleteResult = await client.query(deleteQuery, [
+      requestId,
+      refrigerantItemIds,
+    ]);
+
+    // Update request total cost
+    const updateCostQuery = `
+      UPDATE service_requests 
+      SET estimated_cost = GREATEST(estimated_cost - $1, 0),
+          updated_at = NOW()
+      WHERE request_id = $2
+      RETURNING estimated_cost
+    `;
+    const updateResult = await client.query(updateCostQuery, [
+      costReduction,
+      requestId,
+    ]);
+
+    // Log in audit_log
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_refrigerants",
+        record_id: requestId,
+        action: "DELETE",
+        old_values: {
+          refrigerants_removed: deleteResult.rows.length,
+          cost_reduction: costReduction,
+          item_ids: refrigerantItemIds,
+        },
+        changed_by: req.user.email,
+        change_reason: "Refrigerants removed from service request",
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: `Successfully removed ${deleteResult.rows.length} refrigerant(s) from request`,
+      data: {
+        removedCount: deleteResult.rows.length,
+        costReduction: costReduction,
+        newTotalCost: updateResult.rows[0].estimated_cost,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Remove refrigerants from request error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove refrigerants from request",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
@@ -2226,8 +2180,8 @@ module.exports = {
   getServiceWithRelatedItems,
   checkStockAvailability,
   updateRequestStatus,
-  addChemicalToRequest,
-  addRefrigerantToRequest,
-  removeItemFromRequest,
-  updateItemQuantity,
+  addChemicalsToRequest,
+  addRefrigerantsToRequest,
+  removeChemicalsFromRequest,
+  removeRefrigerantsFromRequest,
 };
