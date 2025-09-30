@@ -7,12 +7,12 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import AboutUsPage from "./pages/AboutUsPage";
 import ServicesPage from "./pages/ServicesPage";
-import LoginPage from "./pages/LoginPage"; // CHANGED: Import LoginPage instead of LoginForm
-import SignupPage from "./pages/SignupPage"; // CHANGED: Import SignupPage instead of SignupForm
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 
-// Admin Pages (these will be reused for staff)
+// Admin Pages
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
-import ServiceRequestDetails from "./pages/admin/ServiceRequestDetails";
+import AdminServiceRequestDetails from "./pages/admin/ServiceRequestDetails"; // RENAMED for clarity
 import VerifyAccountsPage from "./pages/admin/VerifyAccounts";
 import ClientProfilesPage from "./pages/admin/ClientProfiles";
 import UserManagementPage from "./pages/admin/UserManagement";
@@ -20,6 +20,9 @@ import ActivityLogPage from "./pages/admin/ActivityLog";
 import AccountSettings from "./pages/admin/AccountSettings";
 import Messages from "./pages/admin/Messages";
 import MessageDetail from "./pages/admin/MessageDetail";
+
+// Staff Pages
+import StaffServiceRequestDetails from "./pages/staff/ServiceRequestDetails"; // NEW
 
 // Customer Pages
 import CustomerServiceTracker from "./pages/customer/CustomerServiceTracker";
@@ -59,7 +62,7 @@ function App() {
               path="/admin/service-request/:requestNumber"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
-                  <ServiceRequestDetails />
+                  <AdminServiceRequestDetails />
                 </ProtectedRoute>
               }
             />
@@ -120,7 +123,7 @@ function App() {
               }
             />
 
-            {/* Protected Staff Routes - Reusing Admin Components */}
+            {/* Protected Staff Routes */}
             <Route
               path="/staff/service-tracker"
               element={
@@ -133,7 +136,7 @@ function App() {
               path="/staff/service-request/:requestNumber"
               element={
                 <ProtectedRoute allowedRoles={['staff']}>
-                  <ServiceRequestDetails />
+                  <StaffServiceRequestDetails />
                 </ProtectedRoute>
               }
             />

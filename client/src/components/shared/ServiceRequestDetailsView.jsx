@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
-import ManageRequestItemsModal from "../admin/ManageRequestItemsModal";
+import ManageRequestItemsModal from "./ManageRequestItemsModal";
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
-  
+
   // Permission flags based on role
-  const canAssignStaff = userRole === 'admin';
-  const canGiveDiscounts = userRole === 'admin';
-  
+  const canAssignStaff = userRole === "admin";
+  const canGiveDiscounts = userRole === "admin";
+
   // State for editable fields
   const [serviceStatus, setServiceStatus] = useState("Pending");
   const [paymentStatus, setPaymentStatus] = useState("Pending");
@@ -17,81 +17,113 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [serviceStartDate, setServiceStartDate] = useState("");
   const [serviceEndDate, setServiceEndDate] = useState("");
   const [selectedDiscount, setSelectedDiscount] = useState("No Discount");
-  
+
   // State for data loading
   const [requestData, setRequestData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
-  
+
   // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
 
   // State for manage items modal
   const [isManageItemsModalOpen, setIsManageItemsModalOpen] = useState(false);
 
+  // State for staff list
+  const [staffList, setStaffList] = useState([]);
+
+  // Fetch staff list
+  const fetchStaffList = async () => {
+    try {
+      const token = localStorage.getItem("h2quote_token");
+      const response = await fetch(
+        "http://localhost:5000/api/service-requests/staff-list",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        setStaffList(data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching staff list:", error);
+    }
+  };
+
   // Fetch request details from backend
   const fetchRequestDetails = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('h2quote_token');
-      
-      // First, find the request by request_number to get request_id
-      const searchResponse = await fetch(`http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      const token = localStorage.getItem("h2quote_token");
+
+      const searchResponse = await fetch(
+        `http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
-      });
+      );
 
       if (!searchResponse.ok) {
-        throw new Error('Failed to find service request');
+        throw new Error("Failed to find service request");
       }
 
       const searchData = await searchResponse.json();
-      
+
       if (!searchData.success || searchData.data.requests.length === 0) {
-        setError('Service request not found');
+        setError("Service request not found");
         return;
       }
 
       const request = searchData.data.requests[0];
       setRequestId(request.request_id);
-      
-      // Now fetch full details using request_id
-      const detailResponse = await fetch(`http://localhost:5000/api/service-requests/${request.request_id}/details`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+
+      const detailResponse = await fetch(
+        `http://localhost:5000/api/service-requests/${request.request_id}/details`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
-      });
+      );
 
       if (!detailResponse.ok) {
-        throw new Error('Failed to fetch request details');
+        throw new Error("Failed to fetch request details");
       }
 
       const detailData = await detailResponse.json();
 
       if (detailData.success) {
-        const { request: requestDetails, items, paymentHistory } = detailData.data;
-        
-        // Calculate actual total cost from items
+        const {
+          request: requestDetails,
+          items,
+          paymentHistory,
+        } = detailData.data;
+
         const actualTotalCost = items.reduce((sum, item) => {
-          const lineTotal = typeof item.line_total === 'string' 
-            ? parseFloat(item.line_total.replace(/[₱,]/g, '')) 
-            : parseFloat(item.line_total) || 0;
+          const lineTotal =
+            typeof item.line_total === "string"
+              ? parseFloat(item.line_total.replace(/[₱,]/g, ""))
+              : parseFloat(item.line_total) || 0;
           return sum + lineTotal;
         }, 0);
-        
-        // Format total cost
-        const formattedTotalCost = `₱${actualTotalCost.toLocaleString('en-US', {
+
+        const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
           minimumFractionDigits: 2,
-          maximumFractionDigits: 2
+          maximumFractionDigits: 2,
         })}`;
 
-        // Transform data to match existing component structure
         const transformedData = {
           id: requestDetails.request_number,
           requestedAt: requestDetails.requested_at,
@@ -101,7 +133,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             email: requestDetails.email || "Not provided",
             contact: requestDetails.phone || "Not provided",
           },
-          services: items.map(item => ({
+          services: items.map((item) => ({
+            service_id: item.service_id, // Added this
             category: item.service_category || item.category,
             service: item.name,
             remarks: item.remarks || "-",
@@ -109,12 +142,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             unitPrice: item.unit_price,
             totalPrice: item.total_price,
             itemType: item.item_type,
+            warranty_months: item.warranty_months || 6,
+            warranty_start_date: item.warranty_start_date || "",
+            warranty_status: item.warranty_status || "Not Set",
           })),
           paymentHistory: requestDetails.paymentHistory || [],
           estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
           totalCost: formattedTotalCost,
           paymentMode: requestDetails.payment_mode || "Bank Transfer",
-          paymentTerms: requestDetails.payment_terms || "50% Down, 50% upon Completion",
+          paymentTerms:
+            requestDetails.payment_terms || "50% Down, 50% upon Completion",
           paymentDeadline: requestDetails.payment_deadline || "Not set",
           assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
           warranty: requestDetails.warranty || "6 months",
@@ -125,18 +162,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
         setRequestData(transformedData);
         setPaymentBreakdown(requestDetails.paymentHistory || []);
-        
-        // Set initial status values
+
         setServiceStatus(requestDetails.service_status || "Pending");
         setPaymentStatus(requestDetails.payment_status || "Pending");
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
-        
       } else {
-        setError(detailData.message || 'Failed to fetch request details');
+        setError(detailData.message || "Failed to fetch request details");
       }
     } catch (error) {
-      console.error('Error fetching request details:', error);
-      setError('Failed to fetch request details');
+      console.error("Error fetching request details:", error);
+      setError("Failed to fetch request details");
     } finally {
       setLoading(false);
     }
@@ -145,20 +180,21 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   useEffect(() => {
     if (requestNumber) {
       fetchRequestDetails();
+      if (canAssignStaff) {
+        fetchStaffList();
+      }
     }
-  }, [requestNumber]);
+  }, [requestNumber, canAssignStaff]);
 
-  // Handle items updated callback
   const handleItemsUpdated = () => {
     fetchRequestDetails();
   };
 
-  // Handle payment breakdown status changes
   const handlePaymentStatusChange = (index, newStatus) => {
     const updatedPayments = [...paymentBreakdown];
     updatedPayments[index] = {
       ...updatedPayments[index],
-      paymentStatus: newStatus
+      paymentStatus: newStatus,
     };
     setPaymentBreakdown(updatedPayments);
   };
@@ -183,6 +219,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         Pending: "bg-gray-100 text-gray-800",
         Valid: "bg-green-100 text-green-800",
         Expired: "bg-red-100 text-red-800",
+        "Not Set": "bg-gray-100 text-gray-500",
         "N/A": "bg-gray-100 text-gray-500",
       },
     };
@@ -269,9 +306,64 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     );
   };
 
-  // Get back navigation path based on role
   const getBackPath = () => {
-    return userRole === 'admin' ? '/admin/service-tracker' : '/staff/service-tracker';
+    return userRole === "admin"
+      ? "/admin/service-tracker"
+      : "/staff/service-tracker";
+  };
+
+  // ✅ ADD handleSaveChanges HERE
+  const handleSaveChanges = async () => {
+    try {
+      const token = localStorage.getItem("h2quote_token");
+
+      const updatePayload = {
+        serviceStatus: serviceStatus,
+        paymentStatus: paymentStatus,
+        warrantyStatus: warrantyStatus,
+        assignedStaff: requestData.assignedStaff,
+        serviceStartDate: serviceStartDate || null,
+        serviceEndDate: serviceEndDate || null,
+        discount: selectedDiscount,
+        services: requestData.services.map((service) => ({
+          service_id: service.service_id,
+          itemType: service.itemType,
+          warranty_months: service.warranty_months,
+          warranty_start_date: service.warranty_start_date || null,
+          warranty_status: service.warranty_status,
+        })),
+        paymentBreakdown: paymentBreakdown.map((payment) => ({
+          phase: payment.phase,
+          paymentStatus: payment.paymentStatus,
+        })),
+      };
+
+      console.log("Sending update payload:", updatePayload);
+
+      const response = await fetch(
+        `http://localhost:5000/api/service-requests/${requestId}/update`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatePayload),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert("Changes saved successfully!");
+        fetchRequestDetails();
+      } else {
+        alert("Failed to save changes: " + data.message);
+      }
+    } catch (error) {
+      console.error("Save changes error:", error);
+      alert("Failed to save changes. Please try again.");
+    }
   };
 
   if (loading) {
@@ -298,12 +390,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     );
   }
 
-  // Check if request is editable
-  const isEditable = ['Pending', 'Assigned', 'Processing'].includes(requestData.serviceStatus);
+  const isEditable = ["Pending", "Assigned", "Processing"].includes(
+    requestData.serviceStatus
+  );
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center gap-4">
         <button
           onClick={() => navigate(getBackPath())}
@@ -314,12 +406,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </button>
       </div>
 
-      {/* Status Tracker */}
       <div className="p-6">
         <StatusTracker />
       </div>
 
-      {/* Customer Information */}
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-4 pb-3 text-[#004785] border-b-2 border-gray-300">
           Customer Information
@@ -357,7 +447,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       </div>
 
-      {/* Service Details */}
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
           Service Details
@@ -397,7 +486,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Warranty: (In Months)
             </label>
-            <span className="text-sm text-gray-800">{requestData.warranty}</span>
+            <span className="text-sm text-gray-800">
+              {requestData.warranty}
+            </span>
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">
@@ -409,10 +500,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Warranty Fulfillment Status:
             </label>
-            <span className="text-sm text-gray-800">{requestData.warrantyStatus}</span>
+            <span className="text-sm text-gray-800">
+              {requestData.warrantyStatus}
+            </span>
           </div>
-          
-          {/* Assigned Staff - Only shown for admin, read-only for staff */}
+
           <div className="col-span-2">
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Assigned Staff:
@@ -421,32 +513,33 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               <select
                 value={requestData.assignedStaff}
                 onChange={(e) => {
-                  // Handle staff assignment change
                   setRequestData({
                     ...requestData,
-                    assignedStaff: e.target.value
+                    assignedStaff: e.target.value,
                   });
                 }}
                 className="text-sm border border-gray-300 rounded-lg px-2 py-1 cursor-pointer"
               >
                 <option value="Not assigned">Not assigned</option>
-                <option value="John Doe">John Doe</option>
-                <option value="Jane Smith">Jane Smith</option>
-                {/* Add more staff options from your backend */}
+                {staffList.map((staff) => (
+                  <option key={staff.id} value={staff.name}>
+                    {staff.name} {staff.department && `- ${staff.department}`}
+                  </option>
+                ))}
               </select>
             ) : (
-              <span className="text-sm text-gray-800">{requestData.assignedStaff}</span>
+              <span className="text-sm text-gray-800">
+                {requestData.assignedStaff}
+              </span>
             )}
           </div>
         </div>
 
-        {/* Header with Manage Items button */}
         <div className="flex items-center justify-between mb-4">
           <label className="block text-sm font-medium text-gray-700">
             List of Requested Services:
           </label>
-          
-          {/* Show manage items button only if request is editable */}
+
           {isEditable && requestId && (
             <button
               onClick={() => setIsManageItemsModalOpen(true)}
@@ -458,7 +551,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           )}
         </div>
 
-        {/* Services Table */}
         <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-100 border-b">
@@ -479,7 +571,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   Unit Price
                 </th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                  Total Estimated Price
+                  Total Price
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                  Warranty (Months)
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                  Start Date
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                  Warranty Status
                 </th>
               </tr>
             </thead>
@@ -504,6 +605,62 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                     {service.totalPrice}
                   </td>
+
+                  {service.itemType === "service" ? (
+                    <>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max="60"
+                          value={service.warranty_months || 6}
+                          onChange={(e) => {
+                            const updatedServices = [...requestData.services];
+                            updatedServices[index] = {
+                              ...updatedServices[index],
+                              warranty_months: parseInt(e.target.value) || 6,
+                            };
+                            setRequestData({
+                              ...requestData,
+                              services: updatedServices,
+                            });
+                          }}
+                          className="w-16 text-center border border-gray-300 rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        <input
+                          type="date"
+                          value={service.warranty_start_date || ""}
+                          onChange={(e) => {
+                            const updatedServices = [...requestData.services];
+                            updatedServices[index] = {
+                              ...updatedServices[index],
+                              warranty_start_date: e.target.value,
+                            };
+                            setRequestData({
+                              ...requestData,
+                              services: updatedServices,
+                            });
+                          }}
+                          className="border border-gray-300 rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-center">
+                        {getStatusBadge(
+                          service.warranty_status || "Not Set",
+                          "warrantyStatus"
+                        )}
+                      </td>
+                    </>
+                  ) : (
+                    <td
+                      className="px-3 py-4 text-xs xl:text-sm text-gray-500 text-center"
+                      colSpan="3"
+                    >
+                      N/A (Material)
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -511,7 +668,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       </div>
 
-      {/* Availed Discounts - Only visible for admin */}
       {canGiveDiscounts && (
         <div className="p-6">
           <div className="flex items-center justify-between">
@@ -519,21 +675,21 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               Availed Discounts
             </h2>
             <div className="flex gap-2">
-              <button 
+              <button
                 onClick={() => setSelectedDiscount("5%")}
                 className={`p-3 border text-sm rounded-lg font-semibold cursor-pointer ${
-                  selectedDiscount === "5%" 
-                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]" 
+                  selectedDiscount === "5%"
+                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]"
                     : "border-gray-300 text-[#0260A0]"
                 }`}
               >
                 5%
               </button>
-              <button 
+              <button
                 onClick={() => setSelectedDiscount("No Discount")}
                 className={`p-3 border text-sm rounded-lg font-semibold cursor-pointer ${
-                  selectedDiscount === "No Discount" 
-                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]" 
+                  selectedDiscount === "No Discount"
+                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]"
                     : "border-gray-300 text-[#0260A0]"
                 }`}
               >
@@ -544,7 +700,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       )}
 
-      {/* Total Cost */}
       <div className="p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
@@ -556,7 +711,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       </div>
 
-      {/* Payment */}
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
           Payment
@@ -605,7 +759,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           </div>
         </div>
 
-        {/* Payment Breakdown */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-4">
             Payment Breakdown:
@@ -664,7 +817,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                     <select
                       value={payment.paymentStatus}
-                      onChange={(e) => handlePaymentStatusChange(index, e.target.value)}
+                      onChange={(e) =>
+                        handlePaymentStatusChange(index, e.target.value)
+                      }
                       className="text-xs xl:text-sm border border-gray-300 rounded p-2"
                     >
                       <option value="Pending">Pending</option>
@@ -679,7 +834,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       </div>
 
-      {/* Duration */}
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
           Duration
@@ -721,20 +875,21 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="flex gap-4 mt-5">
-        <button 
+        <button
           onClick={() => navigate(getBackPath())}
           className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl cursor-pointer hover:bg-gray-200 transition-all"
         >
           Cancel
         </button>
-        <button className="flex-1 px-6 py-2 bg-[#004785] text-white rounded-lg cursor-pointer hover:bg-[#003366] transition-all">
+        <button
+          onClick={handleSaveChanges}
+          className="flex-1 px-6 py-2 bg-[#004785] text-white rounded-lg cursor-pointer hover:bg-[#003366] transition-all"
+        >
           Save Changes
         </button>
       </div>
 
-      {/* Manage Items Modal */}
       {requestId && (
         <ManageRequestItemsModal
           isOpen={isManageItemsModalOpen}
