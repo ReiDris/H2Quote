@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
+import PaymentProofViewer from "./PaymentProofViewer";
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
@@ -30,8 +31,18 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   // State for manage items modal
   const [isManageItemsModalOpen, setIsManageItemsModalOpen] = useState(false);
 
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [viewingPaymentId, setViewingPaymentId] = useState(null);
+  const [viewingFileName, setViewingFileName] = useState("");
+
   // State for staff list
   const [staffList, setStaffList] = useState([]);
+
+  const handleViewProof = (paymentId, fileName) => {
+    setViewingPaymentId(paymentId);
+    setViewingFileName(fileName);
+    setIsViewerOpen(true);
+  };
 
   // Fetch staff list
   const fetchStaffList = async () => {
@@ -803,9 +814,17 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   </td>
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                     {payment.proofOfPayment === "-" ? (
-                      "-"
+                      <span className="text-gray-400">Not uploaded</span>
                     ) : (
-                      <button className="flex items-center gap-1 text-blue-600 hover:text-blue-800">
+                      <button
+                        onClick={() =>
+                          handleViewProof(
+                            payment.payment_id,
+                            payment.proofOfPayment
+                          )
+                        }
+                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto"
+                      >
                         <Eye size={16} />
                         View
                       </button>
@@ -898,6 +917,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           onSuccess={handleItemsUpdated}
         />
       )}
+
+      <PaymentProofViewer
+        isOpen={isViewerOpen}
+        onClose={() => {
+          setIsViewerOpen(false);
+          setViewingPaymentId(null);
+        }}
+        paymentId={viewingPaymentId}
+        fileName={viewingFileName}
+      />
     </div>
   );
 };

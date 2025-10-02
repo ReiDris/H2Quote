@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -12,55 +12,107 @@ import CustomerLayout from "../../layouts/CustomerLayout";
 const CustomerServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [mockData, setMockData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const handleMoreActions = (requestId) => {
-    // Navigate to the customer service request details page
-    navigate(`/customer/service-request/${requestId.replace("#", "")}`);
+  const itemsPerPage = 10;
+
+  // Fetch customer requests from API
+  const fetchCustomerRequests = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('h2quote_token');
+      
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const response = await fetch('http://localhost:5000/api/service-requests/my-requests', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('h2quote_token');
+          navigate('/login');
+          return;
+        }
+        throw new Error('Failed to fetch service requests');
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('Fetched customer requests:', data.data);
+        
+        // Transform backend data to match your existing UI structure
+        const transformedData = (data.data || []).map(item => ({
+          id: item.request_number,
+          requestedAt: formatDate(item.created_at),
+          serviceCategory: "-", // Can be enhanced based on items
+          requestedService: "-", // Can be enhanced based on items
+          assignedStaff: item.assigned_staff_name || "-",
+          serviceStatus: item.service_status || "Pending",
+          paymentStatus: item.payment_status || "Pending",
+          warrantyStatus: item.warranty_status || "N/A",
+          totalCost: formatCurrency(item.estimated_cost),
+          requestId: item.request_id // Keep original ID for navigation
+        }));
+
+        setMockData(transformedData);
+      } else {
+        setError(data.message || 'Failed to fetch service requests');
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      setError('Failed to fetch service requests');
+      setMockData([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Mock data for customer's service requests (only their own)
-  const mockData = [
-    {
-      id: "#REQ01",
-      requestedAt: "May 07, 2025 - 10:34 AM",
-      serviceCategory: "Services, Chemicals",
-      requestedService: "Service A, Chemical A",
-      assignedStaff: "Staff 1",
-      serviceStatus: "Ongoing",
-      paymentStatus: "Partial",
-      warrantyStatus: "Pending",
-      totalCost: "₱50,000",
-    },
-    {
-      id: "#REQ03",
-      requestedAt: "April 15, 2025 - 02:15 PM",
-      serviceCategory: "Services",
-      requestedService: "Water Testing & Analysis",
-      assignedStaff: "Staff 2",
-      serviceStatus: "Completed",
-      paymentStatus: "Paid",
-      warrantyStatus: "Valid",
-      totalCost: "₱5,000",
-    },
-    {
-      id: "#REQ07",
-      requestedAt: "March 22, 2025 - 09:45 AM",
-      serviceCategory: "Chemicals",
-      requestedService: "Chemical Cleaning Solution",
-      assignedStaff: "Staff 3",
-      serviceStatus: "Completed",
-      paymentStatus: "Paid",
-      warrantyStatus: "Expired",
-      totalCost: "₱15,000",
-    },
-  ];
+  useEffect(() => {
+    fetchCustomerRequests();
+  }, []);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const formatCurrency = (amount) => {
+    if (!amount) return "₱0";
+    return `₱${parseFloat(amount).toLocaleString('en-PH')}`;
+  };
+
+  const handleMoreActions = (item) => {
+    // Navigate using the actual request_id from backend
+    navigate(`/customer/service-request/${item.requestId}`);
+  };
 
   const getStatusBadge = (status, type) => {
     const statusStyles = {
       serviceStatus: {
         Pending: "bg-gray-100 text-gray-800",
         Assigned: "bg-orange-200 text-orange-600",
+        Processing: "bg-yellow-100 text-yellow-800",
+        Approval: "bg-purple-100 text-purple-800",
         Ongoing: "bg-blue-100 text-blue-800",
         Completed: "bg-green-100 text-green-800",
         Cancelled: "bg-red-100 text-red-800",
@@ -92,13 +144,27 @@ const CustomerServiceTracker = () => {
   const filteredData = mockData.filter(
     (item) =>
       item.requestedService.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.id.toLowerCase().includes(searchTerm.toLowerCase())
+      item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.assignedStaff.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalPages = Math.ceil(filteredData.length / 10);
   const startIndex = (currentPage - 1) * 10;
   const endIndex = startIndex + 10;
   const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  if (loading) {
+    return (
+      <CustomerLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading your service requests...</p>
+          </div>
+        </div>
+      </CustomerLayout>
+    );
+  }
 
   return (
     <CustomerLayout>
@@ -195,7 +261,7 @@ const CustomerServiceTracker = () => {
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-center">
                       <button
-                        onClick={() => handleMoreActions(item.id)}
+                        onClick={() => handleMoreActions(item)}
                         className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
                         title="View Details"
                       >
@@ -290,7 +356,9 @@ const CustomerServiceTracker = () => {
           <div className="text-center py-8 bg-white rounded-lg border border-gray-200">
             <div className="text-gray-500 mb-2">No service requests found</div>
             <p className="text-sm text-gray-400">
-              You haven't made any service requests yet
+              {searchTerm 
+                ? "Try adjusting your search"
+                : "You haven't made any service requests yet"}
             </p>
           </div>
         )}

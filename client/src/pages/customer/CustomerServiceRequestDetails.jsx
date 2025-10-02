@@ -1,63 +1,120 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Eye, Upload } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
+import PaymentProofUploadModal from "./PaymentProofUploadModal";
+import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
+  const { requestId } = useParams();
+  const [requestData, setRequestData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Mock data for the specific request (customer's view)
-  const requestData = {
-    id: "#REQ01",
-    requestedAt: "May 07, 2025 - 10:34 AM",
-    serviceStatus: "Ongoing",
-    paymentStatus: "Partial",
-    warrantyStatus: "Pending",
-    services: [
-      {
-        category: "Services",
-        service: "Service A",
-        remarks: "-",
-        quantity: 1,
-        unitPrice: "₱50,000",
-        totalPrice: "₱50,000",
-      },
-      {
-        category: "Chemicals",
-        service: "Chemical A",
-        remarks: "-",
-        quantity: 1,
-        unitPrice: "₱40,000",
-        totalPrice: "₱40,000",
-      },
-    ],
-    paymentHistory: [
-      {
-        phase: "Down Payment",
-        percentage: "50%",
-        amount: "₱25,000",
-        proofOfPayment: "proof_payment_1.pdf",
-        paidOn: "May 08, 2025",
-        paymentStatus: "Paid",
-      },
-      {
-        phase: "Completion Balance",
-        percentage: "50%",
-        amount: "₱25,000",
-        proofOfPayment: "-",
-        paidOn: "Pending",
-        paymentStatus: "Pending",
-      },
-    ],
-    estimatedDuration: "3 - 7 Days",
-    totalCost: "₱ 50,000",
-    paymentMode: "Bank Transfer",
-    paymentTerms: "50% Down Payment, 50% upon Completion",
-    paymentDeadline: "May 20, 2025",
-    assignedStaff: "Staff 1",
-    serviceStartDate: "May 09, 2025",
-    estimatedEndDate: "May 16, 2025",
-    warranty: "6 months",
+  // Payment proof modal states
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [viewingPaymentId, setViewingPaymentId] = useState(null);
+  const [viewingFileName, setViewingFileName] = useState('');
+
+  useEffect(() => {
+    if (requestId) {
+      fetchRequestDetails();
+    }
+  }, [requestId]);
+
+  const fetchRequestDetails = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('h2quote_token');
+      
+      console.log('Fetching details for requestId:', requestId);
+      
+      if (!token) {
+        console.log('No token found');
+        navigate('/login');
+        return;
+      }
+
+      const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/details`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('h2quote_token');
+          navigate('/login');
+          return;
+        }
+        if (response.status === 404) {
+          setError('Service request not found');
+          return;
+        }
+        throw new Error('Failed to fetch request details');
+      }
+
+      const data = await response.json();
+      console.log('Received data:', data);
+
+      if (data.success) {
+        const { request: requestDetails, items } = data.data;
+        
+        const transformedData = {
+          id: requestDetails.request_number,
+          requestedAt: requestDetails.requested_at,
+          serviceStatus: requestDetails.service_status,
+          paymentStatus: requestDetails.payment_status,
+          warrantyStatus: requestDetails.warranty_status,
+          services: (items || []).map(item => ({
+            category: item.service_category || item.category,
+            service: item.service || item.name,
+            remarks: item.remarks || "-",
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            totalPrice: item.total_price
+          })),
+          paymentHistory: requestDetails.paymentHistory || [],
+          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+          totalCost: requestDetails.totalCost,
+          paymentMode: requestDetails.payment_mode || "-",
+          paymentTerms: requestDetails.payment_terms || "-",
+          paymentDeadline: requestDetails.payment_deadline || "-",
+          assignedStaff: requestDetails.assigned_staff_name || "-",
+          serviceStartDate: requestDetails.service_start_date || "-",
+          estimatedEndDate: requestDetails.estimated_end_date || "-",
+          warranty: requestDetails.warranty || "6 months"
+        };
+
+        console.log('Setting request data');
+        setRequestData(transformedData);
+        setError("");
+      } else {
+        setError(data.message || 'Failed to fetch request details');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to fetch request details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadSuccess = () => {
+    fetchRequestDetails(); // Refresh the data after upload
+  };
+
+  const handleViewProof = (paymentId, fileName) => {
+    setViewingPaymentId(paymentId);
+    setViewingFileName(fileName);
+    setIsViewerOpen(true);
   };
 
   const getStatusBadge = (status, type) => {
@@ -65,6 +122,8 @@ const CustomerServiceRequestDetails = () => {
       serviceStatus: {
         Pending: "bg-gray-100 text-gray-800",
         Assigned: "bg-orange-200 text-orange-600",
+        Processing: "bg-yellow-100 text-yellow-800",
+        Approval: "bg-purple-100 text-purple-800",
         Ongoing: "bg-blue-100 text-blue-800",
         Completed: "bg-green-100 text-green-800",
         Cancelled: "bg-red-100 text-red-800",
@@ -102,11 +161,12 @@ const CustomerServiceRequestDetails = () => {
     ];
 
     const getCurrentStep = () => {
+      if (!requestData) return 0;
+      
       switch (requestData.serviceStatus) {
         case "Pending":
           return 0;
         case "Assigned":
-          return 1;
         case "Processing":
           return 1;
         case "Approval":
@@ -126,10 +186,7 @@ const CustomerServiceRequestDetails = () => {
       <div className="my-8">
         <div className="flex items-start justify-between overflow-x-auto">
           {steps.map((step, index) => (
-            <div
-              key={step.key}
-              className="flex items-center min-w-0 flex-shrink-0"
-            >
+            <div key={step.key} className="flex items-center min-w-0 flex-shrink-0">
               <div className="flex flex-col items-center">
                 <div
                   className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold ${
@@ -166,10 +223,56 @@ const CustomerServiceRequestDetails = () => {
     );
   };
 
+  if (loading) {
+    return (
+      <CustomerLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading request details...</p>
+          </div>
+        </div>
+      </CustomerLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <CustomerLayout>
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
+            {error}
+          </div>
+          <button
+            onClick={() => navigate("/customer/service-tracker")}
+            className="mt-4 text-blue-600 hover:text-blue-800"
+          >
+            Back to Service Tracker
+          </button>
+        </div>
+      </CustomerLayout>
+    );
+  }
+
+  if (!requestData) {
+    return (
+      <CustomerLayout>
+        <div className="text-center py-12">
+          <p className="text-gray-500">Request not found</p>
+          <button
+            onClick={() => navigate("/customer/service-tracker")}
+            className="mt-4 text-blue-600 hover:text-blue-800"
+          >
+            Back to Service Tracker
+          </button>
+        </div>
+      </CustomerLayout>
+    );
+  }
+
   return (
     <CustomerLayout>
       <div className="pt-5">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/customer/service-tracker")}
@@ -180,53 +283,37 @@ const CustomerServiceRequestDetails = () => {
           </button>
         </div>
 
-        {/* Status Tracker */}
         <div className="p-6">
           <StatusTracker />
         </div>
 
-        {/* Services Details */}
         <div className="p-6">
           <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
             Service Details
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Request ID:
-              </label>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Request ID:</label>
               <span className="text-sm text-gray-800">{requestData.id}</span>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Service Status:
-              </label>
+              <label className="text-sm font-medium text-gray-700 mr-2">Service Status:</label>
               {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Requested At:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.requestedAt}
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Requested At:</label>
+              <span className="text-sm text-gray-800">{requestData.requestedAt}</span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Warranty:
-              </label>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Warranty:</label>
               <span className="text-sm text-gray-800">{requestData.warranty}</span>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Warranty Status:
-              </label>
+              <label className="text-sm font-medium text-gray-700 mr-2">Warranty Status:</label>
               {getStatusBadge(requestData.warrantyStatus, "warrantyStatus")}
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Assigned Staff:
-              </label>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Assigned Staff:</label>
               <span className="text-sm text-gray-800">{requestData.assignedStaff}</span>
             </div>
           </div>
@@ -237,52 +324,27 @@ const CustomerServiceRequestDetails = () => {
             </label>
           </div>
 
-          {/* Services Table */}
           <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Service Category
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Service
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Remarks
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Quantity
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Unit Price
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Total Price
-                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Service Category</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Service</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Remarks</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Quantity</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Unit Price</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Total Price</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {requestData.services.map((service, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.category}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.service}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.remarks}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.quantity}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.unitPrice}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.totalPrice}
-                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.category}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.service}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.remarks}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.quantity}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.unitPrice}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.totalPrice}</td>
                   </tr>
                 ))}
               </tbody>
@@ -290,114 +352,87 @@ const CustomerServiceRequestDetails = () => {
           </div>
         </div>
 
-        {/* Total Cost */}
         <div className="p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
             <div className="text-right">
-              <p className="text-2xl font-bold text-[#0260A0]">
-                {requestData.totalCost}
-              </p>
+              <p className="text-2xl font-bold text-[#0260A0]">{requestData.totalCost}</p>
             </div>
           </div>
         </div>
 
-        {/* Payment Information */}
         <div className="p-6">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Payment
-          </h2>
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">Payment</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Mode of Payment:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.paymentMode}
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Mode of Payment:</label>
+              <span className="text-sm text-gray-800">{requestData.paymentMode}</span>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Payment Status:
-              </label>
+              <label className="text-sm font-medium text-gray-700 mr-2">Payment Status:</label>
               {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Payment Terms:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.paymentTerms}
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Payment Terms:</label>
+              <span className="text-sm text-gray-800">{requestData.paymentTerms}</span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Payment Deadline:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.paymentDeadline}
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Payment Deadline:</label>
+              <span className="text-sm text-gray-800">{requestData.paymentDeadline}</span>
             </div>
           </div>
 
-          {/* Payment Breakdown */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-4">
-              Payment Breakdown:
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-4">Payment Breakdown:</label>
           </div>
 
           <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Payment Phase
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Percentage
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Amount
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Proof of Payment
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Paid On
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Status
-                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Payment Phase</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Percentage</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Amount</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Proof of Payment</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Paid On</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Status</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {requestData.paymentHistory.map((payment, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.phase}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.percentage}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.amount}
-                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.phase}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.percentage}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.amount}</td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {payment.proofOfPayment === "-" ? (
-                        "-"
+                        <span className="text-gray-400">Not uploaded</span>
                       ) : (
-                        <button className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto">
+                        <button 
+                          onClick={() => handleViewProof(payment.payment_id, payment.proofOfPayment)}
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto"
+                        >
                           <Eye size={16} />
                           View
                         </button>
                       )}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.paidOn}
-                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.paidOn}</td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {getStatusBadge(payment.paymentStatus, "paymentStatus")}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-center">
+                      <button
+                        onClick={() => {
+                          setSelectedPaymentId(payment.payment_id);
+                          setIsUploadModalOpen(true);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 mx-auto text-xs"
+                      >
+                        <Upload size={14} />
+                        {payment.proofOfPayment === "-" ? "Upload" : "Update"}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -406,47 +441,50 @@ const CustomerServiceRequestDetails = () => {
           </div>
         </div>
 
-        {/* Duration Information */}
         <div className="p-6 mb-10">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Duration
-          </h2>
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">Duration</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Estimated Duration:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.estimatedDuration}
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Estimated Duration:</label>
+              <span className="text-sm text-gray-800">{requestData.estimatedDuration}</span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Service Start Date:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.serviceStartDate}
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Service Start Date:</label>
+              <span className="text-sm text-gray-800">{requestData.serviceStartDate}</span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Request Acknowledged On:
-              </label>
-              <span className="text-sm text-gray-800">
-                -
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Request Acknowledged On:</label>
+              <span className="text-sm text-gray-800">-</span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Service End Date:
-              </label>
-              <span className="text-sm text-gray-800">
-                -
-              </span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">Service End Date:</label>
+              <span className="text-sm text-gray-800">{requestData.estimatedEndDate}</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Payment Proof Modals */}
+      <PaymentProofUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => {
+          setIsUploadModalOpen(false);
+          setSelectedPaymentId(null);
+        }}
+        paymentId={selectedPaymentId}
+        currentProof={requestData?.paymentHistory.find(p => p.payment_id === selectedPaymentId)?.proofOfPayment || '-'}
+        onSuccess={handleUploadSuccess}
+      />
+
+      <PaymentProofViewer
+        isOpen={isViewerOpen}
+        onClose={() => {
+          setIsViewerOpen(false);
+          setViewingPaymentId(null);
+        }}
+        paymentId={viewingPaymentId}
+        fileName={viewingFileName}
+      />
     </CustomerLayout>
   );
 };
