@@ -411,7 +411,7 @@ const CustomerServiceRequestDetails = () => {
                       ) : (
                         <button 
                           onClick={() => handleViewProof(payment.payment_id, payment.proofOfPayment)}
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto"
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
                         >
                           <Eye size={16} />
                           View
@@ -428,7 +428,7 @@ const CustomerServiceRequestDetails = () => {
                           setSelectedPaymentId(payment.payment_id);
                           setIsUploadModalOpen(true);
                         }}
-                        className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 mx-auto text-xs"
+                        className="flex items-center gap-1 px-3 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] mx-auto text-xs cursor-pointer"
                       >
                         <Upload size={14} />
                         {payment.proofOfPayment === "-" ? "Upload" : "Update"}
