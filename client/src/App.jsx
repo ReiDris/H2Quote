@@ -207,7 +207,7 @@ function App() {
               }
             />
             <Route
-              path="/customer/service-request/:id"
+              path="/customer/service-request/:requestId"
               element={
                 <ProtectedRoute allowedRoles={['customer']}>
                   <CustomerServiceRequestDetails />

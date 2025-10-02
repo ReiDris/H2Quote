@@ -383,11 +383,8 @@ const getRequestDetails = async (req, res) => {
         sr.*, 
         rs.status_name,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
-        u.email as customer_email,
-        u.phone as customer_phone,
         c.company_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        -- Add formatted fields for frontend
         TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
@@ -403,21 +400,14 @@ const getRequestDetails = async (req, res) => {
           ELSE sr.payment_status
         END as payment_status,
         CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
-          ELSE 'N/A'
-        END as warranty_status,
-        CASE 
-          WHEN sr.warranty_months IS NOT NULL THEN CONCAT(sr.warranty_months, ' months')
-          ELSE '6 months'
-        END as warranty,
-        CASE 
           WHEN sr.estimated_duration_days IS NOT NULL THEN CONCAT(sr.estimated_duration_days, ' Days')
           ELSE '3 - 7 Days'
         END as estimated_duration,
         TO_CHAR(sr.service_start_date, 'Mon DD, YYYY') as service_start_date,
         TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
-        TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline
+        TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline,
+        u.email as email,
+        u.phone as phone
       FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
       JOIN users u ON sr.requested_by_user_id = u.user_id
@@ -437,6 +427,7 @@ const getRequestDetails = async (req, res) => {
 
     const request = requestResult.rows[0];
 
+    // Get services with WARRANTY information
     const servicesQuery = `
       SELECT 
         sri.*, 
@@ -451,8 +442,15 @@ const getRequestDetails = async (req, res) => {
         sri.quantity,
         CONCAT('₱', sri.unit_price::text) as unit_price,
         CONCAT('₱', sri.line_total::text) as total_price,
-        sri.line_total as line_total_numeric,
-        'service' as item_type
+        'service' as item_type,
+        COALESCE(sri.warranty_months, 6) as warranty_months,
+        TO_CHAR(sri.warranty_start_date, 'YYYY-MM-DD') as warranty_start_date,
+        TO_CHAR(sri.warranty_end_date, 'YYYY-MM-DD') as warranty_end_date,
+        CASE 
+          WHEN sri.warranty_end_date IS NULL THEN 'Not Set'
+          WHEN sri.warranty_end_date < CURRENT_DATE THEN 'Expired'
+          ELSE 'Valid'
+        END as warranty_status
       FROM service_request_items sri
       JOIN services s ON sri.service_id = s.service_id
       LEFT JOIN service_categories sc ON s.category_id = sc.category_id
@@ -460,52 +458,47 @@ const getRequestDetails = async (req, res) => {
       ORDER BY sri.item_id
     `;
 
+    // Get chemicals (NO warranty fields)
     const chemicalsQuery = `
-  SELECT 
-    src.*,
-    c.chemical_name as name,
-    'Chemicals' as category,
-    'Chemicals' as service_category,
-    c.chemical_name as service,
-    CASE 
-      WHEN src.notes IS NULL OR src.notes = '' THEN 'Added by customer'
-      ELSE src.notes
-    END as remarks,
-    src.quantity,
-    CONCAT('₱', src.unit_price::text) as unit_price,
-    CONCAT('₱', src.line_total::text) as total_price,
-    src.line_total as line_total_numeric,
-    'chemical' as item_type,
-    src.item_id
-  FROM service_request_chemicals src
-  JOIN chemicals c ON src.chemical_id = c.chemical_id
-  WHERE src.request_id = $1
-  ORDER BY src.item_id
-`;
+      SELECT 
+        src.*,
+        c.chemical_name as name,
+        'Chemicals' as category,
+        'Chemicals' as service_category,
+        c.chemical_name as service,
+        COALESCE(src.notes, '-') as remarks,
+        src.quantity,
+        CONCAT('₱', src.unit_price::text) as unit_price,
+        CONCAT('₱', src.line_total::text) as total_price,
+        'chemical' as item_type,
+        src.item_id
+      FROM service_request_chemicals src
+      JOIN chemicals c ON src.chemical_id = c.chemical_id
+      WHERE src.request_id = $1
+      ORDER BY src.item_id
+    `;
 
+    // Get refrigerants (NO warranty fields)
     const refrigerantsQuery = `
-  SELECT 
-    srr.*,
-    r.refrigerant_name as name,
-    'Refrigerants' as category,
-    'Refrigerants' as service_category,
-    r.refrigerant_name as service,
-    CASE 
-      WHEN srr.notes IS NULL OR srr.notes = '' THEN 'Added by customer'
-      ELSE srr.notes
-    END as remarks,
-    srr.quantity,
-    CONCAT('₱', srr.unit_price::text) as unit_price,
-    CONCAT('₱', srr.line_total::text) as total_price,
-    srr.line_total as line_total_numeric,
-    'refrigerant' as item_type,
-    srr.item_id
-  FROM service_request_refrigerants srr
-  JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
-  WHERE srr.request_id = $1
-  ORDER BY srr.item_id
-`;
+      SELECT 
+        srr.*,
+        r.refrigerant_name as name,
+        'Refrigerants' as category,
+        'Refrigerants' as service_category,
+        r.refrigerant_name as service,
+        COALESCE(srr.notes, '-') as remarks,
+        srr.quantity,
+        CONCAT('₱', srr.unit_price::text) as unit_price,
+        CONCAT('₱', srr.line_total::text) as total_price,
+        'refrigerant' as item_type,
+        srr.item_id
+      FROM service_request_refrigerants srr
+      JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+      WHERE srr.request_id = $1
+      ORDER BY srr.item_id
+    `;
 
+    // Execute all queries
     const [servicesResult, chemicalsResult, refrigerantsResult] =
       await Promise.all([
         pool.query(servicesQuery, [requestId]),
@@ -513,70 +506,47 @@ const getRequestDetails = async (req, res) => {
         pool.query(refrigerantsQuery, [requestId]),
       ]);
 
+    // Combine all items
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
       ...refrigerantsResult.rows,
     ];
 
-    const actualTotalCost = allItems.reduce((sum, item) => {
-      return sum + (parseFloat(item.line_total_numeric) || 0);
-    }, 0);
-
-    const historyQuery = `
-      SELECT 
-        rsh.*, 
-        rs_from.status_name as from_status,
-        rs_to.status_name as to_status,
-        CONCAT(u.first_name, ' ', u.last_name) as changed_by_name
-      FROM request_status_history rsh
-      LEFT JOIN request_statuses rs_from ON rsh.from_status_id = rs_from.status_id
-      JOIN request_statuses rs_to ON rsh.to_status_id = rs_to.status_id
-      LEFT JOIN users u ON rsh.changed_by = u.user_id
-      WHERE rsh.request_id = $1
-      ORDER BY rsh.changed_at DESC
-    `;
-    const historyResult = await pool.query(historyQuery, [requestId]);
-
-    const quotationQuery = `
-      SELECT q.*, CONCAT(u.first_name, ' ', u.last_name) as created_by_name
-      FROM quotations q
-      LEFT JOIN users u ON q.created_by = u.user_id
-      WHERE q.request_id = $1
-      ORDER BY q.created_at DESC
-      LIMIT 1
-    `;
-    const quotationResult = await pool.query(quotationQuery, [requestId]);
-
+    // Get payment history
     const paymentQuery = `
-      SELECT 
-        payment_phase as phase,
-        CONCAT(ROUND((amount::numeric / NULLIF(sr.estimated_cost, 0) * 100), 0), '%') as percentage,
-        CONCAT('₱', amount::text) as amount,
-        COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
-        CASE 
-          WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
-          ELSE 'Pending'
-        END as "paidOn",
-        status as "paymentStatus"
-      FROM payments p
-      JOIN service_requests sr ON p.request_id = sr.request_id
-      WHERE p.request_id = $1
-      ORDER BY payment_id
-    `;
+  SELECT 
+    payment_id,
+    payment_phase as phase,
+    CONCAT(ROUND((amount::numeric / NULLIF(sr.estimated_cost, 0) * 100), 0), '%') as percentage,
+    CONCAT('₱', amount::text) as amount,
+    COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
+    CASE 
+      WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
+      ELSE 'Pending'
+    END as "paidOn",
+    status as "paymentStatus"
+  FROM payments p
+  JOIN service_requests sr ON p.request_id = sr.request_id
+  WHERE p.request_id = $1
+  ORDER BY payment_id
+`;
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
-    let paymentHistory;
+    let paymentHistory = paymentResult.rows;
+
+    // If no payments exist, create default breakdown
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
       const downpaymentAmount = Math.round(
-        (actualTotalCost * downpaymentPercent) / 100
+        (request.estimated_cost * downpaymentPercent) / 100
       );
-      const remainingAmount = actualTotalCost - downpaymentAmount;
+      const remainingAmount = request.estimated_cost - downpaymentAmount;
 
       paymentHistory = [
         {
+          payment_id: null, // Add this field
           phase: "Down Payment",
           percentage: `${downpaymentPercent}%`,
           amount: `₱${downpaymentAmount.toLocaleString()}`,
@@ -585,6 +555,7 @@ const getRequestDetails = async (req, res) => {
           paymentStatus: "Pending",
         },
         {
+          payment_id: null, // Add this field
           phase: "Completion Balance",
           percentage: `${remainingPercent}%`,
           amount: `₱${remainingAmount.toLocaleString()}`,
@@ -597,27 +568,18 @@ const getRequestDetails = async (req, res) => {
       paymentHistory = paymentResult.rows;
     }
 
-    const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-
-    const enhancedRequest = {
-      ...request,
-      id: request.request_number,
-      totalCost: formattedTotalCost,
-      email: request.customer_email,
-      phone: request.customer_phone,
-      paymentHistory: paymentHistory,
-    };
-
     res.json({
       success: true,
       data: {
-        request: enhancedRequest,
+        request: {
+          ...request,
+          id: request.request_number,
+          totalCost: `₱ ${request.estimated_cost?.toLocaleString() || "0"}`,
+          paymentHistory: paymentHistory,
+        },
         items: allItems,
-        statusHistory: historyResult.rows,
-        quotation: quotationResult.rows[0] || null,
+        statusHistory: [],
+        quotation: null,
       },
     });
   } catch (error) {
@@ -2165,6 +2127,236 @@ const removeRefrigerantsFromRequest = async (req, res) => {
   }
 };
 
+const getStaffList = async (req, res) => {
+  try {
+    const query = `
+      SELECT user_id, first_name, last_name, department
+      FROM users 
+      WHERE user_type = 'staff' AND status = 'Active'
+      ORDER BY first_name, last_name
+    `;
+
+    const result = await pool.query(query);
+
+    const staffList = result.rows.map((staff) => ({
+      id: staff.user_id,
+      name: `${staff.first_name} ${staff.last_name}`,
+      department: staff.department,
+    }));
+
+    res.json({
+      success: true,
+      data: staffList,
+    });
+  } catch (error) {
+    console.error("Get staff list error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch staff list",
+    });
+  }
+};
+
+const updateItemWarranty = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const { itemId, itemType, warrantyMonths, warrantyStartDate } = req.body;
+
+    // Only allow for services
+    if (itemType !== "service") {
+      return res.status(400).json({
+        success: false,
+        message: "Warranties can only be set for services",
+      });
+    }
+
+    // Calculate warranty end date
+    let warrantyEndDate = null;
+    if (warrantyStartDate && warrantyMonths) {
+      const startDate = new Date(warrantyStartDate);
+      warrantyEndDate = new Date(startDate);
+      warrantyEndDate.setMonth(
+        warrantyEndDate.getMonth() + parseInt(warrantyMonths)
+      );
+    }
+
+    const updateQuery = `
+      UPDATE service_request_items
+      SET 
+        warranty_months = $1,
+        warranty_start_date = $2,
+        warranty_end_date = $3
+      WHERE item_id = $4 AND request_id = $5
+      RETURNING *
+    `;
+
+    await client.query(updateQuery, [
+      warrantyMonths,
+      warrantyStartDate,
+      warrantyEndDate,
+      itemId,
+      requestId,
+    ]);
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Warranty updated successfully",
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Update warranty error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update warranty",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const updateServiceRequest = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const {
+      serviceStatus,
+      paymentStatus,
+      assignedStaff,
+      serviceStartDate,
+      services,
+      paymentBreakdown,
+    } = req.body;
+
+    console.log("Updating request:", requestId);
+    console.log("Payload:", req.body);
+
+    // ADD THIS STATUS MAPPING
+    const statusMapping = {
+      Pending: "New",
+      Assigned: "Under Review",
+      Processing: "Quote Prepared",
+      Approval: "Quote Approved",
+      Ongoing: "In Progress",
+      Completed: "Completed",
+    };
+
+    const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+
+    // Get the status_id for the service status - USE backendStatus instead
+    const statusResult = await client.query(
+      "SELECT status_id FROM request_statuses WHERE status_name = $1",
+      [backendStatus] // Changed from serviceStatus
+    );
+
+    if (statusResult.rows.length === 0) {
+      throw new Error(`Invalid status: ${serviceStatus}`);
+    }
+
+    const statusId = statusResult.rows[0].status_id;
+
+    // Get assigned staff user_id if not "Not assigned"
+    let assignedStaffId = null;
+    if (assignedStaff && assignedStaff !== "Not assigned") {
+      const staffResult = await client.query(
+        `SELECT user_id FROM users WHERE CONCAT(first_name, ' ', last_name) = $1`,
+        [assignedStaff]
+      );
+      if (staffResult.rows.length > 0) {
+        assignedStaffId = staffResult.rows[0].user_id;
+      }
+    }
+
+    // Update service request main details
+    const updateRequestQuery = `
+      UPDATE service_requests 
+      SET 
+        status_id = $1,
+        payment_status = $2,
+        assigned_to_staff_id = $3,
+        service_start_date = $4,
+        updated_at = NOW()
+      WHERE request_id = $5
+    `;
+
+    await client.query(updateRequestQuery, [
+      statusId,
+      paymentStatus,
+      assignedStaffId,
+      serviceStartDate,
+      requestId,
+    ]);
+
+    // Update warranty information for each service item
+    if (services && services.length > 0) {
+      for (const service of services) {
+        if (service.itemType === "service" && service.service_id) {
+          await client.query(
+            `
+            UPDATE service_request_items
+            SET 
+              warranty_months = $1, 
+              warranty_start_date = $2
+            WHERE request_id = $3 AND service_id = $4
+          `,
+            [
+              service.warranty_months || 6,
+              service.warranty_start_date,
+              requestId,
+              service.service_id,
+            ]
+          );
+        }
+      }
+    }
+
+    // Update payment statuses
+    // Update payment statuses and set paid_on date when marked as Paid
+    if (paymentBreakdown && paymentBreakdown.length > 0) {
+      for (const payment of paymentBreakdown) {
+        await client.query(
+          `
+      UPDATE payments
+      SET status = $1,
+          paid_on = CASE 
+            WHEN $1 = 'Paid' THEN NOW() 
+            ELSE paid_on 
+          END,
+          updated_at = NOW()
+      WHERE request_id = $2 AND payment_phase = $3
+    `,
+          [payment.paymentStatus, requestId, payment.phase]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Service request updated successfully",
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Update service request error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update service request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   createServiceRequest,
   getCustomerRequests,
@@ -2184,4 +2376,7 @@ module.exports = {
   addRefrigerantsToRequest,
   removeChemicalsFromRequest,
   removeRefrigerantsFromRequest,
+  getStaffList,
+  updateItemWarranty,
+  updateServiceRequest,
 };

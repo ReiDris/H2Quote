@@ -43,6 +43,7 @@ router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestC
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 router.put('/:requestId/items/:itemId/warranty', requireAdminOrStaff, serviceRequestController.updateItemWarranty);
 router.put('/:requestId/update', requireAdminOrStaff, serviceRequestController.updateServiceRequest);
+router.put('/:requestId/update', requireAdminOrStaff, serviceRequestController.updateServiceRequest);
 
 // Generic routes LAST
 router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
