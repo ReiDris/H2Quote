@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Bell, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
+import { useServiceRequest } from "../../contexts/ServiceRequestContext"; // ADD THIS
 import ServiceRequestModal from "../customer/ServiceRequestModal";
 
 const Header = () => {
   const { user } = useAuth();
+  const { selectedServices } = useServiceRequest(); // ADD THIS
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isServiceRequestModalOpen, setIsServiceRequestModalOpen] =
     useState(false);
-  const [activeFilter, setActiveFilter] = useState("all"); // 'all' or 'unread'
+  const [activeFilter, setActiveFilter] = useState("all");
   const notificationRef = useRef(null);
 
   // Mock notification data
@@ -57,7 +59,6 @@ const Header = () => {
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  // Filter notifications based on active filter
   const filteredNotifications =
     activeFilter === "all"
       ? notifications
@@ -80,11 +81,9 @@ const Header = () => {
   };
 
   const handleLogoClick = () => {
-    // Open LandingPage in a new tab
     window.open("/", "_blank");
   };
 
-  // Close notification when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -124,6 +123,12 @@ const Header = () => {
               title="Request Service"
             >
               <ShoppingCart size={25} />
+              {/* Cart Badge - ADDED THIS */}
+              {selectedServices.length > 0 && (
+                <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {selectedServices.length}
+                </div>
+              )}
             </button>
           )}
 

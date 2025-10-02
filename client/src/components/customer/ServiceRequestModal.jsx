@@ -1,7 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { X, Trash2 } from "lucide-react";
+import { useServiceRequest } from "../../contexts/ServiceRequestContext"; // ADD THIS
 
-const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () => {}, onClose }) => {
+const ServiceRequestModal = ({ onClose }) => { // REMOVE selectedServices and setSelectedServices props
+  const { selectedServices, updateQuantity, removeService, clearServices } = useServiceRequest(); // ADD THIS
+  
   const [paymentMode, setPaymentMode] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [downpayment, setDownpayment] = useState("");
@@ -12,21 +15,7 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const updateQuantity = (serviceId, newQuantity) => {
-    if (newQuantity <= 0) {
-      removeService(serviceId);
-    } else {
-      setSelectedServices(
-        selectedServices.map((s) =>
-          s.id === serviceId ? { ...s, quantity: newQuantity } : s
-        )
-      );
-    }
-  };
-
-  const removeService = (serviceId) => {
-    setSelectedServices(selectedServices.filter((s) => s.id !== serviceId));
-  };
+  // REMOVE updateQuantity and removeService functions - they now come from context
 
   const calculateTotalCost = () => {
     return selectedServices.reduce(
@@ -43,57 +32,45 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
     let totalServiceDuration = 0;
     let hasServices = false;
     let hasChemicalsOrRefrigerants = false;
-    const serviceDurations = []; // For debugging
+    const serviceDurations = [];
     
     selectedServices.forEach(service => {
       if (service.type === 'Services') {
         hasServices = true;
-        let serviceDuration = 3; // Default for services
+        let serviceDuration = 3;
         
-        // Use the actual estimated_duration_hours from database
         if (service.estimated_duration_hours && service.estimated_duration_hours > 0) {
-          // Convert hours to days (24 hours = 1 day for more realistic calculation)
           serviceDuration = Math.ceil(service.estimated_duration_hours / 24);
         } else if (service.duration && service.duration > 0) {
-          // Fallback to duration field if available
           serviceDuration = service.duration;
         }
         
         serviceDurations.push(`${service.name}: ${serviceDuration} days`);
-        
-        // Add service durations together (services performed sequentially)
         totalServiceDuration += serviceDuration;
       } else if (service.type === 'Chemicals' || service.type === 'Refrigerants') {
         hasChemicalsOrRefrigerants = true;
       }
     });
     
-    // For debugging: log the service durations
     if (serviceDurations.length > 0) {
       console.log('Service durations:', serviceDurations, 'Total service time:', totalServiceDuration);
     }
     
-    // Determine final duration based on what's selected
     let finalDuration;
     
     if (hasServices) {
-      // If we have services, use the total service duration
-      // Chemicals/refrigerants don't add time (delivered during service)
       finalDuration = totalServiceDuration;
       if (hasChemicalsOrRefrigerants) {
         console.log('Chemicals/refrigerants will be delivered during service time');
       }
     } else if (hasChemicalsOrRefrigerants) {
-      // Only chemicals/refrigerants selected (no services)
-      return "1 - 2 Days"; // Quick delivery/pickup for chemicals/refrigerants only
+      return "1 - 2 Days";
     } else {
-      // Fallback
       finalDuration = 1;
     }
     
-    // Add buffer days for services (1-2 days buffer)
     const minDuration = finalDuration;
-    const maxWithBuffer = finalDuration + Math.min(2, Math.ceil(finalDuration * 0.2)); // 20% buffer, max 2 days
+    const maxWithBuffer = finalDuration + Math.min(2, Math.ceil(finalDuration * 0.2));
     
     console.log('Final duration calculation:', finalDuration, 'with buffer:', `${minDuration} - ${maxWithBuffer} Days`);
     
@@ -114,7 +91,6 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
     try {
       const token = localStorage.getItem('h2quote_token');
       
-      // Add debugging for selected services
       console.log('=== DEBUG: Selected Services ===');
       selectedServices.forEach((service, index) => {
         console.log(`Service ${index}:`, {
@@ -128,9 +104,8 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
         });
       });
       
-      // Transform selectedServices to match backend format
       const transformedServices = selectedServices.map(service => ({
-        id: service.id, // Keep original ID format (chem_, refrig_, or plain number)
+        id: service.id,
         quantity: service.quantity
       }));
 
@@ -167,8 +142,10 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
       if (data.success) {
         alert(`Service request created successfully! Request Number: ${data.data.requestNumber}`);
         
-        // Reset form
-        setSelectedServices([]);
+        // Use clearServices from context
+        clearServices();
+        
+        // Reset form fields
         setPaymentMode("");
         setPaymentTerms("");
         setDownpayment("");
@@ -189,11 +166,9 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
     }
   };
 
-  // Rest of your component remains the same...
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
       <div className="bg-white rounded-4xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-10">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-300 pb-3">
           <h2 className="text-3xl font-semibold text-[#3C61A8]">
             Request Form
@@ -207,23 +182,19 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
           </button>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto mt-5 pr-4 mr-2">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Error Message */}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">
                 {error}
               </div>
             )}
 
-            {/* Request Service Section */}
             <div>
               <h3 className="text-lg font-semibold text-[#004785] mb-4">
                 Request Service
               </h3>
 
-              {/* Selected Services Display */}
               {selectedServices.length > 0 ? (
                 <div className="space-y-3">
                   {selectedServices.map((service) => (
@@ -275,7 +246,6 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
               )}
             </div>
 
-            {/* Service Details */}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-black mb-1">
@@ -321,7 +291,6 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
               </div>
             </div>
 
-            {/* Estimated Duration and Cost */}
             <div className="grid grid-cols-1 gap-4 px-4 border-b border-gray-300 pb-3">
               <div className="flex justify-between mt-2">
                 <label className="text-base font-semibold text-[#004785]">
@@ -341,7 +310,6 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
               </div>
             </div>
 
-            {/* Payment Section */}
             <div className="border-b border-gray-300 pb-3">
               <h3 className="text-lg font-semibold text-[#004785] mb-4 px-4">
                 Payment
@@ -406,7 +374,6 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
               </div>
             </div>
 
-            {/* Remarks */}
             <div>
               <label className="text-lg font-semibold text-[#004785] mb-4 px-4">
                 Remarks <span className="font-light text-sm">(Optional)</span>
@@ -423,7 +390,6 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isSubmitting || selectedServices.length === 0}
