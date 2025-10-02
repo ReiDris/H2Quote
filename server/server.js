@@ -19,7 +19,7 @@ if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABAS
 }
 
 app.use(cors({
-  origin: true  // Allows all origins in development
+  origin: true  
 }));
 
 app.use(express.json());
@@ -31,7 +31,7 @@ app.use('/api', healthRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
 app.use('/api/messaging', messageRoutes);
 app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/account', accountSettingsRoutes); // ✅ Fixed: using correct variable name
+app.use('/api/account', accountSettingsRoutes); 
 
 app.use((error, req, res, next) => {
     console.error('Unhandled error:', error);

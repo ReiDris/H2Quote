@@ -114,11 +114,30 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
     try {
       const token = localStorage.getItem('h2quote_token');
       
+      // Add debugging for selected services
+      console.log('=== DEBUG: Selected Services ===');
+      selectedServices.forEach((service, index) => {
+        console.log(`Service ${index}:`, {
+          id: service.id,
+          type: typeof service.id,
+          name: service.name,
+          category: service.category,
+          quantity: service.quantity,
+          basePrice: service.basePrice,
+          fullService: service
+        });
+      });
+      
       // Transform selectedServices to match backend format
       const transformedServices = selectedServices.map(service => ({
         id: service.id, // Keep original ID format (chem_, refrig_, or plain number)
         quantity: service.quantity
       }));
+
+      console.log('=== DEBUG: Transformed Services ===');
+      transformedServices.forEach((service, index) => {
+        console.log(`Transformed ${index}:`, service);
+      });
 
       const requestData = {
         selectedServices: transformedServices,
@@ -131,7 +150,8 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
         specialRequirements
       };
 
-      console.log('Sending request data:', requestData);
+      console.log('=== DEBUG: Final Request Data ===');
+      console.log('Sending request data:', JSON.stringify(requestData, null, 2));
 
       const response = await fetch('http://localhost:5000/api/service-requests', {
         method: 'POST',
@@ -169,6 +189,7 @@ const ServiceRequestModal = ({ selectedServices = [], setSelectedServices = () =
     }
   };
 
+  // Rest of your component remains the same...
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
       <div className="bg-white rounded-4xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-10">

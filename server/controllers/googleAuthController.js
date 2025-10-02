@@ -1,4 +1,3 @@
-// controllers/googleAuthController.js
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
@@ -12,11 +11,9 @@ const googleAuth = async (req, res) => {
   try {
     const { credential, code, redirect_uri } = req.body;
 
-    // Handle both old (credential) and new (code) approaches
     let googleUser;
     
     if (credential) {
-      // Old approach - JWT token verification
       const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
       googleUser = await response.json();
 
@@ -27,7 +24,6 @@ const googleAuth = async (req, res) => {
         });
       }
     } else if (code && redirect_uri) {
-      // New approach - OAuth authorization code exchange
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: {
@@ -51,7 +47,6 @@ const googleAuth = async (req, res) => {
         });
       }
 
-      // Get user info using the access token
       const userInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenData.access_token}`);
       googleUser = await userInfoResponse.json();
 
@@ -77,7 +72,6 @@ const googleAuth = async (req, res) => {
       });
     }
 
-    // Check if user exists in database
     const { data: userResults, error: userError } = await supabase.rpc(
       'get_user_with_company',
       { user_email: email }
@@ -86,13 +80,11 @@ const googleAuth = async (req, res) => {
     let user;
 
     if (userError || !userResults || userResults.length === 0) {
-      // User doesn't exist, create new user
       const client = await pool.connect();
       
       try {
         await client.query('BEGIN');
 
-        // Create a default company for Google users
         const insertCompanyQuery = `
           INSERT INTO companies 
           (company_name, email, status, created_at, updated_at) 
@@ -105,7 +97,6 @@ const googleAuth = async (req, res) => {
         ]);
         const companyId = companyResult.rows[0].company_id;
 
-        // Create user
         const insertUserQuery = `
           INSERT INTO users 
           (company_id, first_name, last_name, email, user_type, 
@@ -119,13 +110,12 @@ const googleAuth = async (req, res) => {
           given_name || (name ? name.split(' ')[0] : 'User'),
           family_name || (name ? name.split(' ').slice(1).join(' ') : ''),
           email,
-          googleUser.id || googleUser.sub, // Google user ID (different field names in different APIs)
+          googleUser.id || googleUser.sub, 
           picture
         ]);
 
         await client.query('COMMIT');
 
-        // Fetch the newly created user with company info
         const { data: newUserResults } = await supabase.rpc(
           'get_user_with_company',
           { user_email: email }
@@ -142,7 +132,6 @@ const googleAuth = async (req, res) => {
     } else {
       user = userResults[0];
 
-      // Check if user account is active
       if (user.user_status !== 'Active') {
         return res.status(403).json({
           success: false,
@@ -151,7 +140,6 @@ const googleAuth = async (req, res) => {
         });
       }
 
-      // Update last login and profile picture if provided
       const updateData = { last_login: new Date().toISOString() };
       if (picture) {
         updateData.profile_picture = picture;
@@ -163,7 +151,6 @@ const googleAuth = async (req, res) => {
         .eq('user_id', user.user_id);
     }
 
-    // Generate JWT token
     const tokenPayload = {
       userId: user.user_id,
       email: user.email,
@@ -177,7 +164,6 @@ const googleAuth = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Map user type to role
     let role;
     switch (user.user_type) {
       case 'admin':
@@ -210,7 +196,6 @@ const googleAuth = async (req, res) => {
       profilePicture: user.profile_picture || picture,
     };
 
-    // Log audit entry
     try {
       await supabase.from('audit_log').insert({
         table_name: 'users',

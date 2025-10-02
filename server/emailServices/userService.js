@@ -21,12 +21,10 @@ const createUser = async (userData) => {
             permissions = null
         } = userData;
 
-        // Validate required fields
         if (!firstName || !lastName || !email || !passwordHash) {
             throw new Error('Missing required user data: firstName, lastName, email, and passwordHash are required');
         }
 
-        // Check if email already exists
         const emailExists = await checkExistingEmail(email);
         if (emailExists) {
             throw new Error('Email already exists');

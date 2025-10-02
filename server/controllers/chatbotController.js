@@ -6,10 +6,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Start a new chat session
 const startChatSession = async (req, res) => {
   try {
-    const userId = req.user?.id || null; // May be null for anonymous users
+    const userId = req.user?.id || null; 
     const userIP = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
 
@@ -27,7 +26,6 @@ const startChatSession = async (req, res) => {
       throw error;
     }
 
-    // Log session start analytics
     await supabase
       .from('chat_analytics')
       .insert({
@@ -53,7 +51,6 @@ const startChatSession = async (req, res) => {
   }
 };
 
-// Send a message and get bot response
 const sendMessage = async (req, res) => {
   const client = await pool.connect();
   
@@ -69,7 +66,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Verify session exists and is active
     const sessionCheck = await client.query(
       'SELECT session_id, is_active FROM chat_sessions WHERE session_id = $1',
       [sessionId]
@@ -89,7 +85,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Insert user message
     const userMessageResult = await client.query(`
       INSERT INTO chat_messages (session_id, message_type, content)
       VALUES ($1, $2, $3)
@@ -98,12 +93,10 @@ const sendMessage = async (req, res) => {
 
     const userMessage = userMessageResult.rows[0];
 
-    // Get bot response
     let botResponse;
     const isQuickAction = ['Types of Services', 'Request a Service', 'Payment Options', 'Pricing Info'].includes(message);
 
     if (isQuickAction) {
-      // Get quick action response
       const quickActionResult = await client.query(
         'SELECT response_text FROM chat_quick_actions WHERE action_text = $1 AND is_active = TRUE',
         [message]
@@ -118,7 +111,6 @@ const sendMessage = async (req, res) => {
       botResponse = await getBotResponse(client, message);
     }
 
-    // Insert bot response
     const botMessageResult = await client.query(`
       INSERT INTO chat_messages (session_id, message_type, content, metadata)
       VALUES ($1, 'bot', $2, $3)
@@ -131,13 +123,11 @@ const sendMessage = async (req, res) => {
 
     const botMessage = botMessageResult.rows[0];
 
-    // Update session message count
     await client.query(
       'UPDATE chat_sessions SET total_messages = total_messages + 2 WHERE session_id = $1',
       [sessionId]
     );
 
-    // Log analytics
     await client.query(`
       INSERT INTO chat_analytics (session_id, event_type, event_data)
       VALUES 
@@ -181,7 +171,6 @@ const sendMessage = async (req, res) => {
   }
 };
 
-// Helper function to get bot response using database function
 const getBotResponse = async (client, userInput) => {
   try {
     const result = await client.query('SELECT get_chatbot_response($1) as response', [userInput]);
@@ -192,7 +181,6 @@ const getBotResponse = async (client, userInput) => {
   }
 };
 
-// Get chat history for a session
 const getChatHistory = async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -239,7 +227,6 @@ const getChatHistory = async (req, res) => {
   }
 };
 
-// End chat session
 const endChatSession = async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -256,7 +243,6 @@ const endChatSession = async (req, res) => {
       throw error;
     }
 
-    // Log session end analytics
     await supabase
       .from('chat_analytics')
       .insert({
@@ -279,7 +265,6 @@ const endChatSession = async (req, res) => {
   }
 };
 
-// Get quick actions
 const getQuickActions = async (req, res) => {
   try {
     const { data: actions, error } = await supabase
@@ -306,7 +291,6 @@ const getQuickActions = async (req, res) => {
   }
 };
 
-// Admin function to get chat analytics
 const getChatAnalytics = async (req, res) => {
   try {
     const { startDate, endDate, limit = 100 } = req.query;
@@ -351,7 +335,6 @@ const getChatAnalytics = async (req, res) => {
   }
 };
 
-// Admin function to manage intents
 const updateChatIntent = async (req, res) => {
   try {
     const { intentId } = req.params;
