@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
-import ServiceRequestModal from "../../components/customer/ServiceRequestModal"; // ADD THIS BACK
+import ServiceRequestModal from "../../components/customer/ServiceRequestModal";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 
 const Services = () => {
@@ -14,11 +14,9 @@ const Services = () => {
   const [chemicals, setChemicals] = useState([]);
   const [refrigerants, setRefrigerants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false); // ADD THIS BACK
+  const [error, setError] = useState("");
+  const [showModal, setShowModal] = useState(false);
   const servicesPerPage = 6;
-
-  // ... all your existing code (fetchCatalogData, getServiceIcon, etc.) ...
 
   useEffect(() => {
     fetchCatalogData();
@@ -27,98 +25,110 @@ const Services = () => {
   const fetchCatalogData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('h2quote_token');
-      
-      const servicesResponse = await fetch('http://localhost:5000/api/service-requests/services/catalog', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      const token = localStorage.getItem("h2quote_token");
+
+      const servicesResponse = await fetch(
+        "http://localhost:5000/api/service-requests/services/catalog",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
-      });
+      );
 
       const servicesData = await servicesResponse.json();
 
       let chemicalsData = { success: true, data: [] };
       try {
-        const chemicalsResponse = await fetch('http://localhost:5000/api/service-requests/chemicals/catalog', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+        const chemicalsResponse = await fetch(
+          "http://localhost:5000/api/service-requests/chemicals/catalog",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
           }
-        });
+        );
         chemicalsData = await chemicalsResponse.json();
       } catch (chemError) {
-        console.log('Chemicals not accessible:', chemError);
+        console.log("Chemicals not accessible:", chemError);
       }
 
       let refrigerantsData = { success: true, data: [] };
       try {
-        const refrigerantsResponse = await fetch('http://localhost:5000/api/service-requests/refrigerants/catalog', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+        const refrigerantsResponse = await fetch(
+          "http://localhost:5000/api/service-requests/refrigerants/catalog",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
           }
-        });
+        );
         refrigerantsData = await refrigerantsResponse.json();
       } catch (refrigerantError) {
-        console.log('Refrigerants not accessible:', refrigerantError);
+        console.log("Refrigerants not accessible:", refrigerantError);
       }
 
       if (servicesData.success) {
-        const transformedServices = servicesData.data.map(service => ({
+        const transformedServices = servicesData.data.map((service) => ({
           id: service.service_id,
           title: service.name,
-          description: service.description || 'Professional service',
-          category: service.category || 'Services',
-          type: 'Services',
-          price: `₱${service.base_price?.toLocaleString() || '10,000'}`,
+          description: service.description || "Professional service",
+          category: service.category || "Services",
+          type: "Services",
+          price: `₱${service.base_price?.toLocaleString() || "10,000"}`,
           basePrice: service.base_price || 10000,
-          duration: service.estimated_duration_hours ? Math.ceil(service.estimated_duration_hours / 24) : 3,
+          duration: service.estimated_duration_hours
+            ? Math.ceil(service.estimated_duration_hours / 24)
+            : 3,
           estimated_duration_hours: service.estimated_duration_hours,
           requiresSiteVisit: service.requires_site_visit || false,
-          chemicalsRequired: service.chemicals_required
+          chemicalsRequired: service.chemicals_required,
         }));
 
         setServices(transformedServices);
       }
 
       if (chemicalsData.success && chemicalsData.data.length > 0) {
-        const transformedChemicals = chemicalsData.data.map(chemical => ({
+        const transformedChemicals = chemicalsData.data.map((chemical) => ({
           id: `chem_${chemical.id}`,
           title: chemical.name,
-          description: chemical.description || 'High-quality chemical product',
-          category: 'Chemical Supply',
-          type: 'Chemicals',
-          price: `₱${chemical.base_price?.toLocaleString() || '10,000'}`,
+          description: chemical.description || "High-quality chemical product",
+          category: "Chemical Supply",
+          type: "Chemicals",
+          price: `₱${chemical.base_price?.toLocaleString() || "10,000"}`,
           basePrice: chemical.base_price || 10000,
           capacity: chemical.capacity,
           hazardType: chemical.hazard_type,
-          uses: chemical.uses
+          uses: chemical.uses,
         }));
 
         setChemicals(transformedChemicals);
       }
 
       if (refrigerantsData.success && refrigerantsData.data.length > 0) {
-        const transformedRefrigerants = refrigerantsData.data.map(refrigerant => ({
-          id: `refrig_${refrigerant.id}`,
-          title: refrigerant.name,
-          description: refrigerant.description || 'High-quality refrigerant',
-          category: 'Refrigerant Supply',
-          type: 'Refrigerants',
-          price: `₱${refrigerant.base_price?.toLocaleString() || '10,000'}`,
-          basePrice: refrigerant.base_price || 10000,
-          capacity: refrigerant.capacity,
-          hazardType: refrigerant.hazard_type,
-          chemicalComponents: refrigerant.chemical_components
-        }));
+        const transformedRefrigerants = refrigerantsData.data.map(
+          (refrigerant) => ({
+            id: `refrig_${refrigerant.id}`,
+            title: refrigerant.name,
+            description: refrigerant.description || "High-quality refrigerant",
+            category: "Refrigerant Supply",
+            type: "Refrigerants",
+            price: `₱${refrigerant.base_price?.toLocaleString() || "10,000"}`,
+            basePrice: refrigerant.base_price || 10000,
+            capacity: refrigerant.capacity,
+            hazardType: refrigerant.hazard_type,
+            chemicalComponents: refrigerant.chemical_components,
+          })
+        );
 
         setRefrigerants(transformedRefrigerants);
       }
-
     } catch (error) {
-      console.error('Error fetching catalog:', error);
-      setError('Failed to load services catalog');
+      console.error("Error fetching catalog:", error);
+      setError("Failed to load services catalog");
     } finally {
       setLoading(false);
     }
@@ -126,14 +136,14 @@ const Services = () => {
 
   const getServiceIcon = (type) => {
     switch (type) {
-      case 'Services':
-        return '🔧';
-      case 'Chemicals':
-        return '⚗️';
-      case 'Refrigerants':
-        return '❄️';
+      case "Services":
+        return "🔧";
+      case "Chemicals":
+        return "⚗️";
+      case "Refrigerants":
+        return "❄️";
       default:
-        return '🔧';
+        return "🔧";
     }
   };
 
@@ -189,10 +199,9 @@ const Services = () => {
     }
   };
 
-  // UPDATED: Add to cart AND open modal
   const handleServiceRequest = (service) => {
     addService(service);
-    setShowModal(true); // ADD THIS
+    setShowModal(true);
   };
 
   if (loading) {
@@ -210,7 +219,7 @@ const Services = () => {
       <CustomerLayout>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-600">{error}</p>
-          <button 
+          <button
             onClick={fetchCatalogData}
             className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
@@ -225,7 +234,6 @@ const Services = () => {
     <CustomerLayout>
       <div className="space-y-6">
         <div className="py-8 mx-18 lg:mx-30 xl:mx-30" id="services-content">
-          {/* All your existing JSX for filters, search, services grid, pagination */}
           <div>
             <section className="mb-8">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -305,7 +313,9 @@ const Services = () => {
                           <div className="text-4xl mb-2">
                             {getServiceIcon(service.type)}
                           </div>
-                          <div className="text-sm font-medium">{service.type}</div>
+                          <div className="text-sm font-medium">
+                            {service.type}
+                          </div>
                         </div>
                       </div>
 
@@ -319,7 +329,7 @@ const Services = () => {
                         <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
                           Starts at {service.price}
                         </p>
-                        <button 
+                        <button
                           onClick={() => handleServiceRequest(service)}
                           className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium"
                         >
@@ -432,7 +442,6 @@ const Services = () => {
         </div>
       </div>
 
-      {/* ADD THE MODAL BACK */}
       {showModal && (
         <ServiceRequestModal onClose={() => setShowModal(false)} />
       )}
