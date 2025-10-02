@@ -184,11 +184,6 @@ const CustomerServiceTracker = () => {
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500 text-lg"
             />
           </div>
-
-          <button className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-md hover:border-gray-400 transition-all duration-200 cursor-pointer">
-            <ListFilter size={20} />
-            <span>Filters</span>
-          </button>
         </div>
 
         {/* Table Section */}
