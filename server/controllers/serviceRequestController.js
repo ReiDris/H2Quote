@@ -9,33 +9,38 @@ const supabase = createClient(
 const createDefaultPayments = async (requestId) => {
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-
+    await client.query('BEGIN');
+    
     const requestQuery = `
-      SELECT estimated_cost, downpayment_percentage 
+      SELECT estimated_cost, downpayment_percentage, payment_terms
       FROM service_requests 
       WHERE request_id = $1
     `;
     const request = await client.query(requestQuery, [requestId]);
-    const { estimated_cost, downpayment_percentage } = request.rows[0];
-
-    const downpaymentPercent = downpayment_percentage || 50;
-    const downpaymentAmount = Math.round(
-      (estimated_cost * downpaymentPercent) / 100
-    );
-    const remainingAmount = estimated_cost - downpaymentAmount;
-
-    await client.query(
-      `
-      INSERT INTO payments (request_id, payment_phase, amount, status)
-      VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
-    `,
-      [requestId, downpaymentAmount, remainingAmount]
-    );
-
-    await client.query("COMMIT");
+    const { estimated_cost, downpayment_percentage, payment_terms } = request.rows[0];
+    
+    // Check if it's Full Payment
+    if (payment_terms === 'Full' || !downpayment_percentage) {
+      // Create single payment for full amount
+      await client.query(`
+        INSERT INTO payments (request_id, payment_phase, amount, status)
+        VALUES ($1, 'Full Payment', $2, 'Pending')
+      `, [requestId, estimated_cost]);
+    } else {
+      // Create two payments for down payment scenario
+      const downpaymentPercent = downpayment_percentage || 50;
+      const downpaymentAmount = Math.round((estimated_cost * downpaymentPercent) / 100);
+      const remainingAmount = estimated_cost - downpaymentAmount;
+      
+      await client.query(`
+        INSERT INTO payments (request_id, payment_phase, amount, status)
+        VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+      `, [requestId, downpaymentAmount, remainingAmount]);
+    }
+    
+    await client.query('COMMIT');
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
@@ -180,7 +185,7 @@ const createServiceRequest = async (req, res) => {
     );
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
-    let downpaymentPercentage = 0;
+    let downpaymentPercentage = null; // Change from 0 to null
     if (downpayment && downpayment.includes("%")) {
       downpaymentPercentage = parseFloat(downpayment.replace("%", ""));
     }

@@ -24,6 +24,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
+  const formatPaymentMode = (mode) => {
+    const modeMap = {
+      bank_transfer: "Bank Transfer",
+      cash: "Cash",
+      check: "Check",
+      gcash: "GCash",
+    };
+    return modeMap[mode] || mode;
+  };
 
   // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
@@ -732,7 +741,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               Mode of Payment:
             </label>
             <span className="text-sm text-gray-800">
-              {requestData.paymentMode}
+              {formatPaymentMode(requestData.paymentMode)}
             </span>
           </div>
           <div className="flex items-center">
