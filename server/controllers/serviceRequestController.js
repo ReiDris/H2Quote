@@ -9,38 +9,115 @@ const supabase = createClient(
 const createDefaultPayments = async (requestId) => {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    
+    await client.query("BEGIN");
+
     const requestQuery = `
       SELECT estimated_cost, downpayment_percentage, payment_terms
       FROM service_requests 
       WHERE request_id = $1
     `;
     const request = await client.query(requestQuery, [requestId]);
-    const { estimated_cost, downpayment_percentage, payment_terms } = request.rows[0];
-    
+    const { estimated_cost, downpayment_percentage, payment_terms } =
+      request.rows[0];
+
     // Check if it's Full Payment
-    if (payment_terms === 'Full' || !downpayment_percentage) {
+    if (payment_terms === "Full" || !downpayment_percentage) {
       // Create single payment for full amount
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO payments (request_id, payment_phase, amount, status)
         VALUES ($1, 'Full Payment', $2, 'Pending')
-      `, [requestId, estimated_cost]);
+      `,
+        [requestId, estimated_cost]
+      );
     } else {
       // Create two payments for down payment scenario
       const downpaymentPercent = downpayment_percentage || 50;
-      const downpaymentAmount = Math.round((estimated_cost * downpaymentPercent) / 100);
+      const downpaymentAmount = Math.round(
+        (estimated_cost * downpaymentPercent) / 100
+      );
       const remainingAmount = estimated_cost - downpaymentAmount;
-      
-      await client.query(`
+
+      await client.query(
+        `
         INSERT INTO payments (request_id, payment_phase, amount, status)
         VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
-      `, [requestId, downpaymentAmount, remainingAmount]);
+      `,
+        [requestId, downpaymentAmount, remainingAmount]
+      );
     }
-    
-    await client.query('COMMIT');
+
+    await client.query("COMMIT");
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const recreatePayments = async (requestId) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check if any payments have been made
+    const paymentCheck = await client.query(
+      `SELECT COUNT(*) as paid_count FROM payments 
+       WHERE request_id = $1 AND status = 'Paid'`,
+      [requestId]
+    );
+
+    if (parseInt(paymentCheck.rows[0].paid_count) > 0) {
+      throw new Error(
+        "Cannot modify request - payments have already been made"
+      );
+    }
+
+    // Delete all pending payments
+    await client.query(
+      "DELETE FROM payments WHERE request_id = $1 AND status = 'Pending'",
+      [requestId]
+    );
+
+    // Recreate payments using the existing helper
+    const requestQuery = `
+      SELECT estimated_cost, downpayment_percentage, payment_terms
+      FROM service_requests 
+      WHERE request_id = $1
+    `;
+    const request = await client.query(requestQuery, [requestId]);
+    const { estimated_cost, downpayment_percentage, payment_terms } =
+      request.rows[0];
+
+    // Check if it's Full Payment
+    if (payment_terms === "Full" || !downpayment_percentage) {
+      await client.query(
+        `
+        INSERT INTO payments (request_id, payment_phase, amount, status)
+        VALUES ($1, 'Full Payment', $2, 'Pending')
+      `,
+        [requestId, estimated_cost]
+      );
+    } else {
+      const downpaymentPercent = downpayment_percentage || 50;
+      const downpaymentAmount = Math.round(
+        (estimated_cost * downpaymentPercent) / 100
+      );
+      const remainingAmount = estimated_cost - downpaymentAmount;
+
+      await client.query(
+        `
+        INSERT INTO payments (request_id, payment_phase, amount, status)
+        VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+      `,
+        [requestId, downpaymentAmount, remainingAmount]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -384,42 +461,44 @@ const getRequestDetails = async (req, res) => {
     }
 
     const requestQuery = `
-      SELECT 
-        sr.*, 
-        rs.status_name,
-        CONCAT(u.first_name, ' ', u.last_name) as customer_name,
-        c.company_name,
-        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
-        CASE 
-          WHEN rs.status_name = 'New' THEN 'Pending'
-          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
-          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-          WHEN rs.status_name = 'Completed' THEN 'Completed'
-          ELSE rs.status_name
-        END as service_status,
-        CASE 
-          WHEN sr.payment_status IS NULL THEN 'Pending'
-          ELSE sr.payment_status
-        END as payment_status,
-        CASE 
-          WHEN sr.estimated_duration_days IS NOT NULL THEN CONCAT(sr.estimated_duration_days, ' Days')
-          ELSE '3 - 7 Days'
-        END as estimated_duration,
-        TO_CHAR(sr.service_start_date, 'Mon DD, YYYY') as service_start_date,
-        TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
-        TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline,
-        u.email as email,
-        u.phone as phone
-      FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      JOIN users u ON sr.requested_by_user_id = u.user_id
-      JOIN companies c ON sr.company_id = c.company_id
-      LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-      WHERE ${whereClause}
-    `;
+  SELECT 
+    sr.*, 
+    rs.status_name,
+    CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+    c.company_name,
+    CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
+    CASE 
+      WHEN rs.status_name = 'New' THEN 'Pending'
+      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+      WHEN rs.status_name = 'Completed' THEN 'Completed'
+      ELSE rs.status_name
+    END as service_status,
+    CASE 
+      WHEN sr.payment_status IS NULL THEN 'Pending'
+      ELSE sr.payment_status
+    END as payment_status,
+    CASE 
+      WHEN sr.estimated_duration_days IS NOT NULL THEN CONCAT(sr.estimated_duration_days, ' Days')
+      ELSE '3 - 7 Days'
+    END as estimated_duration,
+    TO_CHAR(sr.service_start_date, 'YYYY-MM-DD') as service_start_date,
+    TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
+    TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline,
+    TO_CHAR(sr.request_acknowledged_date, 'Mon DD, YYYY') as request_acknowledged_date,
+    TO_CHAR(sr.actual_completion_date, 'YYYY-MM-DD') as actual_completion_date,
+    u.email as email,
+    u.phone as phone
+  FROM service_requests sr
+  JOIN request_statuses rs ON sr.status_id = rs.status_id
+  JOIN users u ON sr.requested_by_user_id = u.user_id
+  JOIN companies c ON sr.company_id = c.company_id
+  LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+  WHERE ${whereClause}
+`;
 
     const requestResult = await pool.query(requestQuery, queryParams);
 
@@ -520,22 +599,22 @@ const getRequestDetails = async (req, res) => {
 
     // Get payment history
     const paymentQuery = `
-  SELECT 
-    payment_id,
-    payment_phase as phase,
-    CONCAT(ROUND((amount::numeric / NULLIF(sr.estimated_cost, 0) * 100), 0), '%') as percentage,
-    CONCAT('₱', amount::text) as amount,
-    COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
-    CASE 
-      WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
-      ELSE 'Pending'
-    END as "paidOn",
-    status as "paymentStatus"
-  FROM payments p
-  JOIN service_requests sr ON p.request_id = sr.request_id
-  WHERE p.request_id = $1
-  ORDER BY payment_id
-`;
+      SELECT 
+        payment_id,
+        payment_phase as phase,
+        CONCAT(ROUND((amount::numeric / NULLIF(sr.estimated_cost, 0) * 100), 0), '%') as percentage,
+        CONCAT('₱', amount::text) as amount,
+        COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
+        CASE 
+          WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
+          ELSE 'Pending'
+        END as "paidOn",
+        status as "paymentStatus"
+      FROM payments p
+      JOIN service_requests sr ON p.request_id = sr.request_id
+      WHERE p.request_id = $1
+      ORDER BY payment_id
+    `;
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
     let paymentHistory = paymentResult.rows;
@@ -551,7 +630,7 @@ const getRequestDetails = async (req, res) => {
 
       paymentHistory = [
         {
-          payment_id: null, // Add this field
+          payment_id: null,
           phase: "Down Payment",
           percentage: `${downpaymentPercent}%`,
           amount: `₱${downpaymentAmount.toLocaleString()}`,
@@ -560,7 +639,7 @@ const getRequestDetails = async (req, res) => {
           paymentStatus: "Pending",
         },
         {
-          payment_id: null, // Add this field
+          payment_id: null,
           phase: "Completion Balance",
           percentage: `${remainingPercent}%`,
           amount: `₱${remainingAmount.toLocaleString()}`,
@@ -580,6 +659,16 @@ const getRequestDetails = async (req, res) => {
           ...request,
           id: request.request_number,
           totalCost: `₱ ${request.estimated_cost?.toLocaleString() || "0"}`,
+          discountPercentage: request.discount_percentage || 0,
+          discountedCost: request.discount_percentage
+            ? `₱ ${(
+                (request.estimated_cost * (100 - request.discount_percentage)) /
+                100
+              ).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`
+            : null,
           paymentHistory: paymentHistory,
         },
         items: allItems,
@@ -1580,9 +1669,7 @@ const addChemicalsToRequest = async (req, res) => {
 
     const { requestId } = req.params;
     const { chemicals, adminNotes } = req.body;
-    const adminId = req.user.id;
 
-    // Verify request exists and get current status
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -1601,7 +1688,6 @@ const addChemicalsToRequest = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Allow modifications in these statuses
     if (
       !["New", "Under Review", "Quote Prepared"].includes(request.status_name)
     ) {
@@ -1615,9 +1701,7 @@ const addChemicalsToRequest = async (req, res) => {
     let additionalCost = 0;
     const addedChemicals = [];
 
-    // Process each chemical
     for (const chemical of chemicals) {
-      // Get chemical details - NO STOCK CHECK
       const chemicalQuery = `
         SELECT chemical_id, chemical_name, brand, price 
         FROM chemicals 
@@ -1637,7 +1721,6 @@ const addChemicalsToRequest = async (req, res) => {
       const itemTotal = chemicalData.price * chemical.quantity;
       additionalCost += itemTotal;
 
-      // Insert into service_request_chemicals table
       const insertQuery = `
         INSERT INTO service_request_chemicals 
         (request_id, chemical_id, quantity, unit_price, line_total, notes)
@@ -1651,7 +1734,7 @@ const addChemicalsToRequest = async (req, res) => {
         chemical.quantity,
         chemicalData.price,
         itemTotal,
-        adminNotes || `Added by ${req.user.email}`, // CHANGED THIS LINE
+        adminNotes || `Added by ${req.user.email}`,
       ]);
 
       addedChemicals.push({
@@ -1664,7 +1747,6 @@ const addChemicalsToRequest = async (req, res) => {
       });
     }
 
-    // Update request total cost
     const updateCostQuery = `
       UPDATE service_requests 
       SET estimated_cost = estimated_cost + $1,
@@ -1672,6 +1754,19 @@ const addChemicalsToRequest = async (req, res) => {
       WHERE request_id = $2
     `;
     await client.query(updateCostQuery, [additionalCost, requestId]);
+
+    await client.query("COMMIT");
+
+    // Recreate payments with new total (outside transaction)
+    try {
+      await recreatePayments(requestId);
+    } catch (paymentError) {
+      console.error("Failed to recreate payments:", paymentError);
+      return res.status(400).json({
+        success: false,
+        message: paymentError.message,
+      });
+    }
 
     // Log in audit_log
     try {
@@ -1692,11 +1787,9 @@ const addChemicalsToRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    await client.query("COMMIT");
-
     res.json({
       success: true,
-      message: `Successfully added ${addedChemicals.length} chemical(s) to request`,
+      message: `Successfully added ${addedChemicals.length} chemical(s) to request and updated payments`,
       data: {
         addedChemicals: addedChemicals,
         additionalCost: additionalCost,
@@ -1725,7 +1818,6 @@ const addRefrigerantsToRequest = async (req, res) => {
 
     const { requestId } = req.params;
     const { refrigerants, adminNotes } = req.body;
-    const adminId = req.user.id;
 
     const requestQuery = `
       SELECT sr.*, rs.status_name 
@@ -1759,7 +1851,6 @@ const addRefrigerantsToRequest = async (req, res) => {
     const addedRefrigerants = [];
 
     for (const refrigerant of refrigerants) {
-      // Get refrigerant details - NO STOCK CHECK
       const refrigerantQuery = `
         SELECT refrigerant_id, refrigerant_name, price 
         FROM refrigerants 
@@ -1794,7 +1885,7 @@ const addRefrigerantsToRequest = async (req, res) => {
         refrigerant.quantity,
         refrigerantData.price,
         itemTotal,
-        adminNotes || `Added by ${req.user.email}`, // CHANGED THIS LINE
+        adminNotes || `Added by ${req.user.email}`,
       ]);
 
       addedRefrigerants.push({
@@ -1815,6 +1906,19 @@ const addRefrigerantsToRequest = async (req, res) => {
     `;
     await client.query(updateCostQuery, [additionalCost, requestId]);
 
+    await client.query("COMMIT");
+
+    // Recreate payments with new total (outside transaction)
+    try {
+      await recreatePayments(requestId);
+    } catch (paymentError) {
+      console.error("Failed to recreate payments:", paymentError);
+      return res.status(400).json({
+        success: false,
+        message: paymentError.message,
+      });
+    }
+
     try {
       await supabase.from("audit_log").insert({
         table_name: "service_request_refrigerants",
@@ -1833,11 +1937,9 @@ const addRefrigerantsToRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    await client.query("COMMIT");
-
     res.json({
       success: true,
-      message: `Successfully added ${addedRefrigerants.length} refrigerant(s) to request`,
+      message: `Successfully added ${addedRefrigerants.length} refrigerant(s) to request and updated payments`,
       data: {
         addedRefrigerants: addedRefrigerants,
         additionalCost: additionalCost,
@@ -2239,12 +2341,12 @@ const updateServiceRequest = async (req, res) => {
       serviceStartDate,
       services,
       paymentBreakdown,
+      discount, // ✅ Added
     } = req.body;
 
     console.log("Updating request:", requestId);
     console.log("Payload:", req.body);
 
-    // ADD THIS STATUS MAPPING
     const statusMapping = {
       Pending: "New",
       Assigned: "Under Review",
@@ -2256,10 +2358,10 @@ const updateServiceRequest = async (req, res) => {
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
-    // Get the status_id for the service status - USE backendStatus instead
+    // Get the status_id for the service status
     const statusResult = await client.query(
       "SELECT status_id FROM request_statuses WHERE status_name = $1",
-      [backendStatus] // Changed from serviceStatus
+      [backendStatus]
     );
 
     if (statusResult.rows.length === 0) {
@@ -2268,8 +2370,21 @@ const updateServiceRequest = async (req, res) => {
 
     const statusId = statusResult.rows[0].status_id;
 
+    // Get current request data to check previous assigned staff
+    const currentRequestQuery = `
+      SELECT assigned_to_staff_id, actual_completion_date, request_acknowledged_date
+      FROM service_requests 
+      WHERE request_id = $1
+    `;
+    const currentRequestResult = await client.query(currentRequestQuery, [
+      requestId,
+    ]);
+    const currentRequest = currentRequestResult.rows[0];
+
     // Get assigned staff user_id if not "Not assigned"
     let assignedStaffId = null;
+    let requestAcknowledgedDate = currentRequest.request_acknowledged_date;
+
     if (assignedStaff && assignedStaff !== "Not assigned") {
       const staffResult = await client.query(
         `SELECT user_id FROM users WHERE CONCAT(first_name, ' ', last_name) = $1`,
@@ -2277,10 +2392,36 @@ const updateServiceRequest = async (req, res) => {
       );
       if (staffResult.rows.length > 0) {
         assignedStaffId = staffResult.rows[0].user_id;
+
+        // If staff is being assigned for the first time, set request_acknowledged_date
+        if (!currentRequest.assigned_to_staff_id && assignedStaffId) {
+          requestAcknowledgedDate = new Date().toISOString().split("T")[0];
+          console.log(
+            `Request acknowledged date set: ${requestAcknowledgedDate}`
+          );
+        }
       }
     }
 
-    // Update service request main details
+    // Auto-set actual_completion_date when status changes to Completed
+    let actualCompletionDate = currentRequest.actual_completion_date;
+    if (
+      backendStatus === "Completed" &&
+      !currentRequest.actual_completion_date
+    ) {
+      actualCompletionDate = new Date().toISOString().split("T")[0];
+      console.log(
+        `Service end date (actual completion) set: ${actualCompletionDate}`
+      );
+    }
+
+    // ✅ Parse discount percentage
+    let discountPercentage = 0;
+    if (discount && discount !== "No Discount") {
+      discountPercentage = parseFloat(discount.replace("%", ""));
+    }
+
+    // ✅ Updated query to include discount_percentage
     const updateRequestQuery = `
       UPDATE service_requests 
       SET 
@@ -2288,8 +2429,11 @@ const updateServiceRequest = async (req, res) => {
         payment_status = $2,
         assigned_to_staff_id = $3,
         service_start_date = $4,
+        request_acknowledged_date = $5,
+        actual_completion_date = $6,
+        discount_percentage = $7,
         updated_at = NOW()
-      WHERE request_id = $5
+      WHERE request_id = $8
     `;
 
     await client.query(updateRequestQuery, [
@@ -2297,47 +2441,111 @@ const updateServiceRequest = async (req, res) => {
       paymentStatus,
       assignedStaffId,
       serviceStartDate,
+      requestAcknowledgedDate,
+      actualCompletionDate,
+      discountPercentage, // ✅ Added
       requestId,
     ]);
 
-    // Update warranty information for each service item
+    // Check if ANY service has manual warranty data
+    const hasManualWarrantyData =
+      services &&
+      services.length > 0 &&
+      services.some((s) => s.warranty_start_date);
+
+    // Auto-set warranty ONLY if status is Completed AND no manual warranty data provided
+    if (backendStatus === "Completed" && !hasManualWarrantyData) {
+      const warrantyStartDate = new Date().toISOString().split("T")[0];
+      const warrantyMonths = 6;
+      const warrantyEndDate = new Date();
+      warrantyEndDate.setMonth(warrantyEndDate.getMonth() + warrantyMonths);
+
+      // Update all service items with warranty
+      await client.query(
+        `
+        UPDATE service_request_items
+        SET 
+          warranty_months = $1,
+          warranty_start_date = $2,
+          warranty_end_date = $3
+        WHERE request_id = $4
+      `,
+        [
+          warrantyMonths,
+          warrantyStartDate,
+          warrantyEndDate.toISOString().split("T")[0],
+          requestId,
+        ]
+      );
+
+      // Also update the main service_requests table
+      await client.query(
+        `
+        UPDATE service_requests
+        SET 
+          warranty_start_date = $1,
+          warranty_months = $2
+        WHERE request_id = $3
+      `,
+        [warrantyStartDate, warrantyMonths, requestId]
+      );
+
+      console.log(
+        `Warranty automatically set for request ${requestId}: ${warrantyStartDate} for ${warrantyMonths} months`
+      );
+    }
+
+    // Update warranty information for each service item (if manually provided)
     if (services && services.length > 0) {
       for (const service of services) {
         if (service.itemType === "service" && service.service_id) {
-          await client.query(
-            `
-            UPDATE service_request_items
-            SET 
-              warranty_months = $1, 
-              warranty_start_date = $2
-            WHERE request_id = $3 AND service_id = $4
-          `,
-            [
-              service.warranty_months || 6,
-              service.warranty_start_date,
-              requestId,
-              service.service_id,
-            ]
-          );
+          // Only update if warranty data is explicitly provided
+          if (service.warranty_start_date) {
+            const months = service.warranty_months || 6;
+            const endDate = new Date(service.warranty_start_date);
+            endDate.setMonth(endDate.getMonth() + months);
+            const warrantyEndDate = endDate.toISOString().split("T")[0];
+
+            await client.query(
+              `
+              UPDATE service_request_items
+              SET 
+                warranty_months = $1, 
+                warranty_start_date = $2,
+                warranty_end_date = $3
+              WHERE request_id = $4 AND service_id = $5
+            `,
+              [
+                months,
+                service.warranty_start_date,
+                warrantyEndDate,
+                requestId,
+                service.service_id,
+              ]
+            );
+
+            console.log(
+              `Manual warranty set for service ${service.service_id}: ${service.warranty_start_date} for ${months} months`
+            );
+          }
         }
       }
     }
 
-    // Update payment statuses
     // Update payment statuses and set paid_on date when marked as Paid
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
         await client.query(
           `
-      UPDATE payments
-      SET status = $1,
-          paid_on = CASE 
-            WHEN $1 = 'Paid' THEN NOW() 
-            ELSE paid_on 
+          UPDATE payments
+          SET status = $1,
+              paid_on = CASE 
+                WHEN $1 = 'Paid' THEN NOW() 
+                ELSE paid_on 
           END,
-          updated_at = NOW()
-      WHERE request_id = $2 AND payment_phase = $3
-    `,
+              updated_at = NOW()
+          WHERE request_id = $2 AND payment_phase = $3
+        `,
           [payment.paymentStatus, requestId, payment.phase]
         );
       }
@@ -2355,6 +2563,205 @@ const updateServiceRequest = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update service request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const setServiceWarranty = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const {
+      warrantyStartDate,
+      warrantyMonths = 6, // Default 6 months
+      applyToAllServices = true,
+    } = req.body;
+
+    // Verify request exists and is completed
+    const requestQuery = `
+      SELECT sr.request_id, rs.status_name
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    // Only allow setting warranty for completed services
+    if (request.status_name !== "Completed") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "Warranty can only be set for completed service requests",
+      });
+    }
+
+    const startDate =
+      warrantyStartDate || new Date().toISOString().split("T")[0];
+
+    // Calculate warranty end date
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + parseInt(warrantyMonths));
+    const warrantyEndDate = endDate.toISOString().split("T")[0];
+
+    // Update ALL service items in the request with warranty information
+    const updateQuery = `
+      UPDATE service_request_items
+      SET 
+        warranty_months = $1,
+        warranty_start_date = $2,
+        warranty_end_date = $3
+      WHERE request_id = $4
+      RETURNING item_id, service_id
+    `;
+
+    const updateResult = await client.query(updateQuery, [
+      warrantyMonths,
+      startDate,
+      warrantyEndDate,
+      requestId,
+    ]);
+
+    // Also update the service_requests table
+    await client.query(
+      `
+      UPDATE service_requests
+      SET 
+        warranty_start_date = $1,
+        warranty_months = $2
+      WHERE request_id = $3
+    `,
+      [startDate, warrantyMonths, requestId]
+    );
+
+    // Log audit entry
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_items",
+        record_id: requestId,
+        action: "UPDATE",
+        new_values: {
+          warranty_set: true,
+          warranty_start_date: startDate,
+          warranty_months: warrantyMonths,
+          warranty_end_date: warrantyEndDate,
+          items_updated: updateResult.rows.length,
+        },
+        changed_by: req.user.email,
+        change_reason: "Warranty activated for completed service",
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: `Warranty set successfully for ${updateResult.rows.length} service(s)`,
+      data: {
+        warrantyStartDate: startDate,
+        warrantyEndDate: warrantyEndDate,
+        warrantyMonths: warrantyMonths,
+        servicesUpdated: updateResult.rows.length,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Set service warranty error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to set warranty",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// Add this function to update individual service item warranty
+const updateIndividualServiceWarranty = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId, itemId } = req.params;
+    const { warrantyMonths, warrantyStartDate } = req.body;
+
+    if (!warrantyMonths || !warrantyStartDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Warranty months and start date are required",
+      });
+    }
+
+    // Calculate warranty end date
+    const startDate = new Date(warrantyStartDate);
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + parseInt(warrantyMonths));
+    const warrantyEndDate = endDate.toISOString().split("T")[0];
+
+    // Update specific service item
+    const updateQuery = `
+      UPDATE service_request_items
+      SET 
+        warranty_months = $1,
+        warranty_start_date = $2,
+        warranty_end_date = $3
+      WHERE item_id = $4 AND request_id = $5
+      RETURNING item_id, service_id
+    `;
+
+    const result = await client.query(updateQuery, [
+      warrantyMonths,
+      warrantyStartDate,
+      warrantyEndDate,
+      itemId,
+      requestId,
+    ]);
+
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        success: false,
+        message: "Service item not found",
+      });
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Service warranty updated successfully",
+      data: {
+        warrantyStartDate: warrantyStartDate,
+        warrantyEndDate: warrantyEndDate,
+        warrantyMonths: warrantyMonths,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Update individual service warranty error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update service warranty",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
@@ -2384,4 +2791,6 @@ module.exports = {
   getStaffList,
   updateItemWarranty,
   updateServiceRequest,
+  setServiceWarranty,
+  updateIndividualServiceWarranty,
 };

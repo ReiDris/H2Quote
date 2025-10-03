@@ -51,6 +51,23 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  const calculateDiscountedTotal = () => {
+    const baseTotal = parseFloat(requestData.totalCost.replace(/[₱,]/g, ""));
+
+    if (selectedDiscount === "No Discount" || !selectedDiscount) {
+      return requestData.totalCost;
+    }
+
+    const discountPercent = parseFloat(selectedDiscount.replace("%", ""));
+    const discountAmount = (baseTotal * discountPercent) / 100;
+    const finalTotal = baseTotal - discountAmount;
+
+    return `₱${finalTotal.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   const handleViewProof = (paymentId, fileName) => {
     setViewingPaymentId(paymentId);
     setViewingFileName(fileName);
@@ -151,6 +168,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         const transformedData = {
           id: requestDetails.request_number,
           requestedAt: requestDetails.requested_at,
+          requestAcknowledgedDate:
+            requestDetails.request_acknowledged_date || "-",
+          actualCompletionDate: requestDetails.actual_completion_date || "-",
           customer: {
             name: requestDetails.customer_name,
             company: requestDetails.company_name,
@@ -190,6 +210,13 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setServiceStatus(requestDetails.service_status || "Pending");
         setPaymentStatus(requestDetails.payment_status || "Pending");
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
+        setServiceStartDate(requestDetails.service_start_date || "");
+        setServiceEndDate(requestDetails.actual_completion_date || "");
+        setSelectedDiscount(
+          requestDetails.discount_percentage
+            ? `${requestDetails.discount_percentage}%`
+            : "No Discount"
+        );
       } else {
         setError(detailData.message || "Failed to fetch request details");
       }
@@ -730,8 +757,18 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
           <div className="text-right">
+            {selectedDiscount !== "No Discount" && (
+              <>
+                <p className="text-sm text-gray-500 line-through">
+                  {requestData.totalCost}
+                </p>
+                <p className="text-xs text-green-600 mb-1">
+                  {selectedDiscount} discount applied
+                </p>
+              </>
+            )}
             <p className="text-2xl font-bold text-[#0260A0]">
-              {requestData.totalCost}
+              {calculateDiscountedTotal()}
             </p>
           </div>
         </div>
@@ -898,13 +935,17 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Request Acknowledged:
             </label>
-            <span className="text-sm text-gray-800">-</span>
+            <span className="text-sm text-gray-800">
+              {requestData.requestAcknowledgedDate}
+            </span>
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Service End Date:
             </label>
-            <span className="text-sm text-gray-800">-</span>
+            <span className="text-sm text-gray-800">
+              {requestData.actualCompletionDate}
+            </span>
           </div>
         </div>
       </div>
