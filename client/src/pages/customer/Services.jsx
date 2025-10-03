@@ -306,7 +306,7 @@ const Services = () => {
                   {currentServices.map((service) => (
                     <div
                       key={service.id}
-                      className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+                      className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col"
                     >
                       <div className="h-48 bg-gradient-to-br from-[#004785] to-[#0066b3] flex items-center justify-center">
                         <div className="text-white text-center p-8">
@@ -319,11 +319,11 @@ const Services = () => {
                         </div>
                       </div>
 
-                      <div className="p-6">
-                        <h3 className="text-lg font-bold text-[#004785] mb-3">
+                      <div className="p-6 flex flex-col h-full">
+                        <h3 className="text-xl font-bold text-[#004785] mb-3">
                           {service.title}
                         </h3>
-                        <p className="text-[#004785] text-sm leading-relaxed mb-4 font-light">
+                        <p className="text-[#004785] text-sm leading-relaxed font-light flex-grow">
                           {service.description}
                         </p>
                         <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
@@ -331,7 +331,7 @@ const Services = () => {
                         </p>
                         <button
                           onClick={() => handleServiceRequest(service)}
-                          className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium"
+                          className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto"
                         >
                           Request
                         </button>

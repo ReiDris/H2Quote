@@ -35,19 +35,25 @@ const ServiceRequestModal = ({ onClose }) => {
     let hasServices = false;
     let hasChemicalsOrRefrigerants = false;
 
-    selectedServices.forEach(service => {
-      if (service.type === 'Services') {
+    selectedServices.forEach((service) => {
+      if (service.type === "Services") {
         hasServices = true;
         let serviceDuration = 3;
-        
-        if (service.estimated_duration_hours && service.estimated_duration_hours > 0) {
+
+        if (
+          service.estimated_duration_hours &&
+          service.estimated_duration_hours > 0
+        ) {
           serviceDuration = Math.ceil(service.estimated_duration_hours / 24);
         } else if (service.duration && service.duration > 0) {
           serviceDuration = service.duration;
         }
 
         totalServiceDuration += serviceDuration;
-      } else if (service.type === "Chemicals" || service.type === "Refrigerants") {
+      } else if (
+        service.type === "Chemicals" ||
+        service.type === "Refrigerants"
+      ) {
         hasChemicalsOrRefrigerants = true;
       }
     });
@@ -63,8 +69,9 @@ const ServiceRequestModal = ({ onClose }) => {
     }
 
     const minDuration = finalDuration;
-    const maxWithBuffer = finalDuration + Math.min(2, Math.ceil(finalDuration * 0.2));
-    
+    const maxWithBuffer =
+      finalDuration + Math.min(2, Math.ceil(finalDuration * 0.2));
+
     return `${minDuration} - ${maxWithBuffer} Days`;
   }, [selectedServices]);
 
@@ -80,11 +87,11 @@ const ServiceRequestModal = ({ onClose }) => {
     setError("");
 
     try {
-      const token = localStorage.getItem('h2quote_token');
+      const token = localStorage.getItem("h2quote_token");
       
-      const transformedServices = selectedServices.map(service => ({
+      const transformedServices = selectedServices.map((service) => ({
         id: service.id,
-        quantity: service.quantity
+        quantity: service.quantity,
       }));
 
       const requestData = {
@@ -98,14 +105,17 @@ const ServiceRequestModal = ({ onClose }) => {
         specialRequirements,
       };
 
-      const response = await fetch("http://localhost:5000/api/service-requests", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestData),
-      });
+      const response = await fetch(
+        "http://localhost:5000/api/service-requests",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestData),
+        }
+      );
 
       const data = await response.json();
 
@@ -191,13 +201,19 @@ const ServiceRequestModal = ({ onClose }) => {
                             min="1"
                             value={service.quantity}
                             onChange={(e) =>
-                              updateQuantity(service.id, parseInt(e.target.value))
+                              updateQuantity(
+                                service.id,
+                                parseInt(e.target.value)
+                              )
                             }
                             className="w-12 px-2 py-1 border border-gray-300 rounded text-center"
                             disabled={isSubmitting}
                           />
                           <span className="text-sm font-semibold text-[#3C61A8]">
-                            ₱{(service.basePrice * service.quantity).toLocaleString()}
+                            ₱
+                            {(
+                              service.basePrice * service.quantity
+                            ).toLocaleString()}
                           </span>
                           <button
                             type="button"

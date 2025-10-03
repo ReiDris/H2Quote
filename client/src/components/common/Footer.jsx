@@ -91,24 +91,34 @@ const Footer = () => {
             <h4 className="font-semibold mb-6 text-lg">Get In Touch</h4>
 
             {/* Email Us button - visible only on md and smaller screens */}
-            <div className="bg-white rounded-lg p-4 inline-block lg:hidden">
+            <a
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=trishkaye@trishkayechemicals-services.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-white rounded-lg p-4 inline-block lg:hidden"
+            >
               <div className="flex items-center">
                 <EnvelopeIcon className="mr-2 w-5 h-5 text-[#0260A0]" />
                 <span className="text-sm text-[#0260A0] font-semibold xl:whitespace-nowrap">
                   Email Us
                 </span>
               </div>
-            </div>
+            </a>
 
             {/* Full email - visible only on md and larger screens */}
-            <div className="bg-white rounded-lg p-4 hidden lg:inline-block">
+            <a
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=trishkaye@trishkayechemicals-services.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-white rounded-lg p-4 hidden lg:inline-block"
+            >
               <div className="flex items-center">
                 <EnvelopeIcon className="mr-2 w-5 h-5 text-[#0260A0]" />
                 <span className="lg:text-xs xl:text-sm text-[#0260A0] font-semibold xl:whitespace-nowrap">
                   trishkaye@trishkayechemicals-services.com
                 </span>
               </div>
-            </div>
+            </a>
           </div>
         </div>
 

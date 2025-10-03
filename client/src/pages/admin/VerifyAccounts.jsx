@@ -26,6 +26,14 @@ const VerifyAccountsPage = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingUsers, setProcessingUsers] = useState(new Set());
 
+  // New modal states for alerts
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [userToReject, setUserToReject] = useState(null);
+
   // Fetch pending users from backend
   useEffect(() => {
     fetchPendingUsers();
@@ -85,7 +93,8 @@ const VerifyAccountsPage = () => {
       setShowDocumentModal(true);
     } catch (error) {
       console.error("Error loading document:", error);
-      alert("Failed to load document");
+      setModalMessage("Failed to load document");
+      setShowErrorModal(true);
     } finally {
       setIsProcessing(false);
     }
@@ -123,12 +132,14 @@ const VerifyAccountsPage = () => {
         setPendingUsers((prevUsers) =>
           prevUsers.filter((u) => u.user_id !== selectedUser.user_id)
         );
-        alert(`User approved as ${selectedRole}!`);
+        setModalMessage(`User approved as ${selectedRole}!`);
+        setShowSuccessModal(true);
         setShowApprovalModal(false);
         setShowDocumentModal(false);
         setSelectedUser(null);
       } else {
-        alert(data.message || "Failed to approve user");
+        setModalMessage(data.message || "Failed to approve user");
+        setShowErrorModal(true);
         // Remove from processing set if failed so they can retry
         setProcessingUsers((prev) => {
           const newSet = new Set(prev);
@@ -138,7 +149,8 @@ const VerifyAccountsPage = () => {
       }
     } catch (error) {
       console.error("Error approving user:", error);
-      alert("Failed to approve user");
+      setModalMessage("Failed to approve user");
+      setShowErrorModal(true);
       // Remove from processing set if failed so they can retry
       setProcessingUsers((prev) => {
         const newSet = new Set(prev);
@@ -150,30 +162,37 @@ const VerifyAccountsPage = () => {
     }
   };
 
-  const handleReject = async (user) => {
-    // Prevent duplicate submissions
+  const handleRejectClick = (user) => {
     if (processingUsers.has(user.user_id)) {
       return;
     }
+    setUserToReject(user);
+    setRejectionReason("");
+    setShowRejectModal(true);
+  };
 
-    const reason = prompt("Please provide a reason for rejection:");
-    if (!reason) return;
+  const handleRejectConfirm = async () => {
+    if (!rejectionReason.trim()) {
+      setModalMessage("Please provide a reason for rejection");
+      setShowErrorModal(true);
+      return;
+    }
 
     try {
       setIsProcessing(true);
-      setProcessingUsers((prev) => new Set(prev).add(user.user_id));
+      setProcessingUsers((prev) => new Set(prev).add(userToReject.user_id));
 
       const token = localStorage.getItem("h2quote_token");
 
       const response = await fetch(
-        `http://localhost:5000/api/admin/reject-user/${user.user_id}`,
+        `http://localhost:5000/api/admin/reject-user/${userToReject.user_id}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ reason }),
+          body: JSON.stringify({ reason: rejectionReason }),
         }
       );
 
@@ -181,25 +200,31 @@ const VerifyAccountsPage = () => {
 
       if (data.success) {
         setPendingUsers((prevUsers) =>
-          prevUsers.filter((u) => u.user_id !== user.user_id)
+          prevUsers.filter((u) => u.user_id !== userToReject.user_id)
         );
-        alert("User rejected successfully");
+        setModalMessage("User rejected successfully");
+        setShowSuccessModal(true);
+        setShowRejectModal(false);
+        setUserToReject(null);
+        setRejectionReason("");
       } else {
-        alert(data.message || "Failed to reject user");
+        setModalMessage(data.message || "Failed to reject user");
+        setShowErrorModal(true);
         // Remove from processing set if failed so they can retry
         setProcessingUsers((prev) => {
           const newSet = new Set(prev);
-          newSet.delete(user.user_id);
+          newSet.delete(userToReject.user_id);
           return newSet;
         });
       }
     } catch (error) {
       console.error("Error rejecting user:", error);
-      alert("Failed to reject user");
+      setModalMessage("Failed to reject user");
+      setShowErrorModal(true);
       // Remove from processing set if failed so they can retry
       setProcessingUsers((prev) => {
         const newSet = new Set(prev);
-        newSet.delete(user.user_id);
+        newSet.delete(userToReject.user_id);
         return newSet;
       });
     } finally {
@@ -297,7 +322,7 @@ const VerifyAccountsPage = () => {
           </div>
           <button
             onClick={fetchPendingUsers}
-            className="px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="px-4 py-3 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-all cursor-pointer"
           >
             Refresh
           </button>
@@ -403,7 +428,7 @@ const VerifyAccountsPage = () => {
                               <button
                                 onClick={() => {
                                   if (!processingUsers.has(user.user_id)) {
-                                    handleReject(user);
+                                    handleRejectClick(user);
                                   }
                                 }}
                                 className="text-red-600 hover:text-red-800 cursor-pointer p-1 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -516,35 +541,37 @@ const VerifyAccountsPage = () => {
 
       {/* Document Viewer Modal */}
       {showDocumentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 mb-4">
               <div>
-                <h2 className="text-xl font-bold">Verification Document</h2>
-                <p className="text-sm text-gray-600">
+                <h2 className="text-lg font-bold text-[#004785]">
+                  Verification Document
+                </h2>
+                <p className="text-sm text-black">
                   {selectedUser?.first_name} {selectedUser?.last_name} -{" "}
                   {selectedUser?.companies?.company_name}
                 </p>
               </div>
               <button
                 onClick={() => setShowDocumentModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
               >
                 <X size={24} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-4 bg-gray-100">
+            <div className="flex-1 overflow-auto p-4 bg-gray-100 rounded-lg flex items-center justify-center">
               {isProcessing ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#004785]"></div>
                 </div>
               ) : (
                 <iframe
                   src={`${documentUrl}?token=${encodeURIComponent(
                     localStorage.getItem("h2quote_token")
                   )}`}
-                  className="w-full h-full min-h-[600px] border-0"
+                  className="w-full h-full min-h-[500px] border-0 rounded-lg"
                   title="Verification Document"
                 />
               )}
@@ -555,110 +582,198 @@ const VerifyAccountsPage = () => {
 
       {/* Approval Modal with Role Selection */}
       {showApprovalModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Approve User</h2>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-md mx-4">
+            <div className="pb-2 border-b border-gray-200 mb-4">
+              <h2 className="text-lg font-bold text-[#004785]">Approve User</h2>
+            </div>
 
-              <div className="mb-6">
-                <p className="text-gray-700 mb-2">
-                  <strong>Name:</strong> {selectedUser?.first_name}{" "}
-                  {selectedUser?.last_name}
-                </p>
-                <p className="text-gray-700 mb-2">
-                  <strong>Company:</strong>{" "}
-                  {selectedUser?.companies?.company_name}
-                </p>
-                <p className="text-gray-700 mb-4">
-                  <strong>Email:</strong> {selectedUser?.email}
-                </p>
-              </div>
+            <div className="mb-6">
+              <p className="text-black text-sm mb-2">
+                <strong>Name:</strong> {selectedUser?.first_name}{" "}
+                {selectedUser?.last_name}
+              </p>
+              <p className="text-black text-sm mb-2">
+                <strong>Company:</strong>{" "}
+                {selectedUser?.companies?.company_name}
+              </p>
+              <p className="text-black text-sm mb-4">
+                <strong>Email:</strong> {selectedUser?.email}
+              </p>
+            </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select User Role <span className="text-red-500">*</span>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-black mb-2">
+                Select User Role <span className="text-red-500">*</span>
+              </label>
+
+              <div className="space-y-2">
+                <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="client"
+                    checked={selectedRole === "client"}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                    className="mr-3 h-4 w-4 text-[#004785]"
+                  />
+                  <div>
+                    <div className="font-medium text-black">Customer</div>
+                    <div className="text-sm text-black">
+                      Regular client with access to request services
+                    </div>
+                  </div>
                 </label>
 
-                <div className="space-y-2">
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="role"
-                      value="client"
-                      checked={selectedRole === "client"}
-                      onChange={(e) => setSelectedRole(e.target.value)}
-                      className="mr-3 h-4 w-4 text-blue-600"
-                    />
-                    <div>
-                      <div className="font-medium">Customer</div>
-                      <div className="text-sm text-gray-500">
-                        Regular client with access to request services
-                      </div>
+                <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="staff"
+                    checked={selectedRole === "staff"}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                    className="mr-3 h-4 w-4 text-[#004785]"
+                  />
+                  <div>
+                    <div className="font-medium text-black">Staff</div>
+                    <div className="text-sm text-black">
+                      Staff member with service management access
                     </div>
-                  </label>
+                  </div>
+                </label>
 
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="role"
-                      value="staff"
-                      checked={selectedRole === "staff"}
-                      onChange={(e) => setSelectedRole(e.target.value)}
-                      className="mr-3 h-4 w-4 text-blue-600"
-                    />
-                    <div>
-                      <div className="font-medium">Staff</div>
-                      <div className="text-sm text-gray-500">
-                        Staff member with service management access
-                      </div>
+                <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="admin"
+                    checked={selectedRole === "admin"}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                    className="mr-3 h-4 w-4 text-[#004785]"
+                  />
+                  <div>
+                    <div className="font-medium text-black">Administrator</div>
+                    <div className="text-sm text-black">
+                      Full system access and user management
                     </div>
-                  </label>
-
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="role"
-                      value="admin"
-                      checked={selectedRole === "admin"}
-                      onChange={(e) => setSelectedRole(e.target.value)}
-                      className="mr-3 h-4 w-4 text-blue-600"
-                    />
-                    <div>
-                      <div className="font-medium">Administrator</div>
-                      <div className="text-sm text-gray-500">
-                        Full system access and user management
-                      </div>
-                    </div>
-                  </label>
-                </div>
+                  </div>
+                </label>
               </div>
+            </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={handleApprove}
-                  disabled={
-                    isProcessing ||
-                    !selectedRole ||
-                    processingUsers.has(selectedUser?.user_id)
-                  }
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-                >
-                  {isProcessing && processingUsers.has(selectedUser?.user_id)
-                    ? "Approving..."
-                    : "Approve as " +
-                      selectedRole.charAt(0).toUpperCase() +
-                      selectedRole.slice(1)}
-                </button>
-                <button
-                  onClick={() => setShowApprovalModal(false)}
-                  disabled={
-                    isProcessing && processingUsers.has(selectedUser?.user_id)
-                  }
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowApprovalModal(false)}
+                disabled={
+                  isProcessing && processingUsers.has(selectedUser?.user_id)
+                }
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={
+                  isProcessing ||
+                  !selectedRole ||
+                  processingUsers.has(selectedUser?.user_id)
+                }
+                className="flex-1 bg-[#004785] text-white px-4 py-2 rounded-lg hover:bg-[#003666] transition-colors cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+              >
+                {isProcessing && processingUsers.has(selectedUser?.user_id)
+                  ? "Approving..."
+                  : "Approve as " +
+                    selectedRole.charAt(0).toUpperCase() +
+                    selectedRole.slice(1)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-md mx-4">
+            <div className="pb-2 border-b border-gray-200 mb-4">
+              <h2 className="text-lg font-bold text-[#004785]">Reject User</h2>
+            </div>
+
+            <p className="text-black text-sm mb-4">
+              Please provide a reason for rejecting this user application.
+            </p>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-black mb-2">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#004785] focus:border-[#004785] text-sm"
+                placeholder="Enter reason for rejection..."
+                rows={4}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setUserToReject(null);
+                  setRejectionReason("");
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRejectConfirm}
+                disabled={isProcessing || !rejectionReason.trim()}
+                className="flex-1 bg-[#004785] text-white px-4 py-2 rounded-lg hover:bg-[#003666] transition-colors cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+              >
+                {isProcessing ? "Rejecting..." : "Confirm Rejection"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
+            <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
+              Success
+            </h2>
+            <p className="text-black mb-6 text-sm">{modalMessage}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
+            <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
+              Error
+            </h2>
+            <p className="text-black mb-6 text-sm">{modalMessage}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
+              >
+                OK
+              </button>
             </div>
           </div>
         </div>
