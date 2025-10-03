@@ -47,6 +47,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   // State for staff list
   const [staffList, setStaffList] = useState([]);
 
+  // State for success modal
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
   const handleViewProof = (paymentId, fileName) => {
     setViewingPaymentId(paymentId);
     setViewingFileName(fileName);
@@ -154,7 +158,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             contact: requestDetails.phone || "Not provided",
           },
           services: items.map((item) => ({
-            service_id: item.service_id, // Added this
+            service_id: item.service_id,
             category: item.service_category || item.category,
             service: item.name,
             remarks: item.remarks || "-",
@@ -332,7 +336,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       : "/staff/service-tracker";
   };
 
-  // ✅ ADD handleSaveChanges HERE
   const handleSaveChanges = async () => {
     try {
       const token = localStorage.getItem("h2quote_token");
@@ -375,14 +378,17 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       const data = await response.json();
 
       if (data.success) {
-        alert("Changes saved successfully!");
+        setSuccessMessage("Changes saved successfully!");
+        setShowSuccessModal(true);
         fetchRequestDetails();
       } else {
-        alert("Failed to save changes: " + data.message);
+        setSuccessMessage("Failed to save changes: " + data.message);
+        setShowSuccessModal(true);
       }
     } catch (error) {
       console.error("Save changes error:", error);
-      alert("Failed to save changes. Please try again.");
+      setSuccessMessage("Failed to save changes. Please try again.");
+      setShowSuccessModal(true);
     }
   };
 
@@ -563,7 +569,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           {isEditable && requestId && (
             <button
               onClick={() => setIsManageItemsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-[#004785] text-white rounded-lg cursor-pointer hover:bg-[#003366] transition-all"
             >
               <Package size={18} />
               Manage Items
@@ -832,7 +838,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                             payment.proofOfPayment
                           )
                         }
-                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto"
+                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
                       >
                         <Eye size={16} />
                         View
@@ -848,7 +854,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                       onChange={(e) =>
                         handlePaymentStatusChange(index, e.target.value)
                       }
-                      className="text-xs xl:text-sm border border-gray-300 rounded p-2"
+                      className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer"
                     >
                       <option value="Pending">Pending</option>
                       <option value="Paid">Paid</option>
@@ -936,6 +942,25 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         paymentId={viewingPaymentId}
         fileName={viewingFileName}
       />
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/60 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
+            <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
+              Save Changes
+            </h2>
+            <p className="text-black mb-6 text-sm">{successMessage}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

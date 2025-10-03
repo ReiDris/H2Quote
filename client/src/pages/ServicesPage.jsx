@@ -1,12 +1,8 @@
 import React, { useState, useMemo } from "react";
 import Hero from "../components/common/Hero";
 import Footer from "../components/common/Footer";
-import {
-    LucideArrowLeft,
-    LucideArrowRight
-} from "lucide-react";
-import Vincent from '../components/common/Vincent';
-
+import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
+import Vincent from "../components/common/Vincent";
 
 const ServicesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -340,7 +336,7 @@ const ServicesPage = () => {
                 {currentServices.map((service) => (
                   <div
                     key={service.id}
-                    className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+                    className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col"
                   >
                     {/* Service Image */}
                     <div className="h-48 bg-gradient-to-br from-[#004785] to-[#0066b3] flex items-center justify-center">
@@ -371,17 +367,17 @@ const ServicesPage = () => {
                     </div>
 
                     {/* Service Content */}
-                    <div className="p-6">
+                    <div className="p-6 flex flex-col h-full">
                       <h3 className="text-xl font-bold text-[#004785] mb-3">
                         {service.title}
                       </h3>
-                      <p className="text-[#004785] text-sm leading-relaxed mb-4 font-light">
+                      <p className="text-[#004785] text-sm leading-relaxed font-light flex-grow">
                         {service.description}
                       </p>
                       <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
                         Starts at {service.price}
                       </p>
-                      <button className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium">
+                      <button className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto">
                         Request
                       </button>
                     </div>
@@ -428,7 +424,7 @@ const ServicesPage = () => {
                     : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
                 }`}
               >
-                <LucideArrowLeft className="w-4 mr-2"/>
+                <LucideArrowLeft className="w-4 mr-2" />
                 Previous
               </button>
 
@@ -464,7 +460,9 @@ const ServicesPage = () => {
                 {/* Ellipsis if needed */}
                 {totalPages > 5 && currentPage < totalPages - 2 && (
                   <>
-                    <span className="px-2 py-2 text-base text-gray-400">...</span>
+                    <span className="px-2 py-2 text-base text-gray-400">
+                      ...
+                    </span>
                     <button
                       onClick={() => handlePageChange(totalPages)}
                       className="px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
@@ -486,7 +484,7 @@ const ServicesPage = () => {
                 }`}
               >
                 Next
-                <LucideArrowRight className="w-4 ms-2"/>
+                <LucideArrowRight className="w-4 ms-2" />
               </button>
             </section>
           )}

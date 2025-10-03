@@ -127,8 +127,7 @@ const signup = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message:
-        "Registration successful! Your account is pending admin verification. You will receive an email notification once approved.",
+      message: "Your account has been created successfully!\n\nYour account is currently pending admin verification.\n\nYou will receive an email notification once approved.",
       data: {
         userId: userId,
         companyName: companyName,
