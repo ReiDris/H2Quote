@@ -2,8 +2,11 @@ import React, { useState, useMemo, useEffect } from "react";
 import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import ServiceRequestModal from "../../components/customer/ServiceRequestModal";
+import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 
 const Services = () => {
+  const { addService } = useServiceRequest();
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -12,11 +15,9 @@ const Services = () => {
   const [refrigerants, setRefrigerants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedServices, setSelectedServices] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const servicesPerPage = 6;
 
-  // Fetch services, chemicals, and refrigerants from backend
   useEffect(() => {
     fetchCatalogData();
   }, []);
@@ -26,7 +27,6 @@ const Services = () => {
       setLoading(true);
       const token = localStorage.getItem("h2quote_token");
 
-      // Fetch services
       const servicesResponse = await fetch(
         "http://localhost:5000/api/service-requests/services/catalog",
         {
@@ -39,7 +39,6 @@ const Services = () => {
 
       const servicesData = await servicesResponse.json();
 
-      // Fetch chemicals
       let chemicalsData = { success: true, data: [] };
       try {
         const chemicalsResponse = await fetch(
@@ -56,7 +55,6 @@ const Services = () => {
         console.log("Chemicals not accessible:", chemError);
       }
 
-      // Fetch refrigerants
       let refrigerantsData = { success: true, data: [] };
       try {
         const refrigerantsResponse = await fetch(
@@ -74,7 +72,6 @@ const Services = () => {
       }
 
       if (servicesData.success) {
-        // Transform services data for frontend
         const transformedServices = servicesData.data.map((service) => ({
           id: service.service_id,
           title: service.name,
@@ -95,7 +92,6 @@ const Services = () => {
       }
 
       if (chemicalsData.success && chemicalsData.data.length > 0) {
-        // Transform chemicals data for frontend
         const transformedChemicals = chemicalsData.data.map((chemical) => ({
           id: `chem_${chemical.id}`,
           title: chemical.name,
@@ -113,7 +109,6 @@ const Services = () => {
       }
 
       if (refrigerantsData.success && refrigerantsData.data.length > 0) {
-        // Transform refrigerants data for frontend
         const transformedRefrigerants = refrigerantsData.data.map(
           (refrigerant) => ({
             id: `refrig_${refrigerant.id}`,
@@ -139,7 +134,6 @@ const Services = () => {
     }
   };
 
-  // Function to get appropriate icon for service type
   const getServiceIcon = (type) => {
     switch (type) {
       case "Services":
@@ -153,16 +147,13 @@ const Services = () => {
     }
   };
 
-  // Combine all items for display
   const allServices = useMemo(() => {
     return [...services, ...chemicals, ...refrigerants];
   }, [services, chemicals, refrigerants]);
 
-  // Filter services based on search term and active filter
   const filteredServices = useMemo(() => {
     let filtered = allServices;
 
-    // If there's a search term, search across ALL services regardless of filter
     if (searchTerm) {
       filtered = allServices.filter(
         (service) =>
@@ -174,7 +165,6 @@ const Services = () => {
           service.type.toLowerCase().includes(searchTerm.toLowerCase())
       );
     } else {
-      // Only apply type filter when there's no search term
       if (activeFilter !== "All") {
         filtered = filtered.filter((service) => service.type === activeFilter);
       }
@@ -183,7 +173,6 @@ const Services = () => {
     return filtered;
   }, [searchTerm, activeFilter, allServices]);
 
-  // Calculate pagination
   const totalPages = Math.ceil(filteredServices.length / servicesPerPage);
   const startIndex = (currentPage - 1) * servicesPerPage;
   const currentServices = filteredServices.slice(
@@ -191,63 +180,30 @@ const Services = () => {
     startIndex + servicesPerPage
   );
 
-  // Handle search
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset to first page when searching
+    setCurrentPage(1);
   };
 
-  // Handle filter change
   const handleFilterChange = (filterType) => {
     setActiveFilter(filterType);
     setCurrentPage(1);
     setSearchTerm("");
   };
 
-  // Handle pagination
   const handlePageChange = (page) => {
     setCurrentPage(page);
-    // Scroll to the services content area instead of top of page
     const servicesContent = document.getElementById("services-grid");
     if (servicesContent) {
       servicesContent.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
-  // Handle service request
   const handleServiceRequest = (service) => {
-    // Add service to selected services
-    const existingService = selectedServices.find((s) => s.id === service.id);
-
-    if (existingService) {
-      // Increase quantity if already selected
-      setSelectedServices((prev) =>
-        prev.map((s) =>
-          s.id === service.id ? { ...s, quantity: s.quantity + 1 } : s
-        )
-      );
-    } else {
-      // Add new service with complete data including duration info
-      setSelectedServices((prev) => [
-        ...prev,
-        {
-          id: service.id,
-          name: service.title,
-          category: service.category,
-          basePrice: service.basePrice,
-          quantity: 1,
-          type: service.type,
-          // Include duration fields for proper calculation
-          duration: service.duration,
-          estimated_duration_hours: service.estimated_duration_hours,
-        },
-      ]);
-    }
-
+    addService(service);
     setShowModal(true);
   };
 
-  // Loading state
   if (loading) {
     return (
       <CustomerLayout>
@@ -258,7 +214,6 @@ const Services = () => {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <CustomerLayout>
@@ -278,13 +233,10 @@ const Services = () => {
   return (
     <CustomerLayout>
       <div className="space-y-6">
-        {/* Main Content */}
         <div className="py-8 mx-18 lg:mx-30 xl:mx-30" id="services-content">
           <div>
-            {/* Search Bar and Filter Buttons */}
             <section className="mb-8">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                {/* Filter Buttons */}
                 <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
                   {["All", "Services", "Chemicals", "Refrigerants"].map(
                     (filter) => (
@@ -303,7 +255,6 @@ const Services = () => {
                   )}
                 </div>
 
-                {/* Search Bar */}
                 <div className="lg:w-[35%] xl:w-[50%]">
                   <div className="relative">
                     <input
@@ -332,7 +283,6 @@ const Services = () => {
                 </div>
               </div>
 
-              {/* Active Filter Indicator */}
               {searchTerm && (
                 <div className="mt-4 text-center">
                   <p className="text-gray-600">
@@ -350,7 +300,6 @@ const Services = () => {
               )}
             </section>
 
-            {/* Services Grid */}
             <section className="mb-12" id="services-grid">
               {currentServices.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -359,7 +308,6 @@ const Services = () => {
                       key={service.id}
                       className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col"
                     >
-                      {/* Service Image */}
                       <div className="h-48 bg-gradient-to-br from-[#004785] to-[#0066b3] flex items-center justify-center">
                         <div className="text-white text-center p-8">
                           <div className="text-4xl mb-2">
@@ -371,23 +319,23 @@ const Services = () => {
                         </div>
                       </div>
 
-                      {/* Service Content */}
-                    <div className="p-6 flex flex-col h-full">
-                      <h3 className="text-xl font-bold text-[#004785] mb-3">
-                        {service.title}
-                      </h3>
-                      <p className="text-[#004785] text-sm leading-relaxed font-light flex-grow">
-                        {service.description}
-                      </p>
-                      <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
-                        Starts at {service.price}
-                      </p>
-                      <button 
-                      onClick={() => handleServiceRequest(service)}
-                      className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto">
-                        Request
-                      </button>
-                    </div>
+                      <div className="p-6 flex flex-col h-full">
+                        <h3 className="text-xl font-bold text-[#004785] mb-3">
+                          {service.title}
+                        </h3>
+                        <p className="text-[#004785] text-sm leading-relaxed font-light flex-grow">
+                          {service.description}
+                        </p>
+                        <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
+                          Starts at {service.price}
+                        </p>
+                        <button
+                          onClick={() => handleServiceRequest(service)}
+                          className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto"
+                        >
+                          Request
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -418,10 +366,8 @@ const Services = () => {
               )}
             </section>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <section className="flex justify-between items-center w-full">
-                {/* Previous Button */}
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
@@ -435,7 +381,6 @@ const Services = () => {
                   Previous
                 </button>
 
-                {/* Page Numbers - Centered */}
                 <div className="flex items-center space-x-3">
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
                     let pageNum;
@@ -464,7 +409,6 @@ const Services = () => {
                     );
                   })}
 
-                  {/* Ellipsis if needed */}
                   {totalPages > 5 && currentPage < totalPages - 2 && (
                     <>
                       <span className="px-2 py-2 text-base text-gray-400">
@@ -480,7 +424,6 @@ const Services = () => {
                   )}
                 </div>
 
-                {/* Next Button */}
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
@@ -499,13 +442,8 @@ const Services = () => {
         </div>
       </div>
 
-      {/* Service Request Modal */}
       {showModal && (
-        <ServiceRequestModal
-          selectedServices={selectedServices}
-          setSelectedServices={setSelectedServices}
-          onClose={() => setShowModal(false)}
-        />
+        <ServiceRequestModal onClose={() => setShowModal(false)} />
       )}
     </CustomerLayout>
   );

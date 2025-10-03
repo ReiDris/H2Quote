@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { X, Trash2 } from "lucide-react";
+import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 
-const ServiceRequestModal = ({
-  selectedServices = [],
-  setSelectedServices = () => {},
-  onClose,
-}) => {
+const ServiceRequestModal = ({ onClose }) => {
+  const { selectedServices, updateQuantity, removeService, clearServices } = useServiceRequest();
+  
   const [paymentMode, setPaymentMode] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [downpayment, setDownpayment] = useState("");
@@ -19,22 +18,6 @@ const ServiceRequestModal = ({
   // State for success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [requestNumber, setRequestNumber] = useState("");
-
-  const updateQuantity = (serviceId, newQuantity) => {
-    if (newQuantity <= 0) {
-      removeService(serviceId);
-    } else {
-      setSelectedServices(
-        selectedServices.map((s) =>
-          s.id === serviceId ? { ...s, quantity: newQuantity } : s
-        )
-      );
-    }
-  };
-
-  const removeService = (serviceId) => {
-    setSelectedServices(selectedServices.filter((s) => s.id !== serviceId));
-  };
 
   const calculateTotalCost = () => {
     return selectedServices.reduce(
@@ -51,7 +34,6 @@ const ServiceRequestModal = ({
     let totalServiceDuration = 0;
     let hasServices = false;
     let hasChemicalsOrRefrigerants = false;
-    const serviceDurations = [];
 
     selectedServices.forEach((service) => {
       if (service.type === "Services") {
@@ -67,7 +49,6 @@ const ServiceRequestModal = ({
           serviceDuration = service.duration;
         }
 
-        serviceDurations.push(`${service.name}: ${serviceDuration} days`);
         totalServiceDuration += serviceDuration;
       } else if (
         service.type === "Chemicals" ||
@@ -77,24 +58,10 @@ const ServiceRequestModal = ({
       }
     });
 
-    if (serviceDurations.length > 0) {
-      console.log(
-        "Service durations:",
-        serviceDurations,
-        "Total service time:",
-        totalServiceDuration
-      );
-    }
-
     let finalDuration;
 
     if (hasServices) {
       finalDuration = totalServiceDuration;
-      if (hasChemicalsOrRefrigerants) {
-        console.log(
-          "Chemicals/refrigerants will be delivered during service time"
-        );
-      }
     } else if (hasChemicalsOrRefrigerants) {
       return "1 - 2 Days";
     } else {
@@ -104,13 +71,6 @@ const ServiceRequestModal = ({
     const minDuration = finalDuration;
     const maxWithBuffer =
       finalDuration + Math.min(2, Math.ceil(finalDuration * 0.2));
-
-    console.log(
-      "Final duration calculation:",
-      finalDuration,
-      "with buffer:",
-      `${minDuration} - ${maxWithBuffer} Days`
-    );
 
     return `${minDuration} - ${maxWithBuffer} Days`;
   }, [selectedServices]);
@@ -128,29 +88,11 @@ const ServiceRequestModal = ({
 
     try {
       const token = localStorage.getItem("h2quote_token");
-
-      console.log("=== DEBUG: Selected Services ===");
-      selectedServices.forEach((service, index) => {
-        console.log(`Service ${index}:`, {
-          id: service.id,
-          type: typeof service.id,
-          name: service.name,
-          category: service.category,
-          quantity: service.quantity,
-          basePrice: service.basePrice,
-          fullService: service,
-        });
-      });
-
+      
       const transformedServices = selectedServices.map((service) => ({
         id: service.id,
         quantity: service.quantity,
       }));
-
-      console.log("=== DEBUG: Transformed Services ===");
-      transformedServices.forEach((service, index) => {
-        console.log(`Transformed ${index}:`, service);
-      });
 
       const requestData = {
         selectedServices: transformedServices,
@@ -162,12 +104,6 @@ const ServiceRequestModal = ({
         preferredSchedule,
         specialRequirements,
       };
-
-      console.log("=== DEBUG: Final Request Data ===");
-      console.log(
-        "Sending request data:",
-        JSON.stringify(requestData, null, 2)
-      );
 
       const response = await fetch(
         "http://localhost:5000/api/service-requests",
@@ -187,8 +123,7 @@ const ServiceRequestModal = ({
         setRequestNumber(data.data.requestNumber);
         setShowSuccessModal(true);
 
-        // Reset form
-        setSelectedServices([]);
+        clearServices();
         setPaymentMode("");
         setPaymentTerms("");
         setDownpayment("");
@@ -216,7 +151,6 @@ const ServiceRequestModal = ({
     <>
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
         <div className="bg-white rounded-4xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-10">
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-300 pb-3">
             <h2 className="text-3xl font-semibold text-[#3C61A8]">
               Request Form
@@ -230,23 +164,19 @@ const ServiceRequestModal = ({
             </button>
           </div>
 
-          {/* Content */}
           <div className="flex-1 overflow-y-auto mt-5 pr-4 mr-2">
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Error Message */}
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">
                   {error}
                 </div>
               )}
 
-              {/* Request Service Section */}
               <div>
                 <h3 className="text-lg font-semibold text-[#004785] mb-4">
                   Request Service
                 </h3>
 
-                {/* Selected Services Display */}
                 {selectedServices.length > 0 ? (
                   <div className="space-y-3">
                     {selectedServices.map((service) => (
@@ -304,7 +234,6 @@ const ServiceRequestModal = ({
                 )}
               </div>
 
-              {/* Service Details */}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-black mb-1">
@@ -350,7 +279,6 @@ const ServiceRequestModal = ({
                 </div>
               </div>
 
-              {/* Estimated Duration and Cost */}
               <div className="grid grid-cols-1 gap-4 px-4 border-b border-gray-300 pb-3">
                 <div className="flex justify-between mt-2">
                   <label className="text-base font-semibold text-[#004785]">
@@ -370,7 +298,6 @@ const ServiceRequestModal = ({
                 </div>
               </div>
 
-              {/* Payment Section */}
               <div className="border-b border-gray-300 pb-3">
                 <h3 className="text-lg font-semibold text-[#004785] mb-4 px-4">
                   Payment
@@ -435,7 +362,6 @@ const ServiceRequestModal = ({
                 </div>
               </div>
 
-              {/* Remarks */}
               <div>
                 <label className="text-lg font-semibold text-[#004785] mb-4 px-4">
                   Remarks <span className="font-light text-sm">(Optional)</span>
@@ -452,7 +378,6 @@ const ServiceRequestModal = ({
                 </div>
               </div>
 
-              {/* Submit Buttons */}
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -482,7 +407,6 @@ const ServiceRequestModal = ({
         </div>
       </div>
 
-      {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
