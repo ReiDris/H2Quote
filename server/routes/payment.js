@@ -3,32 +3,24 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const paymentController = require('../controllers/paymentController');
 
-// Apply authentication to all routes
+const requireAdminOrStaff = (req, res, next) => {
+  if (!['admin', 'staff'].includes(req.user.userType)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin or staff access required'
+    });
+  }
+  next();
+};
+
 router.use(authenticateToken);
 
-// Customer routes - upload and delete payment proof
-router.post('/:paymentId/upload-proof', 
-  (req, res, next) => {
-    paymentController.paymentUpload(req, res, (err) => {
-      if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message
-        });
-      }
-      next();
-    });
-  },
-  paymentController.uploadPaymentProof
-);
-
+// Customer routes
+router.post('/:paymentId/upload-proof', paymentController.paymentUpload, paymentController.uploadPaymentProof);
 router.delete('/:paymentId/proof', paymentController.deletePaymentProof);
 
-// View payment proof (accessible by customer who owns it, or admin/staff)
-router.get('/:paymentId/proof', paymentController.viewPaymentProof);
+// Admin/Staff routes
+router.get('/:paymentId/proof', requireAdminOrStaff, paymentController.viewPaymentProof);
+router.put('/:paymentId/status', requireAdminOrStaff, paymentController.updatePaymentStatus);  // ✅ New route
 
 module.exports = router;
-
-// Add to server.js:
-// const paymentRoutes = require('./routes/payments');
-// app.use('/api/payments', paymentRoutes);

@@ -1,5 +1,6 @@
 const { createClient } = require("@supabase/supabase-js");
 const pool = require("../config/database");
+const { createNotification } = require('./notificationController');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -123,6 +124,7 @@ const recreatePayments = async (requestId) => {
     client.release();
   }
 };
+
 
 const createServiceRequest = async (req, res) => {
   const client = await pool.connect();
@@ -262,7 +264,7 @@ const createServiceRequest = async (req, res) => {
     );
     const initialStatusId = statusResult.rows[0]?.status_id || 1;
 
-    let downpaymentPercentage = null; // Change from 0 to null
+    let downpaymentPercentage = null;
     if (downpayment && downpayment.includes("%")) {
       downpaymentPercentage = parseFloat(downpayment.replace("%", ""));
     }
@@ -347,11 +349,41 @@ const createServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
+    // ✅ Create default payments
     try {
       await createDefaultPayments(requestId);
       console.log("Default payments created successfully");
     } catch (paymentError) {
       console.error("Failed to create default payments:", paymentError);
+    }
+
+    // ✅ CREATE NOTIFICATIONS FOR ADMIN AND STAFF
+    try {
+      // Get all admin and staff users
+      const staffQuery = `
+        SELECT user_id, email, first_name, last_name 
+        FROM users 
+        WHERE user_type IN ('admin', 'staff') AND status = 'Active'
+      `;
+      const staffResult = await client.query(staffQuery);
+
+      console.log(`Creating notifications for ${staffResult.rows.length} admin/staff users`);
+
+      // Create notification for each admin/staff
+      for (const staff of staffResult.rows) {
+        await createNotification(
+          staff.user_id,
+          'Service Request',
+          'New Service Request',
+          `A new service request #${requestNumber} has been submitted by ${req.user.email}. Total cost: ₱${totalCost.toLocaleString()}`,
+          staff.email
+        );
+      }
+
+      console.log('Notifications created successfully for admin/staff');
+    } catch (notifError) {
+      console.error('Failed to create notifications:', notifError);
+      // Don't fail the request if notifications fail
     }
 
     console.log("Request created successfully:", {
@@ -491,7 +523,8 @@ const getRequestDetails = async (req, res) => {
     TO_CHAR(sr.request_acknowledged_date, 'Mon DD, YYYY') as request_acknowledged_date,
     TO_CHAR(sr.actual_completion_date, 'YYYY-MM-DD') as actual_completion_date,
     u.email as email,
-    u.phone as phone
+    u.phone as phone,
+    sr.discount_percentage
   FROM service_requests sr
   JOIN request_statuses rs ON sr.status_id = rs.status_id
   JOIN users u ON sr.requested_by_user_id = u.user_id
@@ -511,7 +544,6 @@ const getRequestDetails = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Get services with WARRANTY information
     const servicesQuery = `
       SELECT 
         sri.*, 
@@ -524,8 +556,8 @@ const getRequestDetails = async (req, res) => {
         s.service_name as service,
         COALESCE(sri.notes, '-') as remarks,
         sri.quantity,
-        CONCAT('₱', sri.unit_price::text) as unit_price,
-        CONCAT('₱', sri.line_total::text) as total_price,
+        sri.unit_price,
+        sri.line_total,
         'service' as item_type,
         COALESCE(sri.warranty_months, 6) as warranty_months,
         TO_CHAR(sri.warranty_start_date, 'YYYY-MM-DD') as warranty_start_date,
@@ -542,7 +574,6 @@ const getRequestDetails = async (req, res) => {
       ORDER BY sri.item_id
     `;
 
-    // Get chemicals (NO warranty fields)
     const chemicalsQuery = `
       SELECT 
         src.*,
@@ -552,8 +583,8 @@ const getRequestDetails = async (req, res) => {
         c.chemical_name as service,
         COALESCE(src.notes, '-') as remarks,
         src.quantity,
-        CONCAT('₱', src.unit_price::text) as unit_price,
-        CONCAT('₱', src.line_total::text) as total_price,
+        src.unit_price,
+        src.line_total,
         'chemical' as item_type,
         src.item_id
       FROM service_request_chemicals src
@@ -562,7 +593,6 @@ const getRequestDetails = async (req, res) => {
       ORDER BY src.item_id
     `;
 
-    // Get refrigerants (NO warranty fields)
     const refrigerantsQuery = `
       SELECT 
         srr.*,
@@ -572,8 +602,8 @@ const getRequestDetails = async (req, res) => {
         r.refrigerant_name as service,
         COALESCE(srr.notes, '-') as remarks,
         srr.quantity,
-        CONCAT('₱', srr.unit_price::text) as unit_price,
-        CONCAT('₱', srr.line_total::text) as total_price,
+        srr.unit_price,
+        srr.line_total,
         'refrigerant' as item_type,
         srr.item_id
       FROM service_request_refrigerants srr
@@ -582,7 +612,6 @@ const getRequestDetails = async (req, res) => {
       ORDER BY srr.item_id
     `;
 
-    // Execute all queries
     const [servicesResult, chemicalsResult, refrigerantsResult] =
       await Promise.all([
         pool.query(servicesQuery, [requestId]),
@@ -590,19 +619,36 @@ const getRequestDetails = async (req, res) => {
         pool.query(refrigerantsQuery, [requestId]),
       ]);
 
-    // Combine all items
+    // Calculate subtotal from all items
+    const subtotal = [
+      ...servicesResult.rows,
+      ...chemicalsResult.rows,
+      ...refrigerantsResult.rows,
+    ].reduce((sum, item) => {
+      return sum + parseFloat(item.line_total || 0);
+    }, 0);
+
+    // Calculate discount
+    const discountPercentage = request.discount_percentage || 0;
+    const discountAmount = (subtotal * discountPercentage) / 100;
+    const totalCostAfterDiscount = subtotal - discountAmount;
+
+    // Format items for display
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
       ...refrigerantsResult.rows,
-    ];
+    ].map((item) => ({
+      ...item,
+      unit_price: `₱${parseFloat(item.unit_price).toLocaleString()}`,
+      total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
+    }));
 
-    // Get payment history
     const paymentQuery = `
       SELECT 
         payment_id,
         payment_phase as phase,
-        CONCAT(ROUND((amount::numeric / NULLIF(sr.estimated_cost, 0) * 100), 0), '%') as percentage,
+        CONCAT(ROUND((amount::numeric / NULLIF($1, 0) * 100), 0), '%') as percentage,
         CONCAT('₱', amount::text) as amount,
         COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
         CASE 
@@ -611,22 +657,23 @@ const getRequestDetails = async (req, res) => {
         END as "paidOn",
         status as "paymentStatus"
       FROM payments p
-      JOIN service_requests sr ON p.request_id = sr.request_id
-      WHERE p.request_id = $1
+      WHERE p.request_id = $2
       ORDER BY payment_id
     `;
-    const paymentResult = await pool.query(paymentQuery, [requestId]);
+    const paymentResult = await pool.query(paymentQuery, [
+      totalCostAfterDiscount,
+      requestId,
+    ]);
 
     let paymentHistory = paymentResult.rows;
 
-    // If no payments exist, create default breakdown
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
       const downpaymentAmount = Math.round(
-        (request.estimated_cost * downpaymentPercent) / 100
+        (totalCostAfterDiscount * downpaymentPercent) / 100
       );
-      const remainingAmount = request.estimated_cost - downpaymentAmount;
+      const remainingAmount = totalCostAfterDiscount - downpaymentAmount;
 
       paymentHistory = [
         {
@@ -648,8 +695,6 @@ const getRequestDetails = async (req, res) => {
           paymentStatus: "Pending",
         },
       ];
-    } else {
-      paymentHistory = paymentResult.rows;
     }
 
     res.json({
@@ -658,17 +703,10 @@ const getRequestDetails = async (req, res) => {
         request: {
           ...request,
           id: request.request_number,
-          totalCost: `₱ ${request.estimated_cost?.toLocaleString() || "0"}`,
-          discountPercentage: request.discount_percentage || 0,
-          discountedCost: request.discount_percentage
-            ? `₱ ${(
-                (request.estimated_cost * (100 - request.discount_percentage)) /
-                100
-              ).toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}`
-            : null,
+          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`,
           paymentHistory: paymentHistory,
         },
         items: allItems,
@@ -1496,6 +1534,10 @@ const updateRequestStatus = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType;
 
+    // ✅ Log for debugging
+    console.log('Update request:', requestId);
+    console.log('New service status:', serviceStatus);
+
     let whereClause = "request_id = $1";
     let queryParams = [requestId];
 
@@ -1504,8 +1546,12 @@ const updateRequestStatus = async (req, res) => {
       queryParams.push(userId);
     }
 
+    // ✅ Modified to get current status name
     const requestCheck = await client.query(
-      `SELECT request_id, status_id FROM service_requests WHERE ${whereClause}`,
+      `SELECT sr.request_id, sr.status_id, rs.status_name as current_status_name
+       FROM service_requests sr
+       JOIN request_statuses rs ON sr.status_id = rs.status_id
+       WHERE ${whereClause}`,
       queryParams
     );
 
@@ -1517,7 +1563,11 @@ const updateRequestStatus = async (req, res) => {
     }
 
     const currentRequest = requestCheck.rows[0];
+    const currentStatusName = currentRequest.current_status_name;
 
+    console.log('Current status in DB:', currentStatusName);
+
+    // ✅ Status mapping and order
     const statusMapping = {
       Pending: "New",
       Assigned: "Under Review",
@@ -1527,10 +1577,48 @@ const updateRequestStatus = async (req, res) => {
       Completed: "Completed",
     };
 
-    const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+    const statusOrder = [
+      "New",                // 0 - Pending
+      "Under Review",       // 1 - Assigned
+      "Quote Prepared",     // 2 - Processing
+      "Quote Approved",     // 3 - Approval
+      "In Progress",        // 4 - Ongoing
+      "Completed"           // 5 - Completed
+    ];
 
     let newStatusId = currentRequest.status_id;
+    
+    // ✅ Only validate if serviceStatus is being changed
     if (serviceStatus) {
+      const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+      console.log('Mapped backend status:', backendStatus);
+
+      // ✅ Check if trying to move backward BEFORE querying database
+      const currentIndex = statusOrder.indexOf(currentStatusName);
+      const newIndex = statusOrder.indexOf(backendStatus);
+      
+      console.log('Current index:', currentIndex, 'New index:', newIndex);
+      
+      if (currentIndex === -1) {
+        console.error('Current status not found in order:', currentStatusName);
+      }
+      
+      if (newIndex === -1) {
+        console.error('New status not found in order:', backendStatus);
+      }
+
+      // ✅ Prevent backward movement
+      if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Cannot move backward from "${currentStatusName}" to "${backendStatus}". Status can only progress forward.`,
+          currentStatus: currentStatusName,
+          attemptedStatus: backendStatus
+        });
+      }
+
+      // Get new status ID
       const statusResult = await client.query(
         "SELECT status_id FROM request_statuses WHERE status_name = $1",
         [backendStatus]
@@ -1538,6 +1626,12 @@ const updateRequestStatus = async (req, res) => {
 
       if (statusResult.rows.length > 0) {
         newStatusId = statusResult.rows[0].status_id;
+      } else {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Invalid status: ${backendStatus}`,
+        });
       }
     }
 
@@ -1655,6 +1749,7 @@ const updateRequestStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update service request",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     client.release();
@@ -2327,6 +2422,7 @@ const updateItemWarranty = async (req, res) => {
   }
 };
 
+
 const updateServiceRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2341,11 +2437,37 @@ const updateServiceRequest = async (req, res) => {
       serviceStartDate,
       services,
       paymentBreakdown,
-      discount, // ✅ Added
+      discount,
     } = req.body;
 
     console.log("Updating request:", requestId);
     console.log("Payload:", req.body);
+
+    // Get current status BEFORE making changes
+    const currentRequestQuery = `
+      SELECT sr.assigned_to_staff_id, sr.actual_completion_date, 
+             sr.request_acknowledged_date, rs.status_name as current_status_name,
+             sr.requested_by_user_id, sr.request_number,
+             u.email as customer_email, u.first_name as customer_first_name
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      WHERE sr.request_id = $1
+    `;
+    const currentRequestResult = await client.query(currentRequestQuery, [requestId]);
+    
+    if (currentRequestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found"
+      });
+    }
+    
+    const currentRequest = currentRequestResult.rows[0];
+    const currentStatusName = currentRequest.current_status_name;
+
+    console.log('Current status in DB:', currentStatusName);
 
     const statusMapping = {
       Pending: "New",
@@ -2356,7 +2478,45 @@ const updateServiceRequest = async (req, res) => {
       Completed: "Completed",
     };
 
+    // Define status order
+    const statusOrder = [
+      "New",
+      "Under Review",
+      "Quote Prepared",
+      "Quote Approved",
+      "In Progress",
+      "Completed"
+    ];
+
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+    console.log('New backend status:', backendStatus);
+
+    // Validate backward movement BEFORE updating
+    if (serviceStatus && backendStatus !== currentStatusName) {
+      const currentIndex = statusOrder.indexOf(currentStatusName);
+      const newIndex = statusOrder.indexOf(backendStatus);
+      
+      console.log('Current index:', currentIndex, 'New index:', newIndex);
+
+      if (currentIndex === -1) {
+        console.error('Current status not found in order:', currentStatusName);
+      }
+      
+      if (newIndex === -1) {
+        console.error('New status not found in order:', backendStatus);
+      }
+
+      // Prevent backward movement
+      if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Cannot move backward from "${currentStatusName}" to "${backendStatus}". Status can only progress forward.`,
+          currentStatus: currentStatusName,
+          attemptedStatus: backendStatus
+        });
+      }
+    }
 
     // Get the status_id for the service status
     const statusResult = await client.query(
@@ -2365,21 +2525,14 @@ const updateServiceRequest = async (req, res) => {
     );
 
     if (statusResult.rows.length === 0) {
-      throw new Error(`Invalid status: ${serviceStatus}`);
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status: ${serviceStatus}`
+      });
     }
 
     const statusId = statusResult.rows[0].status_id;
-
-    // Get current request data to check previous assigned staff
-    const currentRequestQuery = `
-      SELECT assigned_to_staff_id, actual_completion_date, request_acknowledged_date
-      FROM service_requests 
-      WHERE request_id = $1
-    `;
-    const currentRequestResult = await client.query(currentRequestQuery, [
-      requestId,
-    ]);
-    const currentRequest = currentRequestResult.rows[0];
 
     // Get assigned staff user_id if not "Not assigned"
     let assignedStaffId = null;
@@ -2393,35 +2546,27 @@ const updateServiceRequest = async (req, res) => {
       if (staffResult.rows.length > 0) {
         assignedStaffId = staffResult.rows[0].user_id;
 
-        // If staff is being assigned for the first time, set request_acknowledged_date
         if (!currentRequest.assigned_to_staff_id && assignedStaffId) {
           requestAcknowledgedDate = new Date().toISOString().split("T")[0];
-          console.log(
-            `Request acknowledged date set: ${requestAcknowledgedDate}`
-          );
+          console.log(`Request acknowledged date set: ${requestAcknowledgedDate}`);
         }
       }
     }
 
     // Auto-set actual_completion_date when status changes to Completed
     let actualCompletionDate = currentRequest.actual_completion_date;
-    if (
-      backendStatus === "Completed" &&
-      !currentRequest.actual_completion_date
-    ) {
+    if (backendStatus === "Completed" && !currentRequest.actual_completion_date) {
       actualCompletionDate = new Date().toISOString().split("T")[0];
-      console.log(
-        `Service end date (actual completion) set: ${actualCompletionDate}`
-      );
+      console.log(`Service end date (actual completion) set: ${actualCompletionDate}`);
     }
 
-    // ✅ Parse discount percentage
+    // Parse discount percentage
     let discountPercentage = 0;
     if (discount && discount !== "No Discount") {
       discountPercentage = parseFloat(discount.replace("%", ""));
     }
 
-    // ✅ Updated query to include discount_percentage
+    // Update service request
     const updateRequestQuery = `
       UPDATE service_requests 
       SET 
@@ -2443,7 +2588,7 @@ const updateServiceRequest = async (req, res) => {
       serviceStartDate,
       requestAcknowledgedDate,
       actualCompletionDate,
-      discountPercentage, // ✅ Added
+      discountPercentage,
       requestId,
     ]);
 
@@ -2460,46 +2605,27 @@ const updateServiceRequest = async (req, res) => {
       const warrantyEndDate = new Date();
       warrantyEndDate.setMonth(warrantyEndDate.getMonth() + warrantyMonths);
 
-      // Update all service items with warranty
       await client.query(
-        `
-        UPDATE service_request_items
-        SET 
-          warranty_months = $1,
-          warranty_start_date = $2,
-          warranty_end_date = $3
-        WHERE request_id = $4
-      `,
-        [
-          warrantyMonths,
-          warrantyStartDate,
-          warrantyEndDate.toISOString().split("T")[0],
-          requestId,
-        ]
+        `UPDATE service_request_items
+        SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
+        WHERE request_id = $4`,
+        [warrantyMonths, warrantyStartDate, warrantyEndDate.toISOString().split("T")[0], requestId]
       );
 
-      // Also update the main service_requests table
       await client.query(
-        `
-        UPDATE service_requests
-        SET 
-          warranty_start_date = $1,
-          warranty_months = $2
-        WHERE request_id = $3
-      `,
+        `UPDATE service_requests
+        SET warranty_start_date = $1, warranty_months = $2
+        WHERE request_id = $3`,
         [warrantyStartDate, warrantyMonths, requestId]
       );
 
-      console.log(
-        `Warranty automatically set for request ${requestId}: ${warrantyStartDate} for ${warrantyMonths} months`
-      );
+      console.log(`Warranty automatically set for request ${requestId}: ${warrantyStartDate} for ${warrantyMonths} months`);
     }
 
     // Update warranty information for each service item (if manually provided)
     if (services && services.length > 0) {
       for (const service of services) {
         if (service.itemType === "service" && service.service_id) {
-          // Only update if warranty data is explicitly provided
           if (service.warranty_start_date) {
             const months = service.warranty_months || 6;
             const endDate = new Date(service.warranty_start_date);
@@ -2507,26 +2633,13 @@ const updateServiceRequest = async (req, res) => {
             const warrantyEndDate = endDate.toISOString().split("T")[0];
 
             await client.query(
-              `
-              UPDATE service_request_items
-              SET 
-                warranty_months = $1, 
-                warranty_start_date = $2,
-                warranty_end_date = $3
-              WHERE request_id = $4 AND service_id = $5
-            `,
-              [
-                months,
-                service.warranty_start_date,
-                warrantyEndDate,
-                requestId,
-                service.service_id,
-              ]
+              `UPDATE service_request_items
+              SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
+              WHERE request_id = $4 AND service_id = $5`,
+              [months, service.warranty_start_date, warrantyEndDate, requestId, service.service_id]
             );
 
-            console.log(
-              `Manual warranty set for service ${service.service_id}: ${service.warranty_start_date} for ${months} months`
-            );
+            console.log(`Manual warranty set for service ${service.service_id}: ${service.warranty_start_date} for ${months} months`);
           }
         }
       }
@@ -2536,22 +2649,50 @@ const updateServiceRequest = async (req, res) => {
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
         await client.query(
-          `
-          UPDATE payments
+          `UPDATE payments
           SET status = $1,
-              paid_on = CASE 
-                WHEN $1 = 'Paid' THEN NOW() 
-                ELSE paid_on 
-          END,
+              paid_on = CASE WHEN $1 = 'Paid' THEN NOW() ELSE paid_on END,
               updated_at = NOW()
-          WHERE request_id = $2 AND payment_phase = $3
-        `,
+          WHERE request_id = $2 AND payment_phase = $3`,
           [payment.paymentStatus, requestId, payment.phase]
         );
       }
     }
 
     await client.query("COMMIT");
+
+    // ✅ CREATE NOTIFICATION FOR CUSTOMER ABOUT STATUS CHANGE
+    try {
+      // Only send notification if status actually changed
+      if (backendStatus !== currentStatusName) {
+        await createNotification(
+          currentRequest.requested_by_user_id,
+          'Service Request',
+          'Service Request Status Updated',
+          `Your service request #${currentRequest.request_number} status has been updated to ${serviceStatus}. ${assignedStaff && assignedStaff !== 'Not assigned' ? `Assigned to: ${assignedStaff}` : ''}`,
+          currentRequest.customer_email
+        );
+        console.log(`Notification sent to customer ${currentRequest.customer_email}`);
+      }
+
+      // Send notification if payment status changed
+      if (paymentStatus && paymentBreakdown && paymentBreakdown.length > 0) {
+        const paidPayments = paymentBreakdown.filter(p => p.paymentStatus === 'Paid');
+        if (paidPayments.length > 0) {
+          await createNotification(
+            currentRequest.requested_by_user_id,
+            'Payment',
+            'Payment Status Updated',
+            `Payment status updated for service request #${currentRequest.request_number}`,
+            currentRequest.customer_email
+          );
+          console.log('Payment notification sent to customer');
+        }
+      }
+    } catch (notifError) {
+      console.error('Failed to create customer notification:', notifError);
+      // Don't fail the update if notification fails
+    }
 
     res.json({
       success: true,

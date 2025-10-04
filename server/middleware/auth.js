@@ -8,22 +8,30 @@ const supabase = createClient(
 
 const authenticateToken = async (req, res, next) => {
   try {
+    console.log('🔐 Auth middleware called for:', req.method, req.path);
+    
     const authHeader = req.headers['authorization'];
+    console.log('📋 Auth header:', authHeader ? 'exists' : 'missing');
+    
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
+      console.log('❌ No token provided');
       return res.status(401).json({
         success: false,
         message: 'Access token required'
       });
     }
 
+    console.log('🔓 Token found, verifying...');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('✅ Token decoded:', { email: decoded.email, userId: decoded.userId });
 
     const { data: userResults, error } = await supabase
       .rpc('get_user_with_company', { user_email: decoded.email });
 
     if (error || !userResults || userResults.length === 0) {
+      console.log('❌ User not found in database:', error);
       return res.status(403).json({
         success: false,
         message: 'Invalid token'
@@ -31,8 +39,10 @@ const authenticateToken = async (req, res, next) => {
     }
 
     const user = userResults[0];
+    console.log('👤 User found:', { id: user.user_id, email: user.email, status: user.user_status });
 
     if (user.user_status !== 'Active') {
+      console.log('❌ User account not active');
       return res.status(403).json({
         success: false,
         message: 'Account is no longer active'
@@ -47,8 +57,11 @@ const authenticateToken = async (req, res, next) => {
       permissions: user.permissions
     };
 
+    console.log('✅ Authentication successful for user:', user.user_id);
     next();
   } catch (error) {
+    console.error('❌ Auth error:', error.name, error.message);
+    
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,

@@ -1,68 +1,110 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Bell, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
-import { useServiceRequest } from "../../contexts/ServiceRequestContext"; // ADD THIS
+import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 import ServiceRequestModal from "../customer/ServiceRequestModal";
 
 const Header = () => {
   const { user } = useAuth();
-  const { selectedServices } = useServiceRequest(); // ADD THIS
+  const { selectedServices } = useServiceRequest();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isServiceRequestModalOpen, setIsServiceRequestModalOpen] =
     useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
   const notificationRef = useRef(null);
 
-  // Mock notification data
-  const notifications = [
-    {
-      id: 1,
-      type: "quotation",
-      title: "New Quotation Request",
-      message: "A client has submitted a new quotation request.",
-      time: "2 minutes ago",
-      isRead: false,
-    },
-    {
-      id: 2,
-      type: "approval",
-      title: "Quotation Approved",
-      message: "A quotation has been approved by the client.",
-      time: "1 hour ago",
-      isRead: false,
-    },
-    {
-      id: 3,
-      type: "payment",
-      title: "Payment Received",
-      message: "A client has completed their payment.",
-      time: "3 hours ago",
-      isRead: true,
-    },
-    {
-      id: 4,
-      type: "overdue",
-      title: "Overdue Payment",
-      message: "Notify the client for settlement.",
-      time: "1 day ago",
-      isRead: true,
-    },
-    {
-      id: 5,
-      type: "pending",
-      title: "Pending Payment",
-      message: "A client has not yet settled the payment.",
-      time: "2 days ago",
-      isRead: true,
-    },
-  ];
+  // Fetch notifications from API
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(
+        `http://localhost:5000/api/notifications?unreadOnly=${activeFilter === 'unread'}`,
+        {
+          method: 'GET',
+          credentials: 'include',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+      const data = await response.json();
 
-  const filteredNotifications =
-    activeFilter === "all"
-      ? notifications
-      : notifications.filter((n) => !n.isRead);
+      if (data.success) {
+        setNotifications(data.data.notifications);
+        setUnreadCount(data.data.unreadCount);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mark notification as read
+  const markAsRead = async (notificationId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(
+        `http://localhost:5000/api/notifications/${notificationId}/read`,
+        {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      fetchNotifications();
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Mark all as read
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(
+        'http://localhost:5000/api/notifications/mark-all-read',
+        {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      fetchNotifications();
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
+  };
+
+  const getTimeAgo = (timestamp) => {
+    const now = new Date();
+    const notifTime = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - notifTime) / 1000);
+
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    return `${Math.floor(diffInSeconds / 86400)} days ago`;
+  };
+
+  const handleNotificationClick = (notification) => {
+    if (notification.is_unread) {
+      markAsRead(notification.notification_id);
+    }
+  };
 
   const toggleNotifications = () => {
     setIsNotificationOpen(!isNotificationOpen);
@@ -84,6 +126,24 @@ const Header = () => {
     window.open("/", "_blank");
   };
 
+  // Fetch notifications on mount and filter change
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user, activeFilter]);
+
+  // Poll for new notifications every 30 seconds
+  useEffect(() => {
+    if (user) {
+      const interval = setInterval(() => {
+        fetchNotifications();
+      }, 30000);
+
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -103,7 +163,6 @@ const Header = () => {
   return (
     <>
       <div className="bg-[#004785] text-white px-6 pt-3 pb-3 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
-        {/* Left side - Logo */}
         <div className="flex items-center">
           <img
             src="/images/logos/TRISHKAYE LOGO SVG.svg"
@@ -113,9 +172,7 @@ const Header = () => {
           />
         </div>
 
-        {/* Right side - Actions */}
         <div className="flex items-center gap-3">
-          {/* Service Request Button - Only for customers */}
           {user?.role === "customer" && (
             <button
               onClick={openServiceRequestModal}
@@ -123,7 +180,6 @@ const Header = () => {
               title="Request Service"
             >
               <ShoppingCart size={25} />
-              {/* Cart Badge - ADDED THIS */}
               {selectedServices.length > 0 && (
                 <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                   {selectedServices.length}
@@ -132,14 +188,12 @@ const Header = () => {
             </button>
           )}
 
-          {/* Notifications */}
           <div className="flex items-center relative" ref={notificationRef}>
             <button
               onClick={toggleNotifications}
               className="relative p-2 hover:bg-blue-700 rounded-lg transition-colors duration-200 cursor-pointer"
             >
               <Bell size={25} />
-              {/* Notification badge */}
               {unreadCount > 0 && (
                 <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                   {unreadCount}
@@ -147,10 +201,8 @@ const Header = () => {
               )}
             </button>
 
-            {/* Notification Dropdown */}
             {isNotificationOpen && (
               <div className="absolute top-full right-0 mt-5 w-120 bg-[#F1F4F5] rounded-lg shadow-lg border border-gray-200 z-50">
-                {/* Header */}
                 <div className="pt-4 px-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold text-[#004785]">
@@ -181,18 +233,31 @@ const Header = () => {
                   </div>
                 </div>
 
-                {/* New Section */}
                 <div className="p-4 border-b border-gray-200 pb-10">
-                  <h4 className="text-sm font-medium text-black mb-3">New</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-black">New</h4>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllAsRead}
+                        className="text-xs text-[#004785] hover:underline"
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
 
-                  {/* Notification Items */}
                   <div className="space-y-3">
-                    {filteredNotifications.length > 0 ? (
-                      filteredNotifications.slice(0, 5).map((notification) => (
+                    {loading ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p className="text-sm">Loading...</p>
+                      </div>
+                    ) : notifications.length > 0 ? (
+                      notifications.slice(0, 5).map((notification) => (
                         <div
-                          key={notification.id}
+                          key={notification.notification_id}
+                          onClick={() => handleNotificationClick(notification)}
                           className={`p-5 rounded-3xl cursor-pointer transition-colors ${
-                            !notification.isRead
+                            notification.is_unread
                               ? "bg-blue-100 hover:bg-blue-200"
                               : "bg-white hover:bg-gray-50"
                           }`}
@@ -202,22 +267,22 @@ const Header = () => {
                               <div className="flex items-start justify-between">
                                 <h5
                                   className={`text-sm font-medium ${
-                                    !notification.isRead
+                                    notification.is_unread
                                       ? "text-gray-900"
                                       : "text-gray-700"
                                   }`}
                                 >
-                                  {notification.title}
+                                  {notification.subject}
                                 </h5>
-                                {!notification.isRead && (
+                                {notification.is_unread && (
                                   <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1"></div>
                                 )}
                               </div>
                               <p className="text-xs text-gray-600 mt-1">
-                                {notification.message}
+                                {notification.message_body}
                               </p>
                               <p className="text-xs text-gray-500 mt-1">
-                                {notification.time}
+                                {getTimeAgo(notification.created_at)}
                               </p>
                             </div>
                           </div>
@@ -239,7 +304,6 @@ const Header = () => {
         </div>
       </div>
 
-      {/* Service Request Modal */}
       {isServiceRequestModalOpen && (
         <ServiceRequestModal onClose={closeServiceRequestModal} />
       )}
