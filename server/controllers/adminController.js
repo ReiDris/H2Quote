@@ -195,34 +195,6 @@ const rejectUser = async (req, res) => {
 const serveVerificationFile = async (req, res) => {
   try {
     const { userId } = req.params;
-    
-    // Get token from query parameter for iframe access
-    const token = req.query.token || req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Access token required'
-      });
-    }
-
-    // Verify the token
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
-      // Check if user is admin
-      if (decoded.userType !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          message: 'Admin access required'
-        });
-      }
-    } catch (err) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token'
-      });
-    }
 
     const { data: user, error } = await supabase
       .from('users')
@@ -238,28 +210,22 @@ const serveVerificationFile = async (req, res) => {
     }
     
     const filePath = user.verification_file_path;
-    const originalName = user.verification_file_original_name;
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
+    // Get signed URL from Supabase Storage (valid for 1 hour)
+    const { data: signedUrlData, error: urlError } = await supabase.storage
+      .from('verification-documents')
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+    if (urlError) {
+      console.error('Error getting signed URL:', urlError);
+      return res.status(500).json({
         success: false,
-        message: 'File not found on server'
+        message: 'Failed to retrieve file'
       });
     }
 
-    // Set appropriate headers for inline viewing
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.pdf') {
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
-    } else if (['.jpg', '.jpeg', '.png'].includes(ext)) {
-      res.setHeader('Content-Type', `image/${ext.substring(1)}`);
-      res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
-    } else {
-      res.setHeader('Content-Disposition', `attachment; filename="${originalName}"`);
-    }
-    
-    res.sendFile(path.resolve(filePath));
+    // Redirect to signed URL
+    res.redirect(signedUrlData.signedUrl);
     
   } catch (error) {
     console.error('Error serving file:', error);

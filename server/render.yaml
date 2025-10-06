@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: h2quote-backend
+    env: node
+    region: singapore  # Choose closest to Philippines
+    plan: free
+    rootDir: ./  # Since render.yaml is in server/ folder
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true  # Render will generate a secure value
+      - key: SUPABASE_URL
+        sync: false  # You'll add this manually
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_DB_HOST
+        sync: false
+      - key: SUPABASE_DB_PORT
+        value: 5432
+      - key: SUPABASE_DB_NAME
+        value: postgres
+      - key: SUPABASE_DB_USER
+        value: postgres
+      - key: SUPABASE_DB_PASSWORD
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@trishkaye.com
+      - key: ADMIN_URL
+        sync: false  # Your Render backend URL
+      - key: FRONTEND_URL
+        sync: false  # Your frontend URL
