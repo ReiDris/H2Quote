@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../config/api';
+import { useAuth } from '../hooks/useAuth'; // ✅ ADD THIS
 
 const GoogleCallback = () => {
   const navigate = useNavigate();
+  const { googleLogin } = useAuth(); // ✅ ADD THIS
   const [error, setError] = useState(null);
-  const hasProcessed = useRef(false); // ✅ Prevent double execution
+  const hasProcessed = useRef(false);
 
   useEffect(() => {
-    // ✅ Guard against double execution
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
@@ -16,8 +17,6 @@ const GoogleCallback = () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
       const errorParam = params.get('error');
-
-      console.log('🔍 Callback params:', { code: code?.substring(0, 20) + '...', errorParam });
 
       if (errorParam) {
         setError('Google authentication failed: ' + errorParam);
@@ -35,60 +34,39 @@ const GoogleCallback = () => {
         const redirectUri = `${window.location.origin}/auth/google/callback`;
         
         console.log('🔐 Exchanging code for token (single call)');
-        console.log('📍 Redirect URI:', redirectUri);
         
-        const result = await authAPI.googleAuth({
+        // ✅ USE googleLogin from useAuth hook instead of direct API call
+        const userData = await googleLogin({
           code: code,
           redirect_uri: redirectUri
         });
 
-        console.log('📊 Response status:', result.status);
+        console.log('✅ Login successful, user data:', userData);
         
-        const data = await result.json();
-        
-        console.log('📦 Response data:', data);
-
-        if (data.success) {
-          console.log('✅ Login successful, storing token and user');
-          localStorage.setItem('h2quote_token', data.data.token);
-          localStorage.setItem('h2quote_user', JSON.stringify(data.data.user));
-          
-          console.log('👤 User role:', data.data.user.role);
-          
-          // Redirect based on user role
-          const userRole = data.data.user.role;
-          let redirectPath;
-          
-          switch (userRole) {
-            case 'admin':
-              redirectPath = '/admin/service-tracker';
-              break;
-            case 'staff':
-              redirectPath = '/staff/service-tracker';
-              break;
-            case 'customer':
-              redirectPath = '/customer/service-tracker';
-              break;
-            default:
-              redirectPath = '/customer/service-tracker';
-          }
-          
-          console.log('🚀 Redirecting to:', redirectPath);
-          navigate(redirectPath, { replace: true });
-        } else {
-          console.error('❌ Login failed:', data.message);
-          setError(data.message || 'Google login failed');
-          setTimeout(() => navigate('/login'), 3000);
+        // Redirect based on user role
+        const userRole = userData.role;
+        switch (userRole) {
+          case 'admin':
+            navigate('/admin/service-tracker', { replace: true });
+            break;
+          case 'staff':
+            navigate('/staff/service-tracker', { replace: true });
+            break;
+          case 'customer':
+            navigate('/customer/service-tracker', { replace: true });
+            break;
+          default:
+            navigate('/customer/service-tracker', { replace: true });
         }
       } catch (error) {
-        console.error('💥 Google auth error:', error);
-        setError('Google login failed. Please try again.');
+        console.error('Google auth error:', error);
+        setError(error.message || 'Google login failed. Please try again.');
         setTimeout(() => navigate('/login'), 3000);
       }
     };
 
     handleCallback();
-  }, []);
+  }, [navigate, googleLogin]); // ✅ ADD googleLogin to dependencies
 
   if (error) {
     return (
