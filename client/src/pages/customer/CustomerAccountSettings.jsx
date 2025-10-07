@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import { useAuth } from "../../hooks/useAuth";
+import API_URL from "../../config/api";
 
 const CustomerAccountSettings = () => {
   const { user } = useAuth();
@@ -25,7 +26,7 @@ const CustomerAccountSettings = () => {
   const fetchAccountData = async () => {
     try {
       const token = localStorage.getItem('h2quote_token');
-      const response = await fetch('http://localhost:5000/api/account', {
+      const response = await fetch(`${API_URL}/account`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -119,7 +120,7 @@ const CustomerAccountSettings = () => {
         updateData.password = formData.password;
       }
 
-      const response = await fetch('http://localhost:5000/api/account', {
+      const response = await fetch(`${API_URL}/account`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

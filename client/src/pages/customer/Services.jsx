@@ -3,6 +3,7 @@ import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import ServiceRequestModal from "../../components/customer/ServiceRequestModal";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
+import API_URL from "../../config/api";
 
 const Services = () => {
   const { addService } = useServiceRequest();
@@ -28,7 +29,7 @@ const Services = () => {
       const token = localStorage.getItem("h2quote_token");
 
       const servicesResponse = await fetch(
-        "http://localhost:5000/api/service-requests/services/catalog",
+        `${API_URL}/api/service-requests/services/catalog`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -42,7 +43,7 @@ const Services = () => {
       let chemicalsData = { success: true, data: [] };
       try {
         const chemicalsResponse = await fetch(
-          "http://localhost:5000/api/service-requests/chemicals/catalog",
+          `${API_URL}/api/service-requests/chemicals/catalog`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -58,7 +59,7 @@ const Services = () => {
       let refrigerantsData = { success: true, data: [] };
       try {
         const refrigerantsResponse = await fetch(
-          "http://localhost:5000/api/service-requests/refrigerants/catalog",
+          `${API_URL}/api/service-requests/refrigerants/catalog`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

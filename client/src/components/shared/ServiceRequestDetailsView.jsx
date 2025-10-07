@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
 import PaymentProofViewer from "./PaymentProofViewer";
+import API_URL from "../config/api";
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
@@ -79,7 +80,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     try {
       const token = localStorage.getItem("h2quote_token");
       const response = await fetch(
-        "http://localhost:5000/api/service-requests/staff-list",
+        `${API_URL}/api/service-requests/staff-list`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -104,7 +105,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       const token = localStorage.getItem("h2quote_token");
 
       const searchResponse = await fetch(
-        `http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`,
+        `${API_URL}/api/service-requests?search=${requestNumber}&limit=1`,
         {
           method: "GET",
           headers: {
@@ -129,7 +130,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       setRequestId(request.request_id);
 
       const detailResponse = await fetch(
-        `http://localhost:5000/api/service-requests/${request.request_id}/details`,
+        `${API_URL}/api/service-requests/${request.request_id}/details`,
         {
           method: "GET",
           headers: {
@@ -391,7 +392,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       console.log("Sending update payload:", updatePayload);
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/update`,
+        `${API_URL}/api/service-requests/${requestId}/update`,
         {
           method: "PUT",
           headers: {

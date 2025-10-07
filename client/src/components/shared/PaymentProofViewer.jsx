@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Download } from "lucide-react";
+import API_URL from "../config/api";
 
 const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
   const [loading, setLoading] = useState(true);
@@ -28,7 +29,7 @@ const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
 
       const token = localStorage.getItem("h2quote_token");
       const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentId}/proof`,
+        `${API_URL}/api/payments/${paymentId}/proof`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

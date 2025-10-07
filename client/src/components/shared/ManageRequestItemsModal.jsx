@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Plus, Trash2, Search, AlertCircle } from "lucide-react";
+import API_URL from "../config/api";
 
 const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [activeTab, setActiveTab] = useState("chemicals");
@@ -26,7 +27,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
       const endpoint = activeTab === "chemicals" ? "chemicals" : "refrigerants";
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${endpoint}/catalog`,
+        `${API_URL}/api/service-requests/${endpoint}/catalog`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -49,7 +50,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
       const token = localStorage.getItem("h2quote_token");
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/details`,
+        `${API_URL}/api/service-requests/${requestId}/details`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -117,7 +118,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
             };
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/${endpoint}`,
+        `${API_URL}/api/service-requests/${requestId}/${endpoint}`,
         {
           method: "POST",
           headers: {
@@ -184,7 +185,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
             };
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/${endpoint}`,
+        `${API_URL}/api/service-requests/${requestId}/${endpoint}`,
         {
           method: "POST",
           headers: {
@@ -234,7 +235,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
           : { refrigerantItemIds: [itemId] };
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/${endpoint}`,
+        `${API_URL}/api/service-requests/${requestId}/${endpoint}`,
         {
           method: "DELETE",
           headers: {

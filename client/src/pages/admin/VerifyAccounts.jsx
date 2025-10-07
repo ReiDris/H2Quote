@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import API_URL from "../../config/api";
 
 const VerifyAccountsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -50,7 +51,7 @@ const VerifyAccountsPage = () => {
       }
 
       const response = await fetch(
-        "http://localhost:5000/api/admin/pending-users",
+        `${API_URL}/admin/pending-users`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -86,7 +87,7 @@ const VerifyAccountsPage = () => {
       const token = localStorage.getItem("h2quote_token");
 
       // Create the URL for viewing the document
-      const url = `http://localhost:5000/api/admin/verification-file/${user.user_id}`;
+      const url = `${API_URL}/admin/verification-file/${user.user_id}`;
 
       setDocumentUrl(url);
       setSelectedUser(user);
@@ -115,7 +116,7 @@ const VerifyAccountsPage = () => {
       const token = localStorage.getItem("h2quote_token");
 
       const response = await fetch(
-        `http://localhost:5000/api/admin/approve-user/${selectedUser.user_id}`,
+        `${API_URL}/admin/approve-user/${selectedUser.user_id}`,
         {
           method: "POST",
           headers: {
@@ -185,7 +186,7 @@ const VerifyAccountsPage = () => {
       const token = localStorage.getItem("h2quote_token");
 
       const response = await fetch(
-        `http://localhost:5000/api/admin/reject-user/${userToReject.user_id}`,
+        `${API_URL}/admin/reject-user/${userToReject.user_id}`,
         {
           method: "POST",
           headers: {

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, Upload, FileImage, Trash2 } from "lucide-react";
+import API_URL from "../../config/api";
 
 const PaymentProofUploadModal = ({
   isOpen,
@@ -71,7 +72,7 @@ const PaymentProofUploadModal = ({
 
       const token = localStorage.getItem("h2quote_token");
       const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentId}/upload-proof`,
+        `${API_URL}/api/payments/${paymentId}/upload-proof`,
         {
           method: "POST",
           headers: {
@@ -109,7 +110,7 @@ const PaymentProofUploadModal = ({
       const token = localStorage.getItem("h2quote_token");
 
       const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentId}/proof`,
+        `${API_URL}/api/payments/${paymentId}/proof`,
         {
           method: "DELETE",
           headers: {

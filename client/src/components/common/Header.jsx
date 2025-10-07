@@ -3,6 +3,7 @@ import { Bell, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 import ServiceRequestModal from "../customer/ServiceRequestModal";
+import API_URL from "../../config/api";
 
 const Header = () => {
   const { user } = useAuth();
@@ -20,17 +21,17 @@ const Header = () => {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      
+      const token = localStorage.getItem("token");
+
       const response = await fetch(
-        `http://localhost:5000/api/notifications?unreadOnly=${activeFilter === 'unread'}`,
+        `${API_URL}/notifications?unreadOnly=${activeFilter === "unread"}`,
         {
-          method: 'GET',
-          credentials: 'include',
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          method: "GET",
+          credentials: "include",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
       );
 
@@ -41,7 +42,7 @@ const Header = () => {
         setUnreadCount(data.data.unreadCount);
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error("Error fetching notifications:", error);
     } finally {
       setLoading(false);
     }
@@ -50,42 +51,36 @@ const Header = () => {
   // Mark notification as read
   const markAsRead = async (notificationId) => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(
-        `http://localhost:5000/api/notifications/${notificationId}/read`,
-        {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const token = localStorage.getItem("token");
+      await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       fetchNotifications();
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error("Error marking notification as read:", error);
     }
   };
 
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(
-        'http://localhost:5000/api/notifications/mark-all-read',
-        {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const token = localStorage.getItem("token");
+      await fetch("${API_URL}/api/notifications/mark-all-read", {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       fetchNotifications();
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      console.error("Error marking all as read:", error);
     }
   };
 
@@ -94,9 +89,11 @@ const Header = () => {
     const notifTime = new Date(timestamp);
     const diffInSeconds = Math.floor((now - notifTime) / 1000);
 
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 60) return "Just now";
+    if (diffInSeconds < 3600)
+      return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400)
+      return `${Math.floor(diffInSeconds / 3600)} hours ago`;
     return `${Math.floor(diffInSeconds / 86400)} days ago`;
   };
 

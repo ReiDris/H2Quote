@@ -10,6 +10,7 @@ import { CgMaximizeAlt } from "react-icons/cg";
 import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import { useAuth } from "../../hooks/useAuth";
+import API_URL from "../../config/api";
 
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -36,7 +37,7 @@ const ServiceTracker = () => {
         ...(search && { search })
       });
 
-      const response = await fetch(`http://localhost:5000/api/service-requests?${queryParams}`, {
+      const response = await fetch(`${API_URL}/service-requests?${queryParams}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

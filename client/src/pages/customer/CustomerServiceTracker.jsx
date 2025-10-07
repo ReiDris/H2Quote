@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { CgMaximizeAlt } from "react-icons/cg";
 import CustomerLayout from "../../layouts/CustomerLayout";
+import API_URL from "../../config/api";
 
 const CustomerServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -30,7 +31,7 @@ const CustomerServiceTracker = () => {
         return;
       }
 
-      const response = await fetch('http://localhost:5000/api/service-requests/my-requests', {
+      const response = await fetch(`${API_URL}/api/service-requests/my-requests`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import ForgotPasswordModal from "./ForgotPasswordModal";
+import API_URL from '../config/api';
 
 const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   const location = useLocation();
@@ -88,7 +89,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
       setErrors({});
       setSuccessMessage("");
 
-      const result = await fetch("http://localhost:5000/api/auth/google-auth", {
+      const result = await fetch(`${API_URL}/api/auth/google-auth`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -254,7 +255,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
       setErrors({});
 
       // Send the authorization code to your backend
-      const result = await fetch('http://localhost:5000/api/auth/google-auth', {
+      const result = await fetch(`${API_URL}/api/auth/google-auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, Upload } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
+import API_URL from "../../config/api";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ const CustomerServiceRequestDetails = () => {
       }
 
       const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/details`,
+        `${API_URL}/api/service-requests/${requestId}/details`,
         {
           method: "GET",
           headers: {

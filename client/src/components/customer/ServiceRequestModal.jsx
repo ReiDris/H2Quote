@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { X, Trash2 } from "lucide-react";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
+import API_URL from '../config/api';
 
 const ServiceRequestModal = ({ onClose }) => {
   const { selectedServices, updateQuantity, removeService, clearServices } = useServiceRequest();
@@ -106,7 +107,7 @@ const ServiceRequestModal = ({ onClose }) => {
       };
 
       const response = await fetch(
-        "http://localhost:5000/api/service-requests",
+        `${API_URL}/api/service-requests`,
         {
           method: "POST",
           headers: {

@@ -4,6 +4,7 @@ import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import { useAuth } from "../../hooks/useAuth";
+import API_URL from "../../config/api";
 
 const AccountSettings = () => {
   const { user } = useAuth();
@@ -26,7 +27,7 @@ const AccountSettings = () => {
   const fetchAccountData = async () => {
     try {
       const token = localStorage.getItem('h2quote_token');
-      const response = await fetch('http://localhost:5000/api/account', {
+      const response = await fetch(`${API_URL}/account`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -115,7 +116,7 @@ const AccountSettings = () => {
         updateData.password = formData.password;
       }
 
-      const response = await fetch('http://localhost:5000/api/account', {
+      const response = await fetch(`${API_URL}/account`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

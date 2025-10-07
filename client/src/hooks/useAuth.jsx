@@ -5,7 +5,7 @@ const AuthContext = createContext();
 // Safe way to access environment variables in React
 let API_BASE_URL;
 try {
-  API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 } catch (error) {
   API_BASE_URL = 'http://localhost:5000/api';
 }

@@ -1,33 +1,34 @@
-import React, { useState } from 'react';
-import { X, Mail, CheckCircle } from 'lucide-react';
+import React, { useState } from "react";
+import { X, Mail, CheckCircle } from "lucide-react";
+import API_URL from "../config/api";
 
 const ForgotPasswordModal = ({ isOpen, onClose }) => {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!email) {
-      setError('Email is required');
+      setError("Email is required");
       return;
     }
 
     if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email address');
+      setError("Please enter a valid email address");
       return;
     }
 
     setIsSubmitting(true);
-    setError('');
+    setError("");
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/forgot-password', {
-        method: 'POST',
+      const response = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ email }),
       });
@@ -37,19 +38,19 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
       if (data.success) {
         setIsSuccess(true);
       } else {
-        setError(data.message || 'Failed to send reset email');
+        setError(data.message || "Failed to send reset email");
       }
     } catch (error) {
-      console.error('Forgot password error:', error);
-      setError('Network error. Please try again.');
+      console.error("Forgot password error:", error);
+      setError("Network error. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleClose = () => {
-    setEmail('');
-    setError('');
+    setEmail("");
+    setError("");
     setIsSuccess(false);
     onClose();
   };
@@ -80,7 +81,8 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
                   Forgot Password?
                 </h2>
                 <p className="text-xs lg:text-sm text-gray-600">
-                  Enter your email address and we'll send you a link to reset your password.
+                  Enter your email address and we'll send you a link to reset
+                  your password.
                 </p>
               </div>
 
@@ -94,7 +96,10 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
               {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label htmlFor="reset-email" className="block text-xs lg:text-sm xl:text-lg text-gray-700 mb-2">
+                  <label
+                    htmlFor="reset-email"
+                    className="block text-xs lg:text-sm xl:text-lg text-gray-700 mb-2"
+                  >
                     Email Address
                   </label>
                   <input
@@ -103,7 +108,7 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
-                      setError('');
+                      setError("");
                     }}
                     className="w-full px-4 py-3 rounded-xl text-xs lg:text-base border-2 border-gray-300 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-black transition-colors duration-200"
                     placeholder="Enter your email address"
@@ -122,7 +127,7 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
                       Sending...
                     </div>
                   ) : (
-                    'Send Reset Link'
+                    "Send Reset Link"
                   )}
                 </button>
               </form>
@@ -148,9 +153,12 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
                 Check Your Email
               </h2>
               <p className="text-xs lg:text-sm text-gray-600 mb-6">
-                If an account exists with this email, a password reset link has been sent to:
+                If an account exists with this email, a password reset link has
+                been sent to:
               </p>
-              <p className="font-medium text-gray-900 mb-6 text-sm lg:text-base">{email}</p>
+              <p className="font-medium text-gray-900 mb-6 text-sm lg:text-base">
+                {email}
+              </p>
               <p className="text-xs text-gray-500 mb-8">
                 Check your spam folder if you don't see the email in your inbox.
               </p>
