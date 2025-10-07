@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../config/api';
 
 const GoogleCallback = () => {
   const navigate = useNavigate();
   const [error, setError] = useState(null);
+  const hasProcessed = useRef(false); // ✅ Prevent double execution
 
   useEffect(() => {
+    // ✅ Guard against double execution
+    if (hasProcessed.current) return;
+    hasProcessed.current = true;
+
     const handleCallback = async () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
@@ -26,6 +31,8 @@ const GoogleCallback = () => {
 
       try {
         const redirectUri = `${window.location.origin}/auth/google/callback`;
+        
+        console.log('🔐 Exchanging code for token (single call)');
         
         const result = await authAPI.googleAuth({
           code: code,
@@ -65,7 +72,7 @@ const GoogleCallback = () => {
     };
 
     handleCallback();
-  }, [navigate]);
+  }, []); // ✅ Empty dependency array
 
   if (error) {
     return (

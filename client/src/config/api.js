@@ -187,11 +187,11 @@ export const authAPI = {
     });
   },
 
-  googleAuth: (credential) => {
+  googleAuth: (authData) => {
     return fetch(`${API_URL}/auth/google-auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify(authData),  
     });
   },
 
