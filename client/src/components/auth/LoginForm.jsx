@@ -73,6 +73,25 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     };
   }, []);
 
+  useEffect(() => {
+  const handleMessage = async (event) => {
+    if (event.origin !== window.location.origin) {
+      return;
+    }
+
+    if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+      const { code } = event.data;
+      await handleGoogleAuthCode(code);
+    } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
+      setErrors({ general: event.data.error || 'Google authentication failed' });
+      setIsGoogleLoading(false);
+    }
+  };
+
+  window.addEventListener('message', handleMessage);
+  return () => window.removeEventListener('message', handleMessage);
+}, []);
+
   // Clear local errors when parent error changes
   useEffect(() => {
     if (error) {
@@ -84,34 +103,31 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   }, [error]);
 
   const handleGoogleResponse = async (response) => {
-    try {
-      setIsGoogleLoading(true);
-      setErrors({});
-      setSuccessMessage("");
+  try {
+    setIsGoogleLoading(true);
+    setErrors({});
+    setSuccessMessage("");
 
-      const result = await authAPI.googleAuth(response.credential);
+    const result = await authAPI.googleAuth({ credential: response.credential });
+    const data = await result.json();
 
-      const data = await result.json();
+    if (data.success) {
+      localStorage.setItem("h2quote_token", data.data.token);
+      localStorage.setItem("h2quote_user", JSON.stringify(data.data.user));
 
-      if (data.success) {
-        // Store token and user data
-        localStorage.setItem("h2quote_token", data.data.token);
-        localStorage.setItem("h2quote_user", JSON.stringify(data.data.user));
-
-        // Call the parent's onLogin function to handle success
-        if (onLogin) {
-          await onLogin(data.data);
-        }
-      } else {
-        setErrors({ general: data.message || "Google login failed" });
+      if (onLogin) {
+        await onLogin(data.data);
       }
-    } catch (error) {
-      console.error("Google login error:", error);
-      setErrors({ general: "Google login failed. Please try again." });
-    } finally {
-      setIsGoogleLoading(false);
+    } else {
+      setErrors({ general: data.message || "Google login failed" });
     }
-  };
+  } catch (error) {
+    console.error("Google login error:", error);
+    setErrors({ general: "Google login failed. Please try again." });
+  } finally {
+    setIsGoogleLoading(false);
+  }
+};
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -168,106 +184,100 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   };
 
   const handleGoogleLogin = () => {
-    console.log('Google login button clicked');
-    
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    
-    if (!clientId) {
-      setErrors({ general: 'Google Client ID not found' });
-      return;
-    }
+  console.log('Google login button clicked');
+  
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  
+  if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID') {
+    setErrors({ general: 'Google Client ID not configured. Please contact support.' });
+    return;
+  }
 
-    // Create a proper OAuth URL with correct parameters
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: `${window.location.origin}/login`,
-      response_type: 'code', // Use 'code' instead of 'token' for better security
-      scope: 'openid email profile',
-      access_type: 'offline',
-      prompt: 'select_account'
-    });
+  setIsGoogleLoading(true);
+  setErrors({});
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-    
-    console.log('Opening Google OAuth URL:', authUrl);
-    
-    // Open in popup window instead of redirect
-    const popup = window.open(
-      authUrl,
-      'google-auth',
-      'width=500,height=600,left=' + (window.screen.width/2 - 250) + ',top=' + (window.screen.height/2 - 300)
-    );
+  const redirectUri = `${window.location.origin}/auth/google/callback`;
 
-    if (!popup) {
-      setErrors({ general: 'Popup blocked. Please allow popups and try again.' });
-      return;
-    }
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    access_type: 'online',
+    prompt: 'select_account'
+  });
 
-    // Monitor the popup for completion
-    const checkPopup = setInterval(() => {
-      try {
-        if (popup.closed) {
-          clearInterval(checkPopup);
-          console.log('Popup closed');
-        } else if (popup.location.href.includes(window.location.origin)) {
-          // OAuth completed, popup returned to our domain
-          const url = new URL(popup.location.href);
-          const code = url.searchParams.get('code');
-          const error = url.searchParams.get('error');
-          
-          clearInterval(checkPopup);
-          popup.close();
-          
-          if (error) {
-            setErrors({ general: 'Google authentication failed: ' + error });
-          } else if (code) {
-            // Send the authorization code to your backend
-            handleGoogleAuthCode(code);
-          }
-        }
-      } catch (e) {
-        // Cross-origin error - popup is still on Google's domain
-        // This is expected and normal
-      }
-    }, 1000);
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  
+  console.log('Opening Google OAuth URL');
+  
+  const width = 500;
+  const height = 600;
+  const left = window.screen.width / 2 - width / 2;
+  const top = window.screen.height / 2 - height / 2;
+  
+  const popup = window.open(
+    authUrl,
+    'google-auth',
+    `width=${width},height=${height},left=${left},top=${top}`
+  );
 
-    // Clean up if popup is open for too long
-    setTimeout(() => {
-      if (!popup.closed) {
-        clearInterval(checkPopup);
-        popup.close();
-        setErrors({ general: 'Google authentication timed out. Please try again.' });
-      }
-    }, 60000); // 1 minute timeout
-  };
+  if (!popup) {
+    setErrors({ general: 'Popup blocked. Please allow popups and try again.' });
+    setIsGoogleLoading(false);
+    return;
+  }
 
-  const handleGoogleAuthCode = async (code) => {
-    try {
-      setIsGoogleLoading(true);
-      setErrors({});
-
-      // Send the authorization code to your backend
-      const result = await authAPI.googleAuth(code);
-
-      const data = await result.json();
-
-      if (data.success) {
-        localStorage.setItem('h2quote_token', data.data.token);
-        localStorage.setItem('h2quote_user', JSON.stringify(data.data.user));
-        
-        if (onLogin) {
-          await onLogin(data.data);
-        }
-      } else {
-        setErrors({ general: data.message || 'Google login failed' });
-      }
-    } catch (error) {
-      console.error('Google auth error:', error);
-      setErrors({ general: 'Google login failed. Please try again.' });
-    } finally {
+  const timeout = setTimeout(() => {
+    if (popup && !popup.closed) {
+      popup.close();
+      setErrors({ general: 'Google authentication timed out. Please try again.' });
       setIsGoogleLoading(false);
     }
-  };
+  }, 60000);
+
+  const checkClosed = setInterval(() => {
+    if (popup.closed) {
+      clearInterval(checkClosed);
+      clearTimeout(timeout);
+      setTimeout(() => {
+        setIsGoogleLoading(false);
+      }, 1000);
+    }
+  }, 500);
+};
+
+  const handleGoogleAuthCode = async (code) => {
+  try {
+    setIsGoogleLoading(true);
+    setErrors({});
+
+    const redirectUri = `${window.location.origin}/auth/google/callback`;
+    
+    const result = await authAPI.googleAuth({
+      code: code,
+      redirect_uri: redirectUri
+    });
+
+    const data = await result.json();
+
+    if (data.success) {
+      localStorage.setItem('h2quote_token', data.data.token);
+      localStorage.setItem('h2quote_user', JSON.stringify(data.data.user));
+      
+      if (onLogin) {
+        await onLogin(data.data);
+      }
+    } else {
+      setErrors({ general: data.message || 'Google login failed' });
+    }
+  } catch (error) {
+    console.error('Google auth error:', error);
+    setErrors({ general: 'Google login failed. Please try again.' });
+  } finally {
+    setIsGoogleLoading(false);
+  }
+};
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
