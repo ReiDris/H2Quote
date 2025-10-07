@@ -73,25 +73,6 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     };
   }, []);
 
-  useEffect(() => {
-  const handleMessage = async (event) => {
-    if (event.origin !== window.location.origin) {
-      return;
-    }
-
-    if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
-      const { code } = event.data;
-      await handleGoogleAuthCode(code);
-    } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
-      setErrors({ general: event.data.error || 'Google authentication failed' });
-      setIsGoogleLoading(false);
-    }
-  };
-
-  window.addEventListener('message', handleMessage);
-  return () => window.removeEventListener('message', handleMessage);
-}, []);
-
   // Clear local errors when parent error changes
   useEffect(() => {
     if (error) {
@@ -196,6 +177,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   setIsGoogleLoading(true);
   setErrors({});
 
+  // Use the current URL's origin for redirect
   const redirectUri = `${window.location.origin}/auth/google/callback`;
 
   const params = new URLSearchParams({
@@ -209,42 +191,8 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   
-  console.log('Opening Google OAuth URL');
-  
-  const width = 500;
-  const height = 600;
-  const left = window.screen.width / 2 - width / 2;
-  const top = window.screen.height / 2 - height / 2;
-  
-  const popup = window.open(
-    authUrl,
-    'google-auth',
-    `width=${width},height=${height},left=${left},top=${top}`
-  );
-
-  if (!popup) {
-    setErrors({ general: 'Popup blocked. Please allow popups and try again.' });
-    setIsGoogleLoading(false);
-    return;
-  }
-
-  const timeout = setTimeout(() => {
-    if (popup && !popup.closed) {
-      popup.close();
-      setErrors({ general: 'Google authentication timed out. Please try again.' });
-      setIsGoogleLoading(false);
-    }
-  }, 60000);
-
-  const checkClosed = setInterval(() => {
-    if (popup.closed) {
-      clearInterval(checkClosed);
-      clearTimeout(timeout);
-      setTimeout(() => {
-        setIsGoogleLoading(false);
-      }, 1000);
-    }
-  }, 500);
+  // Redirect in the same window instead of popup
+  window.location.href = authUrl;
 };
 
   const handleGoogleAuthCode = async (code) => {
