@@ -3,7 +3,7 @@ import { Bell, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 import ServiceRequestModal from "../customer/ServiceRequestModal";
-import API_URL from "../../config/api";
+import { notificationsAPI } from '../../config/api';
 
 const Header = () => {
   const { user } = useAuth();
@@ -23,17 +23,7 @@ const Header = () => {
       setLoading(true);
       const token = localStorage.getItem("token");
 
-      const response = await fetch(
-        `${API_URL}/notifications?unreadOnly=${activeFilter === "unread"}`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await notificationsAPI.getNotifications(activeFilter === "unread");
 
       const data = await response.json();
 
@@ -51,15 +41,7 @@ const Header = () => {
   // Mark notification as read
   const markAsRead = async (notificationId) => {
     try {
-      const token = localStorage.getItem("token");
-      await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      await notificationsAPI.markAsRead(notificationId);
       fetchNotifications();
     } catch (error) {
       console.error("Error marking notification as read:", error);
@@ -69,15 +51,7 @@ const Header = () => {
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem("token");
-      await fetch("${API_URL}/api/notifications/mark-all-read", {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      await notificationsAPI.markAllAsRead();
       fetchNotifications();
     } catch (error) {
       console.error("Error marking all as read:", error);

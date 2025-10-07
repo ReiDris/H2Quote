@@ -1,14 +1,7 @@
 import { useState, useContext, createContext, useEffect } from 'react';
+import { authAPI } from '../config/api';
 
 const AuthContext = createContext();
-
-// Safe way to access environment variables in React
-let API_BASE_URL;
-try {
-  API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-} catch (error) {
-  API_BASE_URL = 'http://localhost:5000/api';
-}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -28,11 +21,7 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('h2quote_token');
       if (token) {
         try {
-          const response = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
+          const response = await authAPI.getCurrentUser();
 
           if (response.ok) {
             const data = await response.json();
@@ -61,14 +50,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials),
-      });
-
+      const response = await authAPI.login(credentials);
       const data = await response.json();
 
       if (!data.success) {
@@ -107,11 +89,7 @@ export const AuthProvider = ({ children }) => {
         formData.append('verificationFile', signupData.verificationDocument);
       }
 
-      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-        method: 'POST',
-        body: formData, // Don't set Content-Type header for FormData
-      });
-
+      const response = await authAPI.signup(formData);
       const data = await response.json();
 
       if (!data.success) {
@@ -126,17 +104,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const googleLogin = async (credential) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.googleAuth(credential);
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Google login failed');
+      }
+
+      const { token, user: userData } = data.data;
+      
+      // Store token and user data
+      localStorage.setItem('h2quote_token', token);
+      localStorage.setItem('h2quote_user', JSON.stringify(userData));
+      
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       const token = localStorage.getItem('h2quote_token');
       if (token) {
         // Call backend logout endpoint
-        await fetch(`${API_BASE_URL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        await authAPI.logout();
       }
     } catch (error) {
       console.error('Logout error:', error);
@@ -152,6 +150,7 @@ export const AuthProvider = ({ children }) => {
     user,
     login,
     signup,
+    googleLogin,
     logout,
     isLoading,
     isAuthenticated: !!user,

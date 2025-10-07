@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X, Mail, CheckCircle } from "lucide-react";
-import API_URL from '../../config/api';
+import { authAPI } from "../../config/api";
 
 const ForgotPasswordModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState("");
@@ -25,13 +25,7 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
     setError("");
 
     try {
-      const response = await fetch(`${API_URL}/auth/forgot-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email }),
-      });
+      const response = await authAPI.forgotPassword(email);
 
       const data = await response.json();
 

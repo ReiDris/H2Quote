@@ -4,7 +4,7 @@ import { ArrowLeft, Eye, Upload } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
-import API_URL from "../../config/api";
+import { serviceRequestsAPI } from "../../config/api";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -37,89 +37,80 @@ const CustomerServiceRequestDetails = () => {
   }, [requestId]);
 
   const fetchRequestDetails = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("h2quote_token");
+  try {
+    setLoading(true);
+    const token = localStorage.getItem("h2quote_token");
 
-      console.log("Fetching details for requestId:", requestId);
+    console.log("Fetching details for requestId:", requestId);
 
-      if (!token) {
-        console.log("No token found");
+    if (!token) {
+      console.log("No token found");
+      navigate("/login");
+      return;
+    }
+
+    const response = await serviceRequestsAPI.getDetails(requestId);
+
+    console.log("Response status:", response.status);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("h2quote_token");
         navigate("/login");
         return;
       }
-
-      const response = await fetch(
-        `${API_URL}/api/service-requests/${requestId}/details`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      console.log("Response status:", response.status);
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem("h2quote_token");
-          navigate("/login");
-          return;
-        }
-        if (response.status === 404) {
-          setError("Service request not found");
-          return;
-        }
-        throw new Error("Failed to fetch request details");
+      if (response.status === 404) {
+        setError("Service request not found");
+        return;
       }
-
-      const data = await response.json();
-      console.log("Received data:", data);
-
-      if (data.success) {
-        const { request: requestDetails, items } = data.data;
-
-        const transformedData = {
-          id: requestDetails.request_number,
-          requestedAt: requestDetails.requested_at,
-          serviceStatus: requestDetails.service_status,
-          paymentStatus: requestDetails.payment_status,
-          warrantyStatus: requestDetails.warranty_status,
-          services: (items || []).map((item) => ({
-            category: item.service_category || item.category,
-            service: item.service || item.name,
-            remarks: item.remarks || "-",
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            totalPrice: item.total_price,
-          })),
-          paymentHistory: requestDetails.paymentHistory || [],
-          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-          totalCost: requestDetails.totalCost,
-          paymentMode: requestDetails.payment_mode || "-",
-          paymentTerms: requestDetails.payment_terms || "-",
-          paymentDeadline: requestDetails.payment_deadline || "-",
-          assignedStaff: requestDetails.assigned_staff_name || "-",
-          serviceStartDate: requestDetails.service_start_date || "-",
-          estimatedEndDate: requestDetails.estimated_end_date || "-",
-          warranty: requestDetails.warranty || "6 months",
-        };
-
-        console.log("Setting request data");
-        setRequestData(transformedData);
-        setError("");
-      } else {
-        setError(data.message || "Failed to fetch request details");
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      setError("Failed to fetch request details");
-    } finally {
-      setLoading(false);
+      throw new Error("Failed to fetch request details");
     }
-  };
+
+    const data = await response.json();
+    console.log("Received data:", data);
+
+    if (data.success) {
+      const { request: requestDetails, items } = data.data;
+
+      const transformedData = {
+        id: requestDetails.request_number,
+        requestedAt: requestDetails.requested_at,
+        serviceStatus: requestDetails.service_status,
+        paymentStatus: requestDetails.payment_status,
+        warrantyStatus: requestDetails.warranty_status,
+        services: (items || []).map((item) => ({
+          category: item.service_category || item.category,
+          service: item.service || item.name,
+          remarks: item.remarks || "-",
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          totalPrice: item.total_price,
+        })),
+        paymentHistory: requestDetails.paymentHistory || [],
+        estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+        totalCost: requestDetails.totalCost,
+        paymentMode: requestDetails.payment_mode || "-",
+        paymentTerms: requestDetails.payment_terms || "-",
+        paymentDeadline: requestDetails.payment_deadline || "-",
+        assignedStaff: requestDetails.assigned_staff_name || "-",
+        serviceStartDate: requestDetails.service_start_date || "-",
+        estimatedEndDate: requestDetails.estimated_end_date || "-",
+        warranty: requestDetails.warranty || "6 months",
+      };
+
+      console.log("Setting request data");
+      setRequestData(transformedData);
+      setError("");
+    } else {
+      setError(data.message || "Failed to fetch request details");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    setError("Failed to fetch request details");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleUploadSuccess = () => {
     fetchRequestDetails(); // Refresh the data after upload

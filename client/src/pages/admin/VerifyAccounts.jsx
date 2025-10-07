@@ -43,29 +43,16 @@ const VerifyAccountsPage = () => {
   const fetchPendingUsers = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("h2quote_token");
 
-      if (!token) {
-        setError("No authentication token found. Please log in again.");
-        return;
-      }
-
-      const response = await fetch(
-        `${API_URL}/admin/pending-users`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const data = await response.json();
+      const response = await adminAPI.getPendingUsers();
 
       if (response.status === 401 || response.status === 403) {
+        const data = await response.json();
         setError(`Authentication error: ${data.message}`);
         return;
       }
+
+      const data = await response.json();
 
       if (data.success) {
         setPendingUsers(data.data);
@@ -84,10 +71,15 @@ const VerifyAccountsPage = () => {
   const viewDocument = async (user) => {
     try {
       setIsProcessing(true);
-      const token = localStorage.getItem("h2quote_token");
 
       // Create the URL for viewing the document
-      const url = `${API_URL}/admin/verification-file/${user.user_id}`;
+      // Note: For iframe src, we need to construct the full URL with token as query param
+      const token = localStorage.getItem("h2quote_token");
+      const API_BASE =
+        import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      const url = `${API_BASE}/admin/verification-file/${
+        user.user_id
+      }?token=${encodeURIComponent(token)}`;
 
       setDocumentUrl(url);
       setSelectedUser(user);
@@ -113,20 +105,10 @@ const VerifyAccountsPage = () => {
       setIsProcessing(true);
       setProcessingUsers((prev) => new Set(prev).add(selectedUser.user_id));
 
-      const token = localStorage.getItem("h2quote_token");
-
-      const response = await fetch(
-        `${API_URL}/admin/approve-user/${selectedUser.user_id}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ role: selectedRole }),
-        }
+      const response = await adminAPI.approveUser(
+        selectedUser.user_id,
+        selectedRole
       );
-
       const data = await response.json();
 
       if (data.success) {
@@ -163,15 +145,6 @@ const VerifyAccountsPage = () => {
     }
   };
 
-  const handleRejectClick = (user) => {
-    if (processingUsers.has(user.user_id)) {
-      return;
-    }
-    setUserToReject(user);
-    setRejectionReason("");
-    setShowRejectModal(true);
-  };
-
   const handleRejectConfirm = async () => {
     if (!rejectionReason.trim()) {
       setModalMessage("Please provide a reason for rejection");
@@ -183,20 +156,10 @@ const VerifyAccountsPage = () => {
       setIsProcessing(true);
       setProcessingUsers((prev) => new Set(prev).add(userToReject.user_id));
 
-      const token = localStorage.getItem("h2quote_token");
-
-      const response = await fetch(
-        `${API_URL}/admin/reject-user/${userToReject.user_id}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ reason: rejectionReason }),
-        }
+      const response = await adminAPI.rejectUser(
+        userToReject.user_id,
+        rejectionReason
       );
-
       const data = await response.json();
 
       if (data.success) {
@@ -569,9 +532,7 @@ const VerifyAccountsPage = () => {
                 </div>
               ) : (
                 <iframe
-                  src={`${documentUrl}?token=${encodeURIComponent(
-                    localStorage.getItem("h2quote_token")
-                  )}`}
+                  src={documentUrl}
                   className="w-full h-full min-h-[500px] border-0 rounded-lg"
                   title="Verification Document"
                 />

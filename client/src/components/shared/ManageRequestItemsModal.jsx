@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Plus, Trash2, Search, AlertCircle } from "lucide-react";
-import API_URL from '../../config/api';
+import { serviceRequestsAPI } from '../../config/api';
 
 const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [activeTab, setActiveTab] = useState("chemicals");
@@ -23,18 +23,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
 
   const fetchAvailableItems = async () => {
     try {
-      const token = localStorage.getItem("h2quote_token");
-      const endpoint = activeTab === "chemicals" ? "chemicals" : "refrigerants";
-
-      const response = await fetch(
-        `${API_URL}/api/service-requests/${endpoint}/catalog`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await serviceRequestsAPI.getCatalog(activeTab);
 
       if (response.ok) {
         const data = await response.json();
@@ -47,17 +36,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
 
   const fetchCurrentItems = async () => {
     try {
-      const token = localStorage.getItem("h2quote_token");
-
-      const response = await fetch(
-        `${API_URL}/api/service-requests/${requestId}/details`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await serviceRequestsAPI.getDetails(requestId);
 
       if (response.ok) {
         const data = await response.json();
@@ -90,44 +69,14 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     setSuccess("");
 
     try {
-      const token = localStorage.getItem("h2quote_token");
-      // FIXED: Correct endpoint paths (plural)
-      const endpoint =
-        activeTab === "chemicals" ? "add-chemicals" : "add-refrigerants";
+      const itemData = [{
+        id: selectedItem.id,
+        quantity: parseInt(quantity),
+      }];
 
-      // FIXED: Correct request body format (arrays)
-      const requestBody =
-        activeTab === "chemicals"
-          ? {
-              chemicals: [
-                {
-                  id: selectedItem.id,
-                  quantity: parseInt(quantity),
-                },
-              ],
-              adminNotes: notes || undefined,
-            }
-          : {
-              refrigerants: [
-                {
-                  id: selectedItem.id,
-                  quantity: parseInt(quantity),
-                },
-              ],
-              adminNotes: notes || undefined,
-            };
-
-      const response = await fetch(
-        `${API_URL}/api/service-requests/${requestId}/${endpoint}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
+      const response = activeTab === "chemicals"
+        ? await serviceRequestsAPI.addChemicals(requestId, itemData, notes || undefined)
+        : await serviceRequestsAPI.addRefrigerants(requestId, itemData, notes || undefined);
 
       const data = await response.json();
 
@@ -136,10 +85,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
         setSelectedItem(null);
         setQuantity(1);
         setNotes("");
-        fetchCurrentItems(); // Refresh the current items list in the modal
-
-        // DON'T call onSuccess here - only call it when modal closes
-        // This allows multiple additions without closing the modal
+        fetchCurrentItems();
 
         setTimeout(() => setSuccess(""), 3000);
       } else {
@@ -159,42 +105,14 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     setSuccess("");
 
     try {
-      const token = localStorage.getItem("h2quote_token");
-      const endpoint =
-        activeTab === "chemicals" ? "add-chemicals" : "add-refrigerants";
+      const itemData = [{
+        id: item.id,
+        quantity: 1,
+      }];
 
-      const requestBody =
-        activeTab === "chemicals"
-          ? {
-              chemicals: [
-                {
-                  id: item.id,
-                  quantity: 1, // Default quantity
-                },
-              ],
-              adminNotes: "Quick add",
-            }
-          : {
-              refrigerants: [
-                {
-                  id: item.id,
-                  quantity: 1, // Default quantity
-                },
-              ],
-              adminNotes: "Quick add",
-            };
-
-      const response = await fetch(
-        `${API_URL}/api/service-requests/${requestId}/${endpoint}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
+      const response = activeTab === "chemicals"
+        ? await serviceRequestsAPI.addChemicals(requestId, itemData, "Quick add")
+        : await serviceRequestsAPI.addRefrigerants(requestId, itemData, "Quick add");
 
       const data = await response.json();
 
@@ -223,36 +141,15 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     setError("");
 
     try {
-      const token = localStorage.getItem("h2quote_token");
-      // FIXED: Correct endpoint path
-      const endpoint =
-        activeTab === "chemicals" ? "remove-chemicals" : "remove-refrigerants";
-
-      // FIXED: Correct request body format (array of item IDs)
-      const requestBody =
-        activeTab === "chemicals"
-          ? { chemicalItemIds: [itemId] }
-          : { refrigerantItemIds: [itemId] };
-
-      const response = await fetch(
-        `${API_URL}/api/service-requests/${requestId}/${endpoint}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
+      const response = activeTab === "chemicals"
+        ? await serviceRequestsAPI.removeChemicals(requestId, [itemId])
+        : await serviceRequestsAPI.removeRefrigerants(requestId, [itemId]);
 
       const data = await response.json();
 
       if (response.ok && data.success) {
         setSuccess("Item removed successfully");
-        fetchCurrentItems(); // Refresh the current items list in the modal
-
-        // DON'T call onSuccess here - only call it when modal closes
+        fetchCurrentItems();
 
         setTimeout(() => setSuccess(""), 3000);
       } else {
@@ -283,9 +180,9 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
 
   const handleClose = () => {
     if (onSuccess) {
-      onSuccess(); // Trigger parent to refresh data
+      onSuccess();
     }
-    onClose(); // Close the modal
+    onClose();
   };
 
   return (

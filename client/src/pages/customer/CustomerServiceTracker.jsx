@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { CgMaximizeAlt } from "react-icons/cg";
 import CustomerLayout from "../../layouts/CustomerLayout";
-import API_URL from "../../config/api";
+import { serviceRequestsAPI } from "../../config/api"
 
 const CustomerServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -22,63 +22,57 @@ const CustomerServiceTracker = () => {
 
   // Fetch customer requests from API
   const fetchCustomerRequests = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('h2quote_token');
-      
-      if (!token) {
+  try {
+    setLoading(true);
+    const token = localStorage.getItem('h2quote_token');
+    
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    const response = await serviceRequestsAPI.getMyRequests();
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('h2quote_token');
         navigate('/login');
         return;
       }
-
-      const response = await fetch(`${API_URL}/api/service-requests/my-requests`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('h2quote_token');
-          navigate('/login');
-          return;
-        }
-        throw new Error('Failed to fetch service requests');
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        console.log('Fetched customer requests:', data.data);
-        
-        // Transform backend data to match your existing UI structure
-        const transformedData = (data.data || []).map(item => ({
-          id: item.request_number,
-          requestedAt: formatDate(item.created_at),
-          serviceCategory: "-", // Can be enhanced based on items
-          requestedService: "-", // Can be enhanced based on items
-          assignedStaff: item.assigned_staff_name || "-",
-          serviceStatus: item.service_status || "Pending",
-          paymentStatus: item.payment_status || "Pending",
-          warrantyStatus: item.warranty_status || "N/A",
-          totalCost: formatCurrency(item.estimated_cost),
-          requestId: item.request_id // Keep original ID for navigation
-        }));
-
-        setMockData(transformedData);
-      } else {
-        setError(data.message || 'Failed to fetch service requests');
-      }
-    } catch (error) {
-      console.error('Error fetching requests:', error);
-      setError('Failed to fetch service requests');
-      setMockData([]);
-    } finally {
-      setLoading(false);
+      throw new Error('Failed to fetch service requests');
     }
-  };
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log('Fetched customer requests:', data.data);
+      
+      // Transform backend data to match your existing UI structure
+      const transformedData = (data.data || []).map(item => ({
+        id: item.request_number,
+        requestedAt: formatDate(item.created_at),
+        serviceCategory: "-", // Can be enhanced based on items
+        requestedService: "-", // Can be enhanced based on items
+        assignedStaff: item.assigned_staff_name || "-",
+        serviceStatus: item.service_status || "Pending",
+        paymentStatus: item.payment_status || "Pending",
+        warrantyStatus: item.warranty_status || "N/A",
+        totalCost: formatCurrency(item.estimated_cost),
+        requestId: item.request_id // Keep original ID for navigation
+      }));
+
+      setMockData(transformedData);
+    } else {
+      setError(data.message || 'Failed to fetch service requests');
+    }
+  } catch (error) {
+    console.error('Error fetching requests:', error);
+    setError('Failed to fetch service requests');
+    setMockData([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchCustomerRequests();

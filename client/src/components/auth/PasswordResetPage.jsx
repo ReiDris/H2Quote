@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react";
-import API_URL from '../../config/api';
+import { authAPI } from '../../config/api'
 
 const PasswordResetPage = () => {
   const [searchParams] = useSearchParams();
@@ -31,11 +31,7 @@ const PasswordResetPage = () => {
       }
 
       try {
-        const response = await fetch(
-          `${API_URL}/auth/validate-reset-token?token=${encodeURIComponent(
-            token
-          )}&email=${encodeURIComponent(email)}`
-        );
+        const response = await authAPI.validateResetToken(token, email);
         const data = await response.json();
 
         if (data.success) {
@@ -93,21 +89,12 @@ const PasswordResetPage = () => {
     setError("");
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/reset-password",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            token,
-            email,
-            newPassword: formData.newPassword,
-            confirmPassword: formData.confirmPassword,
-          }),
-        }
-      );
+      const response = await authAPI.resetPassword(
+  token,
+  email,
+  formData.newPassword,
+  formData.confirmPassword
+);
 
       const data = await response.json();
 

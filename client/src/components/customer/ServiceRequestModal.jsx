@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { X, Trash2 } from "lucide-react";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
-import API_URL from '../../config/api';
+import { serviceRequestsAPI } from '../../config/api';
 
 const ServiceRequestModal = ({ onClose }) => {
   const { selectedServices, updateQuantity, removeService, clearServices } = useServiceRequest();
@@ -106,17 +106,7 @@ const ServiceRequestModal = ({ onClose }) => {
         specialRequirements,
       };
 
-      const response = await fetch(
-        `${API_URL}/api/service-requests`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestData),
-        }
-      );
+      const response = await serviceRequestsAPI.create(requestData);
 
       const data = await response.json();
 

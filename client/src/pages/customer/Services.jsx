@@ -3,7 +3,7 @@ import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import ServiceRequestModal from "../../components/customer/ServiceRequestModal";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
-import API_URL from "../../config/api";
+import { serviceRequestsAPI } from "../../config/api";
 
 const Services = () => {
   const { addService } = useServiceRequest();
@@ -26,52 +26,30 @@ const Services = () => {
   const fetchCatalogData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("h2quote_token");
 
-      const servicesResponse = await fetch(
-        `${API_URL}/api/service-requests/services/catalog`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
+      // Fetch services
+      const servicesResponse = await serviceRequestsAPI.getServicesCatalog();
       const servicesData = await servicesResponse.json();
 
+      // Fetch chemicals (with error handling)
       let chemicalsData = { success: true, data: [] };
       try {
-        const chemicalsResponse = await fetch(
-          `${API_URL}/api/service-requests/chemicals/catalog`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const chemicalsResponse = await serviceRequestsAPI.getChemicalsCatalog();
         chemicalsData = await chemicalsResponse.json();
       } catch (chemError) {
         console.log("Chemicals not accessible:", chemError);
       }
 
+      // Fetch refrigerants (with error handling)
       let refrigerantsData = { success: true, data: [] };
       try {
-        const refrigerantsResponse = await fetch(
-          `${API_URL}/api/service-requests/refrigerants/catalog`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const refrigerantsResponse = await serviceRequestsAPI.getRefrigerantsCatalog();
         refrigerantsData = await refrigerantsResponse.json();
       } catch (refrigerantError) {
         console.log("Refrigerants not accessible:", refrigerantError);
       }
 
+      // Transform services data
       if (servicesData.success) {
         const transformedServices = servicesData.data.map((service) => ({
           id: service.service_id,
@@ -92,6 +70,7 @@ const Services = () => {
         setServices(transformedServices);
       }
 
+      // Transform chemicals data
       if (chemicalsData.success && chemicalsData.data.length > 0) {
         const transformedChemicals = chemicalsData.data.map((chemical) => ({
           id: `chem_${chemical.id}`,
@@ -109,6 +88,7 @@ const Services = () => {
         setChemicals(transformedChemicals);
       }
 
+      // Transform refrigerants data
       if (refrigerantsData.success && refrigerantsData.data.length > 0) {
         const transformedRefrigerants = refrigerantsData.data.map(
           (refrigerant) => ({
