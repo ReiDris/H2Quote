@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Download } from "lucide-react";
-import API_URL from "../config/api";
+import API_URL from '../../config/api';
 
 const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
   const [loading, setLoading] = useState(true);

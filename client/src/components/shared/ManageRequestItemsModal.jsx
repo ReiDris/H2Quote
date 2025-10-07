@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Plus, Trash2, Search, AlertCircle } from "lucide-react";
-import API_URL from "../config/api";
+import API_URL from '../../config/api';
 
 const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [activeTab, setActiveTab] = useState("chemicals");

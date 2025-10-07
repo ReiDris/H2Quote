@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import ForgotPasswordModal from "./ForgotPasswordModal";
-import API_URL from '../config/api';
+import API_URL from '../../config/api';
 
 const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   const location = useLocation();

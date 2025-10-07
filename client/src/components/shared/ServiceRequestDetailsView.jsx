@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
 import PaymentProofViewer from "./PaymentProofViewer";
-import API_URL from "../config/api";
+import API_URL from '../../config/api';
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();

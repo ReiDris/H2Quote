@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { X, Trash2 } from "lucide-react";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
-import API_URL from '../config/api';
+import API_URL from '../../config/api';
 
 const ServiceRequestModal = ({ onClose }) => {
   const { selectedServices, updateQuantity, removeService, clearServices } = useServiceRequest();
