@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import ForgotPasswordModal from "./ForgotPasswordModal";
-import { authAPI } from '../../config/api';
+import { authAPI } from "../../config/api";
 
 const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   const location = useLocation();
@@ -46,7 +46,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     script.onload = () => {
       if (window.google) {
         const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-        
+
         if (!clientId || clientId === "YOUR_GOOGLE_CLIENT_ID") {
           console.error("Google Client ID is missing or not set properly!");
           return;
@@ -84,31 +84,33 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   }, [error]);
 
   const handleGoogleResponse = async (response) => {
-  try {
-    setIsGoogleLoading(true);
-    setErrors({});
-    setSuccessMessage("");
+    try {
+      setIsGoogleLoading(true);
+      setErrors({});
+      setSuccessMessage("");
 
-    const result = await authAPI.googleAuth({ credential: response.credential });
-    const data = await result.json();
+      const result = await authAPI.googleAuth({
+        credential: response.credential,
+      });
+      const data = await result.json();
 
-    if (data.success) {
-      localStorage.setItem("h2quote_token", data.data.token);
-      localStorage.setItem("h2quote_user", JSON.stringify(data.data.user));
+      if (data.success) {
+        localStorage.setItem("h2quote_token", data.data.token);
+        localStorage.setItem("h2quote_user", JSON.stringify(data.data.user));
 
-      if (onLogin) {
-        await onLogin(data.data);
+        if (onLogin) {
+          await onLogin(data.data);
+        }
+      } else {
+        setErrors({ general: data.message || "Google login failed" });
       }
-    } else {
-      setErrors({ general: data.message || "Google login failed" });
+    } catch (error) {
+      console.error("Google login error:", error);
+      setErrors({ general: "Google login failed. Please try again." });
+    } finally {
+      setIsGoogleLoading(false);
     }
-  } catch (error) {
-    console.error("Google login error:", error);
-    setErrors({ general: "Google login failed. Please try again." });
-  } finally {
-    setIsGoogleLoading(false);
-  }
-};
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -165,67 +167,79 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   };
 
   const handleGoogleLogin = () => {
-  console.log('Google login button clicked');
-  
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  
-  if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID') {
-    setErrors({ general: 'Google Client ID not configured. Please contact support.' });
-    return;
-  }
+    console.log("🔵 Google login button clicked");
 
-  setIsGoogleLoading(true);
-  setErrors({});
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  // Use the current URL's origin for redirect
-  const redirectUri = `${window.location.origin}/auth/google/callback`;
+    // Debug logs
+    console.log("🔑 Client ID:", clientId);
+    console.log("🌍 Environment:", import.meta.env.MODE);
+    console.log("📦 All env vars:", import.meta.env);
 
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: 'openid email profile',
-    access_type: 'online',
-    prompt: 'select_account'
-  });
+    if (!clientId || clientId === "YOUR_GOOGLE_CLIENT_ID") {
+      console.error("❌ Google Client ID not configured");
+      setErrors({
+        general: "Google Client ID not configured. Please contact support.",
+      });
+      return;
+    }
 
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-  
-  // Redirect in the same window instead of popup
-  window.location.href = authUrl;
-};
-
-  const handleGoogleAuthCode = async (code) => {
-  try {
     setIsGoogleLoading(true);
     setErrors({});
 
+    // Use the current URL's origin for redirect
     const redirectUri = `${window.location.origin}/auth/google/callback`;
-    
-    const result = await authAPI.googleAuth({
-      code: code,
-      redirect_uri: redirectUri
+
+    console.log("📍 Redirect URI:", redirectUri);
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      access_type: "online",
+      prompt: "select_account",
     });
 
-    const data = await result.json();
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-    if (data.success) {
-      localStorage.setItem('h2quote_token', data.data.token);
-      localStorage.setItem('h2quote_user', JSON.stringify(data.data.user));
-      
-      if (onLogin) {
-        await onLogin(data.data);
+    console.log("🚀 Redirecting to:", authUrl);
+
+    // Redirect in the same window instead of popup
+    window.location.href = authUrl;
+  };
+
+  const handleGoogleAuthCode = async (code) => {
+    try {
+      setIsGoogleLoading(true);
+      setErrors({});
+
+      const redirectUri = `${window.location.origin}/auth/google/callback`;
+
+      const result = await authAPI.googleAuth({
+        code: code,
+        redirect_uri: redirectUri,
+      });
+
+      const data = await result.json();
+
+      if (data.success) {
+        localStorage.setItem("h2quote_token", data.data.token);
+        localStorage.setItem("h2quote_user", JSON.stringify(data.data.user));
+
+        if (onLogin) {
+          await onLogin(data.data);
+        }
+      } else {
+        setErrors({ general: data.message || "Google login failed" });
       }
-    } else {
-      setErrors({ general: data.message || 'Google login failed' });
+    } catch (error) {
+      console.error("Google auth error:", error);
+      setErrors({ general: "Google login failed. Please try again." });
+    } finally {
+      setIsGoogleLoading(false);
     }
-  } catch (error) {
-    console.error('Google auth error:', error);
-    setErrors({ general: 'Google login failed. Please try again.' });
-  } finally {
-    setIsGoogleLoading(false);
-  }
-};
+  };
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
