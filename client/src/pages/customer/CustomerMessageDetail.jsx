@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Send } from "lucide-react";
-import CustomerLayout from "../layouts/CustomerLayout";
-import { messagingAPI } from '../../config/api';
+import CustomerLayout from "../../layouts/CustomerLayout";
+import { messagingAPI } from '../../config/api';  
 
 const CustomerMessageDetail = () => {
   const navigate = useNavigate();

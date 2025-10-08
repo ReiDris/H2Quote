@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
-import AdminLayout from "../layouts/AdminLayout";
-import StaffLayout from "../layouts/StaffLayout";
-import CustomerLayout from "../layouts/CustomerLayout";
+import AdminLayout from "../../layouts/AdminLayout";
+import StaffLayout from "../../layouts/StaffLayout";
+import CustomerLayout from "../../layouts/CustomerLayout";
 import { messagingAPI } from '../../config/api';
 
 const Messages = () => {
