@@ -27,7 +27,7 @@ const googleAuth = async (req, res) => {
       googleUser = await response.json();
 
       if (googleUser.error) {
-        console.log('❌ Credential validation error:', googleUser.error);
+        console.log('Credential validation error:', googleUser.error);
         return res.status(400).json({
           success: false,
           message: 'Invalid Google token'

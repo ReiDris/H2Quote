@@ -41,9 +41,9 @@ router.post('/:requestId/add-refrigerants', requireAdminOrStaff, serviceRequestC
 router.delete('/:requestId/remove-refrigerants', requireAdminOrStaff, serviceRequestController.removeRefrigerantsFromRequest);
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
-router.put('/:requestId/update', requireAdminOrStaff, serviceRequestController.updateServiceRequest); // ✅ Only once
+router.put('/:requestId/update', requireAdminOrStaff, serviceRequestController.updateServiceRequest);
 router.post('/:requestId/warranty', requireAdminOrStaff, serviceRequestController.setServiceWarranty);
-router.put('/:requestId/items/:itemId/warranty', requireAdminOrStaff, serviceRequestController.updateIndividualServiceWarranty); // ✅ Keep the newer one
+router.put('/:requestId/items/:itemId/warranty', requireAdminOrStaff, serviceRequestController.updateIndividualServiceWarranty); 
 
 // Generic routes LAST
 router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
