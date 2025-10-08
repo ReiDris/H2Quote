@@ -1,10 +1,12 @@
 const { createClient } = require('@supabase/supabase-js');
 const pool = require('../config/database');
+const { createNotification } = require('./notificationController');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
 const getInboxMessages = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -229,8 +231,9 @@ const sendMessage = async (req, res) => {
       });
     }
 
+    // Get recipient details
     const recipientCheck = await client.query(
-      'SELECT user_id FROM users WHERE user_id = $1',
+      'SELECT user_id, email, first_name, last_name FROM users WHERE user_id = $1',
       [recipientId]
     );
 
@@ -240,6 +243,8 @@ const sendMessage = async (req, res) => {
         message: 'Recipient not found'
       });
     }
+
+    const recipient = recipientCheck.rows[0];
 
     const insertQuery = `
       INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
@@ -252,6 +257,24 @@ const sendMessage = async (req, res) => {
     ]);
 
     await client.query('COMMIT');
+
+    // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT
+    try {
+      const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
+      const messagePreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      
+      await createNotification(
+        recipientId,
+        'New Message',
+        `New Message: ${subject}`,
+        `You have received a new message from ${req.user.email}. Subject: ${subject}. ${messagePreview}`,
+        recipient.email
+      );
+      
+      console.log(`Message notification sent to ${recipient.email}`);
+    } catch (notifError) {
+      console.error('Failed to send message notification:', notifError);
+    }
 
     res.status(201).json({
       success: true,
@@ -310,6 +333,13 @@ const replyToMessage = async (req, res) => {
     const replyRecipient = original.sender_id === senderId ? original.recipient_id : original.sender_id;
     const replySubject = original.subject.startsWith('Re: ') ? original.subject : `Re: ${original.subject}`;
 
+    // Get recipient details for notification
+    const recipientQuery = await client.query(
+      'SELECT email, first_name, last_name FROM users WHERE user_id = $1',
+      [replyRecipient]
+    );
+    const recipient = recipientQuery.rows[0];
+
     const replyQuery = `
       INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -329,6 +359,24 @@ const replyToMessage = async (req, res) => {
     `, [messageId, replyId]);
 
     await client.query('COMMIT');
+
+    // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT
+    try {
+      const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
+      const replyPreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      
+      await createNotification(
+        replyRecipient,
+        'Message Reply',
+        `New Reply: ${replySubject}`,
+        `${req.user.email} replied to your message. ${replyPreview}`,
+        recipient.email
+      );
+      
+      console.log(`Reply notification sent to ${recipient.email}`);
+    } catch (notifError) {
+      console.error('Failed to send reply notification:', notifError);
+    }
 
     res.status(201).json({
       success: true,
@@ -459,7 +507,7 @@ const getMessageableUsers = async (req, res) => {
         SELECT user_id as id, CONCAT(first_name, ' ', last_name) as name, 
                user_type, department
         FROM users 
-        WHERE user_type IN ('admin', 'staff') AND user_id != $1
+        WHERE user_type IN ('admin', 'staff') AND user_id != $1 AND status = 'Active'
         ORDER BY user_type, last_name
       `;
     } else {
@@ -468,7 +516,7 @@ const getMessageableUsers = async (req, res) => {
                u.user_type, u.department, c.company_name
         FROM users u
         LEFT JOIN companies c ON u.company_id = c.company_id
-        WHERE u.user_id != $1
+        WHERE u.user_id != $1 AND u.status = 'Active'
         ORDER BY u.user_type, c.company_name, u.last_name
       `;
     }
