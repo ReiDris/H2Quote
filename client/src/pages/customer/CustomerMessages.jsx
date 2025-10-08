@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import CustomerLayout from "../layouts/CustomerLayout";
-import { messagingAPI } from '../config/api';
+import { messagingAPI } from '../../config/api';
 
 const CustomerMessages = () => {
   const navigate = useNavigate();
