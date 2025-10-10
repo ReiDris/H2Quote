@@ -49,7 +49,7 @@ const generateNotificationEmail = (userName, subject, messageBody, actionUrl = n
                 <div style="text-align: center; margin-top: 30px;">
                     <p style="color: #888; font-size: 14px;">
                         Best regards,<br>
-                        The H2Quote Team
+                        TRISHKAYE Enterprises
                     </p>
                 </div>
             </div>
@@ -100,7 +100,7 @@ const generateServiceRequestEmail = (userName, requestNumber, status, message, r
                 <div style="text-align: center; margin-top: 30px;">
                     <p style="color: #888; font-size: 14px;">
                         Best regards,<br>
-                        The H2Quote Team
+                        TRISHKAYE Enterprises
                     </p>
                 </div>
             </div>
@@ -236,7 +236,7 @@ const generateAccountApprovalEmail = (customerName, companyName, email) => {
                 <div style="text-align: center; margin-top: 30px;">
                     <p style="color: #6c757d; font-size: 14px;">
                         Welcome aboard!<br>
-                        The H2Quote Team
+                        TRISHKAYE Enterprises
                     </p>
                 </div>
             </div>
@@ -306,7 +306,7 @@ const generatePasswordResetEmail = (userName, resetToken, resetUrl) => {
                 <div style="text-align: center; margin-top: 30px;">
                     <p style="color: #888; font-size: 14px;">
                         Best regards,<br>
-                        The H2Quote Team
+                        TRISHKAYE Enterprises
                     </p>
                 </div>
             </div>
