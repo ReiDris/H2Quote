@@ -25,3 +25,5 @@ dist-ssr
 .DS_Store
 *.suo
 *.
+.vercel
+#tangina mo vercel
