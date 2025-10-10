@@ -4,6 +4,7 @@ import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import { useAuth } from "../../hooks/useAuth";
+import { accountAPI } from "../../config/api";
 
 const AccountSettings = () => {
   const { user } = useAuth();
@@ -25,14 +26,7 @@ const AccountSettings = () => {
 
   const fetchAccountData = async () => {
     try {
-      const token = localStorage.getItem('h2quote_token');
-      const response = await fetch('http://localhost:5000/api/account', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
+      const response = await accountAPI.getAccount();
       const data = await response.json();
 
       if (data.success) {
@@ -101,8 +95,6 @@ const AccountSettings = () => {
     setSuccessMessage('');
 
     try {
-      const token = localStorage.getItem('h2quote_token');
-      
       // Prepare update data
       const updateData = {
         name: formData.name.trim(),
@@ -115,15 +107,7 @@ const AccountSettings = () => {
         updateData.password = formData.password;
       }
 
-      const response = await fetch('http://localhost:5000/api/account', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
+      const response = await accountAPI.updateAccount(updateData);
       const data = await response.json();
 
       if (data.success) {

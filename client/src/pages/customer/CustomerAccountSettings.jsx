@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import { useAuth } from "../../hooks/useAuth";
+import { accountAPI } from "../../config/api";
 
 const CustomerAccountSettings = () => {
   const { user } = useAuth();
@@ -23,33 +24,26 @@ const CustomerAccountSettings = () => {
   }, []);
 
   const fetchAccountData = async () => {
-    try {
-      const token = localStorage.getItem('h2quote_token');
-      const response = await fetch('http://localhost:5000/api/account', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+  try {
+    const response = await accountAPI.getAccount();
+    const data = await response.json();
+
+    if (data.success) {
+      setFormData({
+        name: data.data.name || '',
+        email: data.data.email || '',
+        contactNo: data.data.contactNo || '',
+        company: data.data.companyName || '',
+        password: '************',
       });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setFormData({
-          name: data.data.name || '',
-          email: data.data.email || '',
-          contactNo: data.data.contactNo || '',
-          company: data.data.companyName || '',
-          password: '************',
-        });
-      } else {
-        setErrors({ general: data.message || 'Failed to load account data' });
-      }
-    } catch (error) {
-      console.error('Error fetching account data:', error);
-      setErrors({ general: 'Failed to load account data' });
+    } else {
+      setErrors({ general: data.message || 'Failed to load account data' });
     }
-  };
+  } catch (error) {
+    console.error('Error fetching account data:', error);
+    setErrors({ general: 'Failed to load account data' });
+  }
+};
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -98,70 +92,60 @@ const CustomerAccountSettings = () => {
   };
 
   const handleSaveChanges = async () => {
-    if (!validateForm()) return;
+  if (!validateForm()) return;
 
-    setLoading(true);
-    setErrors({});
-    setSuccessMessage('');
+  setLoading(true);
+  setErrors({});
+  setSuccessMessage('');
 
-    try {
-      const token = localStorage.getItem('h2quote_token');
-      
-      // Prepare update data
-      const updateData = {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        contactNo: formData.contactNo.trim(),
-      };
+  try {
+    // Prepare update data
+    const updateData = {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      contactNo: formData.contactNo.trim(),
+    };
 
-      // Only include password if it's been changed
-      if (formData.password && formData.password !== '************') {
-        updateData.password = formData.password;
-      }
-
-      const response = await fetch('http://localhost:5000/api/account', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSuccessMessage('Account updated successfully!');
-        
-        // Update local storage if user data changed
-        const currentUser = JSON.parse(localStorage.getItem('h2quote_user') || '{}');
-        const updatedUser = {
-          ...currentUser,
-          name: data.data.name,
-          email: data.data.email,
-          firstName: data.data.firstName,
-          lastName: data.data.lastName,
-        };
-        localStorage.setItem('h2quote_user', JSON.stringify(updatedUser));
-
-        // Reset password field to placeholder
-        setFormData(prev => ({
-          ...prev,
-          password: '************'
-        }));
-
-        // Clear success message after 5 seconds
-        setTimeout(() => setSuccessMessage(''), 5000);
-      } else {
-        setErrors({ general: data.message || 'Failed to update account' });
-      }
-    } catch (error) {
-      console.error('Error updating account:', error);
-      setErrors({ general: 'Failed to update account. Please try again.' });
-    } finally {
-      setLoading(false);
+    // Only include password if it's been changed
+    if (formData.password && formData.password !== '************') {
+      updateData.password = formData.password;
     }
-  };
+
+    const response = await accountAPI.updateAccount(updateData);
+    const data = await response.json();
+
+    if (data.success) {
+      setSuccessMessage('Account updated successfully!');
+      
+      // Update local storage if user data changed
+      const currentUser = JSON.parse(localStorage.getItem('h2quote_user') || '{}');
+      const updatedUser = {
+        ...currentUser,
+        name: data.data.name,
+        email: data.data.email,
+        firstName: data.data.firstName,
+        lastName: data.data.lastName,
+      };
+      localStorage.setItem('h2quote_user', JSON.stringify(updatedUser));
+
+      // Reset password field to placeholder
+      setFormData(prev => ({
+        ...prev,
+        password: '************'
+      }));
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } else {
+      setErrors({ general: data.message || 'Failed to update account' });
+    }
+  } catch (error) {
+    console.error('Error updating account:', error);
+    setErrors({ general: 'Failed to update account. Please try again.' });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);

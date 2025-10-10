@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { uploadVerificationFile, handleUploadError } = require('../middleware/fileUpload');
+const { uploadVerificationFile, handleUploadError } = require('../middleware/supabaseFileUpload');
 const { authenticateToken } = require('../middleware/auth');
 const authController = require('../controllers/authController');
-const googleAuthController = require('../controllers/GoogleAuthController');
+const googleAuthController = require('../controllers/googleAuthController');
 const { validateSignup } = require('../middleware/validation');
 
 router.post('/signup',

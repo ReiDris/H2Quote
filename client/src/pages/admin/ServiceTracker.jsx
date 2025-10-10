@@ -10,6 +10,7 @@ import { CgMaximizeAlt } from "react-icons/cg";
 import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import { useAuth } from "../../hooks/useAuth";
+import { serviceRequestsAPI } from "../../config/api";
 
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -28,21 +29,14 @@ const ServiceTracker = () => {
   const fetchServiceRequests = async (page = 1, search = "") => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('h2quote_token');
       
-      const queryParams = new URLSearchParams({
+      const queryParams = {
         page: page.toString(),
         limit: itemsPerPage.toString(),
         ...(search && { search })
-      });
+      };
 
-      const response = await fetch(`http://localhost:5000/api/service-requests?${queryParams}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await serviceRequestsAPI.getAll(queryParams);
 
       if (!response.ok) {
         throw new Error('Failed to fetch service requests');

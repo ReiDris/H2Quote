@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, Upload, FileImage, Trash2 } from "lucide-react";
+import { paymentsAPI } from "../../config/api";
 
 const PaymentProofUploadModal = ({
   isOpen,
@@ -57,84 +58,60 @@ const PaymentProofUploadModal = ({
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
-      setError("Please select a file to upload.");
-      return;
-    }
+  if (!selectedFile) {
+    setError("Please select a file to upload.");
+    return;
+  }
 
-    try {
-      setUploading(true);
-      setError("");
+  try {
+    setUploading(true);
+    setError("");
 
-      const formData = new FormData();
-      formData.append("paymentProof", selectedFile);
+    const response = await paymentsAPI.uploadPaymentProof(paymentId, selectedFile);
+    const data = await response.json();
 
-      const token = localStorage.getItem("h2quote_token");
-      const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentId}/upload-proof`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSuccessMessage("Payment proof uploaded successfully!");
-        setShowSuccessModal(true);
-      } else {
-        setSuccessMessage(data.message || "Failed to upload payment proof");
-        setShowSuccessModal(true);
-      }
-    } catch (error) {
-      console.error("Upload error:", error);
-      setSuccessMessage("Failed to upload payment proof. Please try again.");
+    if (data.success) {
+      setSuccessMessage("Payment proof uploaded successfully!");
       setShowSuccessModal(true);
-    } finally {
-      setUploading(false);
+    } else {
+      setSuccessMessage(data.message || "Failed to upload payment proof");
+      setShowSuccessModal(true);
     }
-  };
+  } catch (error) {
+    console.error("Upload error:", error);
+    setSuccessMessage("Failed to upload payment proof. Please try again.");
+    setShowSuccessModal(true);
+  } finally {
+    setUploading(false);
+  }
+};
 
   const handleDeleteClick = () => {
     setShowDeleteConfirm(true);
   };
 
   const handleConfirmDelete = async () => {
-    try {
-      setUploading(true);
-      const token = localStorage.getItem("h2quote_token");
+  try {
+    setUploading(true);
 
-      const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentId}/proof`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+    const response = await paymentsAPI.deletePaymentProof(paymentId);
+    const data = await response.json();
 
-      const data = await response.json();
-
-      if (data.success) {
-        setShowDeleteConfirm(false);
-        setShowDeleteSuccessModal(true);
-      } else {
-        setError(data.message || "Failed to delete payment proof");
-        setShowDeleteConfirm(false);
-      }
-    } catch (error) {
-      console.error("Delete error:", error);
-      setError("Failed to delete payment proof. Please try again.");
+    if (data.success) {
       setShowDeleteConfirm(false);
-    } finally {
-      setUploading(false);
+      setShowDeleteSuccessModal(true);
+    } else {
+      setError(data.message || "Failed to delete payment proof");
+      setShowDeleteConfirm(false);
     }
-  };
+  } catch (error) {
+    console.error("Delete error:", error);
+    setError("Failed to delete payment proof. Please try again.");
+    setShowDeleteConfirm(false);
+  } finally {
+    setUploading(false);
+  }
+};
 
   const handleCancelDelete = () => {
     setShowDeleteConfirm(false);

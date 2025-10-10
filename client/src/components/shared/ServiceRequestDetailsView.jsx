@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
 import PaymentProofViewer from "./PaymentProofViewer";
+import { serviceRequestsAPI } from '../../config/api';
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
@@ -24,6 +25,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
+  const formatPaymentMode = (mode) => {
+    const modeMap = {
+      bank_transfer: "Bank Transfer",
+      cash: "Cash",
+      check: "Check",
+      gcash: "GCash",
+    };
+    return modeMap[mode] || mode;
+  };
 
   // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
@@ -42,6 +52,23 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  const calculateDiscountedTotal = () => {
+    const baseTotal = parseFloat(requestData.totalCost.replace(/[₱,]/g, ""));
+
+    if (selectedDiscount === "No Discount" || !selectedDiscount) {
+      return requestData.totalCost;
+    }
+
+    const discountPercent = parseFloat(selectedDiscount.replace("%", ""));
+    const discountAmount = (baseTotal * discountPercent) / 100;
+    const finalTotal = baseTotal - discountAmount;
+
+    return `₱${finalTotal.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   const handleViewProof = (paymentId, fileName) => {
     setViewingPaymentId(paymentId);
     setViewingFileName(fileName);
@@ -50,147 +77,134 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
   // Fetch staff list
   const fetchStaffList = async () => {
-    try {
-      const token = localStorage.getItem("h2quote_token");
-      const response = await fetch(
-        "http://localhost:5000/api/service-requests/staff-list",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const data = await response.json();
-      if (data.success) {
-        setStaffList(data.data);
-      }
-    } catch (error) {
-      console.error("Error fetching staff list:", error);
+  try {
+    const response = await serviceRequestsAPI.getStaffList();
+    const data = await response.json();
+    
+    if (data.success) {
+      setStaffList(data.data);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching staff list:", error);
+  }
+};
 
   // Fetch request details from backend
   const fetchRequestDetails = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("h2quote_token");
+  try {
+    setLoading(true);
 
-      const searchResponse = await fetch(
-        `http://localhost:5000/api/service-requests?search=${requestNumber}&limit=1`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    // Use getAll with search parameter
+    const searchResponse = await serviceRequestsAPI.getAll({
+      search: requestNumber,
+      limit: 1
+    });
 
-      if (!searchResponse.ok) {
-        throw new Error("Failed to find service request");
-      }
-
-      const searchData = await searchResponse.json();
-
-      if (!searchData.success || searchData.data.requests.length === 0) {
-        setError("Service request not found");
-        return;
-      }
-
-      const request = searchData.data.requests[0];
-      setRequestId(request.request_id);
-
-      const detailResponse = await fetch(
-        `http://localhost:5000/api/service-requests/${request.request_id}/details`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!detailResponse.ok) {
-        throw new Error("Failed to fetch request details");
-      }
-
-      const detailData = await detailResponse.json();
-
-      if (detailData.success) {
-        const {
-          request: requestDetails,
-          items,
-          paymentHistory,
-        } = detailData.data;
-
-        const actualTotalCost = items.reduce((sum, item) => {
-          const lineTotal =
-            typeof item.line_total === "string"
-              ? parseFloat(item.line_total.replace(/[₱,]/g, ""))
-              : parseFloat(item.line_total) || 0;
-          return sum + lineTotal;
-        }, 0);
-
-        const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`;
-
-        const transformedData = {
-          id: requestDetails.request_number,
-          requestedAt: requestDetails.requested_at,
-          customer: {
-            name: requestDetails.customer_name,
-            company: requestDetails.company_name,
-            email: requestDetails.email || "Not provided",
-            contact: requestDetails.phone || "Not provided",
-          },
-          services: items.map((item) => ({
-            service_id: item.service_id,
-            category: item.service_category || item.category,
-            service: item.name,
-            remarks: item.remarks || "-",
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            totalPrice: item.total_price,
-            itemType: item.item_type,
-            warranty_months: item.warranty_months || 6,
-            warranty_start_date: item.warranty_start_date || "",
-            warranty_status: item.warranty_status || "Not Set",
-          })),
-          paymentHistory: requestDetails.paymentHistory || [],
-          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-          totalCost: formattedTotalCost,
-          paymentMode: requestDetails.payment_mode || "Bank Transfer",
-          paymentTerms:
-            requestDetails.payment_terms || "50% Down, 50% upon Completion",
-          paymentDeadline: requestDetails.payment_deadline || "Not set",
-          assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
-          warranty: requestDetails.warranty || "6 months",
-          warrantyStatus: requestDetails.warranty_status || "Pending",
-          remarks: requestDetails.remarks || "-",
-          serviceStatus: requestDetails.service_status || "Pending",
-        };
-
-        setRequestData(transformedData);
-        setPaymentBreakdown(requestDetails.paymentHistory || []);
-
-        setServiceStatus(requestDetails.service_status || "Pending");
-        setPaymentStatus(requestDetails.payment_status || "Pending");
-        setWarrantyStatus(requestDetails.warranty_status || "Pending");
-      } else {
-        setError(detailData.message || "Failed to fetch request details");
-      }
-    } catch (error) {
-      console.error("Error fetching request details:", error);
-      setError("Failed to fetch request details");
-    } finally {
-      setLoading(false);
+    if (!searchResponse.ok) {
+      throw new Error("Failed to find service request");
     }
-  };
+
+    const searchData = await searchResponse.json();
+
+    if (!searchData.success || searchData.data.requests.length === 0) {
+      setError("Service request not found");
+      return;
+    }
+
+    const request = searchData.data.requests[0];
+    setRequestId(request.request_id);
+
+    // Use getDetails (not getRequestDetails)
+    const detailResponse = await serviceRequestsAPI.getDetails(request.request_id);
+
+    if (!detailResponse.ok) {
+      throw new Error("Failed to fetch request details");
+    }
+
+    const detailData = await detailResponse.json();
+
+    if (detailData.success) {
+      const {
+        request: requestDetails,
+        items,
+        paymentHistory,
+      } = detailData.data;
+
+      const actualTotalCost = items.reduce((sum, item) => {
+        const lineTotal =
+          typeof item.line_total === "string"
+            ? parseFloat(item.line_total.replace(/[₱,]/g, ""))
+            : parseFloat(item.line_total) || 0;
+        return sum + lineTotal;
+      }, 0);
+
+      const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+
+      const transformedData = {
+        id: requestDetails.request_number,
+        requestedAt: requestDetails.requested_at,
+        requestAcknowledgedDate:
+          requestDetails.request_acknowledged_date || "-",
+        actualCompletionDate: requestDetails.actual_completion_date || "-",
+        customer: {
+          name: requestDetails.customer_name,
+          company: requestDetails.company_name,
+          email: requestDetails.email || "Not provided",
+          contact: requestDetails.phone || "Not provided",
+        },
+        services: items.map((item) => ({
+          service_id: item.service_id,
+          category: item.service_category || item.category,
+          service: item.name,
+          remarks: item.remarks || "-",
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          totalPrice: item.total_price,
+          itemType: item.item_type,
+          warranty_months: item.warranty_months || 6,
+          warranty_start_date: item.warranty_start_date || "",
+          warranty_status: item.warranty_status || "Not Set",
+        })),
+        paymentHistory: requestDetails.paymentHistory || [],
+        estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+        totalCost: formattedTotalCost,
+        paymentMode: requestDetails.payment_mode || "Bank Transfer",
+        paymentTerms:
+          requestDetails.payment_terms || "50% Down, 50% upon Completion",
+        paymentDeadline: requestDetails.payment_deadline || "Not set",
+        assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
+        warranty: requestDetails.warranty || "6 months",
+        warrantyStatus: requestDetails.warranty_status || "Pending",
+        remarks: requestDetails.remarks || "-",
+        serviceStatus: requestDetails.service_status || "Pending",
+      };
+
+      setRequestData(transformedData);
+      setPaymentBreakdown(requestDetails.paymentHistory || []);
+
+      setServiceStatus(requestDetails.service_status || "Pending");
+      setPaymentStatus(requestDetails.payment_status || "Pending");
+      setWarrantyStatus(requestDetails.warranty_status || "Pending");
+      setServiceStartDate(requestDetails.service_start_date || "");
+      setServiceEndDate(requestDetails.actual_completion_date || "");
+      setSelectedDiscount(
+        requestDetails.discount_percentage
+          ? `${requestDetails.discount_percentage}%`
+          : "No Discount"
+      );
+    } else {
+      setError(detailData.message || "Failed to fetch request details");
+    }
+  } catch (error) {
+    console.error("Error fetching request details:", error);
+    setError("Failed to fetch request details");
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (requestNumber) {
@@ -328,60 +342,48 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   };
 
   const handleSaveChanges = async () => {
-    try {
-      const token = localStorage.getItem("h2quote_token");
+  try {
+    const updatePayload = {
+      serviceStatus: serviceStatus,
+      paymentStatus: paymentStatus,
+      warrantyStatus: warrantyStatus,
+      assignedStaff: requestData.assignedStaff,
+      serviceStartDate: serviceStartDate || null,
+      serviceEndDate: serviceEndDate || null,
+      discount: selectedDiscount,
+      services: requestData.services.map((service) => ({
+        service_id: service.service_id,
+        itemType: service.itemType,
+        warranty_months: service.warranty_months,
+        warranty_start_date: service.warranty_start_date || null,
+        warranty_status: service.warranty_status,
+      })),
+      paymentBreakdown: paymentBreakdown.map((payment) => ({
+        phase: payment.phase,
+        paymentStatus: payment.paymentStatus,
+      })),
+    };
 
-      const updatePayload = {
-        serviceStatus: serviceStatus,
-        paymentStatus: paymentStatus,
-        warrantyStatus: warrantyStatus,
-        assignedStaff: requestData.assignedStaff,
-        serviceStartDate: serviceStartDate || null,
-        serviceEndDate: serviceEndDate || null,
-        discount: selectedDiscount,
-        services: requestData.services.map((service) => ({
-          service_id: service.service_id,
-          itemType: service.itemType,
-          warranty_months: service.warranty_months,
-          warranty_start_date: service.warranty_start_date || null,
-          warranty_status: service.warranty_status,
-        })),
-        paymentBreakdown: paymentBreakdown.map((payment) => ({
-          phase: payment.phase,
-          paymentStatus: payment.paymentStatus,
-        })),
-      };
+    console.log("Sending update payload:", updatePayload);
 
-      console.log("Sending update payload:", updatePayload);
+    // Use updateRequest (not updateRequestDetails)
+    const response = await serviceRequestsAPI.updateRequest(requestId, updatePayload);
+    const data = await response.json();
 
-      const response = await fetch(
-        `http://localhost:5000/api/service-requests/${requestId}/update`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updatePayload),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSuccessMessage("Changes saved successfully!");
-        setShowSuccessModal(true);
-        fetchRequestDetails();
-      } else {
-        setSuccessMessage("Failed to save changes: " + data.message);
-        setShowSuccessModal(true);
-      }
-    } catch (error) {
-      console.error("Save changes error:", error);
-      setSuccessMessage("Failed to save changes. Please try again.");
+    if (data.success) {
+      setSuccessMessage("Changes saved successfully!");
+      setShowSuccessModal(true);
+      fetchRequestDetails();
+    } else {
+      setSuccessMessage("Failed to save changes: " + data.message);
       setShowSuccessModal(true);
     }
-  };
+  } catch (error) {
+    console.error("Save changes error:", error);
+    setSuccessMessage("Failed to save changes. Please try again.");
+    setShowSuccessModal(true);
+  }
+};
 
   if (loading) {
     return (
@@ -721,8 +723,18 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
           <div className="text-right">
+            {selectedDiscount !== "No Discount" && (
+              <>
+                <p className="text-sm text-gray-500 line-through">
+                  {requestData.totalCost}
+                </p>
+                <p className="text-xs text-green-600 mb-1">
+                  {selectedDiscount} discount applied
+                </p>
+              </>
+            )}
             <p className="text-2xl font-bold text-[#0260A0]">
-              {requestData.totalCost}
+              {calculateDiscountedTotal()}
             </p>
           </div>
         </div>
@@ -738,7 +750,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               Mode of Payment:
             </label>
             <span className="text-sm text-gray-800">
-              {requestData.paymentMode}
+              {formatPaymentMode(requestData.paymentMode)}
             </span>
           </div>
           <div className="flex items-center">
@@ -889,13 +901,17 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Request Acknowledged:
             </label>
-            <span className="text-sm text-gray-800">-</span>
+            <span className="text-sm text-gray-800">
+              {requestData.requestAcknowledgedDate}
+            </span>
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Service End Date:
             </label>
-            <span className="text-sm text-gray-800">-</span>
+            <span className="text-sm text-gray-800">
+              {requestData.actualCompletionDate}
+            </span>
           </div>
         </div>
       </div>

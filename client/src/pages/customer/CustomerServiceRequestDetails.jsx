@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, Upload } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
+import { serviceRequestsAPI } from "../../config/api";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -12,12 +13,22 @@ const CustomerServiceRequestDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const formatPaymentMode = (mode) => {
+    const modeMap = {
+      bank_transfer: "Bank Transfer",
+      cash: "Cash",
+      check: "Check",
+      gcash: "GCash",
+    };
+    return modeMap[mode] || mode;
+  };
+
   // Payment proof modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [viewingPaymentId, setViewingPaymentId] = useState(null);
-  const [viewingFileName, setViewingFileName] = useState('');
+  const [viewingFileName, setViewingFileName] = useState("");
 
   useEffect(() => {
     if (requestId) {
@@ -26,86 +37,80 @@ const CustomerServiceRequestDetails = () => {
   }, [requestId]);
 
   const fetchRequestDetails = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('h2quote_token');
-      
-      console.log('Fetching details for requestId:', requestId);
-      
-      if (!token) {
-        console.log('No token found');
-        navigate('/login');
+  try {
+    setLoading(true);
+    const token = localStorage.getItem("h2quote_token");
+
+    console.log("Fetching details for requestId:", requestId);
+
+    if (!token) {
+      console.log("No token found");
+      navigate("/login");
+      return;
+    }
+
+    const response = await serviceRequestsAPI.getDetails(requestId);
+
+    console.log("Response status:", response.status);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("h2quote_token");
+        navigate("/login");
         return;
       }
-
-      const response = await fetch(`http://localhost:5000/api/service-requests/${requestId}/details`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('h2quote_token');
-          navigate('/login');
-          return;
-        }
-        if (response.status === 404) {
-          setError('Service request not found');
-          return;
-        }
-        throw new Error('Failed to fetch request details');
+      if (response.status === 404) {
+        setError("Service request not found");
+        return;
       }
-
-      const data = await response.json();
-      console.log('Received data:', data);
-
-      if (data.success) {
-        const { request: requestDetails, items } = data.data;
-        
-        const transformedData = {
-          id: requestDetails.request_number,
-          requestedAt: requestDetails.requested_at,
-          serviceStatus: requestDetails.service_status,
-          paymentStatus: requestDetails.payment_status,
-          warrantyStatus: requestDetails.warranty_status,
-          services: (items || []).map(item => ({
-            category: item.service_category || item.category,
-            service: item.service || item.name,
-            remarks: item.remarks || "-",
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            totalPrice: item.total_price
-          })),
-          paymentHistory: requestDetails.paymentHistory || [],
-          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-          totalCost: requestDetails.totalCost,
-          paymentMode: requestDetails.payment_mode || "-",
-          paymentTerms: requestDetails.payment_terms || "-",
-          paymentDeadline: requestDetails.payment_deadline || "-",
-          assignedStaff: requestDetails.assigned_staff_name || "-",
-          serviceStartDate: requestDetails.service_start_date || "-",
-          estimatedEndDate: requestDetails.estimated_end_date || "-",
-          warranty: requestDetails.warranty || "6 months"
-        };
-
-        console.log('Setting request data');
-        setRequestData(transformedData);
-        setError("");
-      } else {
-        setError(data.message || 'Failed to fetch request details');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      setError('Failed to fetch request details');
-    } finally {
-      setLoading(false);
+      throw new Error("Failed to fetch request details");
     }
-  };
+
+    const data = await response.json();
+    console.log("Received data:", data);
+
+    if (data.success) {
+      const { request: requestDetails, items } = data.data;
+
+      const transformedData = {
+        id: requestDetails.request_number,
+        requestedAt: requestDetails.requested_at,
+        serviceStatus: requestDetails.service_status,
+        paymentStatus: requestDetails.payment_status,
+        warrantyStatus: requestDetails.warranty_status,
+        services: (items || []).map((item) => ({
+          category: item.service_category || item.category,
+          service: item.service || item.name,
+          remarks: item.remarks || "-",
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          totalPrice: item.total_price,
+        })),
+        paymentHistory: requestDetails.paymentHistory || [],
+        estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+        totalCost: requestDetails.totalCost,
+        paymentMode: requestDetails.payment_mode || "-",
+        paymentTerms: requestDetails.payment_terms || "-",
+        paymentDeadline: requestDetails.payment_deadline || "-",
+        assignedStaff: requestDetails.assigned_staff_name || "-",
+        serviceStartDate: requestDetails.service_start_date || "-",
+        estimatedEndDate: requestDetails.estimated_end_date || "-",
+        warranty: requestDetails.warranty || "6 months",
+      };
+
+      console.log("Setting request data");
+      setRequestData(transformedData);
+      setError("");
+    } else {
+      setError(data.message || "Failed to fetch request details");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    setError("Failed to fetch request details");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleUploadSuccess = () => {
     fetchRequestDetails(); // Refresh the data after upload
@@ -162,7 +167,7 @@ const CustomerServiceRequestDetails = () => {
 
     const getCurrentStep = () => {
       if (!requestData) return 0;
-      
+
       switch (requestData.serviceStatus) {
         case "Pending":
           return 0;
@@ -186,7 +191,10 @@ const CustomerServiceRequestDetails = () => {
       <div className="my-8">
         <div className="flex items-start justify-between overflow-x-auto">
           {steps.map((step, index) => (
-            <div key={step.key} className="flex items-center min-w-0 flex-shrink-0">
+            <div
+              key={step.key}
+              className="flex items-center min-w-0 flex-shrink-0"
+            >
               <div className="flex flex-col items-center">
                 <div
                   className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold ${
@@ -293,28 +301,46 @@ const CustomerServiceRequestDetails = () => {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Request ID:</label>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Request ID:
+              </label>
               <span className="text-sm text-gray-800">{requestData.id}</span>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">Service Status:</label>
+              <label className="text-sm font-medium text-gray-700 mr-2">
+                Service Status:
+              </label>
               {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Requested At:</label>
-              <span className="text-sm text-gray-800">{requestData.requestedAt}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Requested At:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.requestedAt}
+              </span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Warranty:</label>
-              <span className="text-sm text-gray-800">{requestData.warranty}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Warranty:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.warranty}
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">Warranty Status:</label>
+              <label className="text-sm font-medium text-gray-700 mr-2">
+                Warranty Status:
+              </label>
               {getStatusBadge(requestData.warrantyStatus, "warrantyStatus")}
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Assigned Staff:</label>
-              <span className="text-sm text-gray-800">{requestData.assignedStaff}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Assigned Staff:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.assignedStaff}
+              </span>
             </div>
           </div>
 
@@ -328,23 +354,47 @@ const CustomerServiceRequestDetails = () => {
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Service Category</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Service</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Remarks</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Quantity</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Unit Price</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Total Price</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Service Category
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Service
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Remarks
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Quantity
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Unit Price
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Total Price
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {requestData.services.map((service, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.category}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.service}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.remarks}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.quantity}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.unitPrice}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{service.totalPrice}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.category}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.service}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.remarks}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.quantity}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.unitPrice}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.totalPrice}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -356,55 +406,95 @@ const CustomerServiceRequestDetails = () => {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
             <div className="text-right">
-              <p className="text-2xl font-bold text-[#0260A0]">{requestData.totalCost}</p>
+              <p className="text-2xl font-bold text-[#0260A0]">
+                {requestData.totalCost}
+              </p>
             </div>
           </div>
         </div>
 
         <div className="p-6">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">Payment</h2>
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Payment
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Mode of Payment:</label>
-              <span className="text-sm text-gray-800">{requestData.paymentMode}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Mode of Payment:
+              </label>
+              <span className="text-sm text-gray-800">
+                {formatPaymentMode(requestData.paymentMode)}
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">Payment Status:</label>
+              <label className="text-sm font-medium text-gray-700 mr-2">
+                Payment Status:
+              </label>
               {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Payment Terms:</label>
-              <span className="text-sm text-gray-800">{requestData.paymentTerms}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Payment Terms:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.paymentTerms}
+              </span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Payment Deadline:</label>
-              <span className="text-sm text-gray-800">{requestData.paymentDeadline}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Payment Deadline:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.paymentDeadline}
+              </span>
             </div>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-4">Payment Breakdown:</label>
+            <label className="block text-sm font-medium text-gray-700 mb-4">
+              Payment Breakdown:
+            </label>
           </div>
 
           <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Payment Phase</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Percentage</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Amount</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Proof of Payment</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Paid On</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Status</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">Actions</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Payment Phase
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Percentage
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Amount
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Proof of Payment
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Paid On
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Status
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {requestData.paymentHistory.map((payment, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.phase}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.percentage}</td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.amount}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.phase}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.percentage}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.amount}
+                    </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {payment.proofOfPayment === "-" ? (
                         <span className="text-gray-400">Not uploaded</span>
@@ -418,7 +508,9 @@ const CustomerServiceRequestDetails = () => {
                         </button>
                       )}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">{payment.paidOn}</td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.paidOn}
+                    </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {getStatusBadge(payment.paymentStatus, "paymentStatus")}
                     </td>
@@ -442,23 +534,39 @@ const CustomerServiceRequestDetails = () => {
         </div>
 
         <div className="p-6 mb-10">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">Duration</h2>
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Duration
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Estimated Duration:</label>
-              <span className="text-sm text-gray-800">{requestData.estimatedDuration}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Estimated Duration:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.estimatedDuration}
+              </span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Service Start Date:</label>
-              <span className="text-sm text-gray-800">{requestData.serviceStartDate}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Service Start Date:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.serviceStartDate}
+              </span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Request Acknowledged On:</label>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Request Acknowledged On:
+              </label>
               <span className="text-sm text-gray-800">-</span>
             </div>
             <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">Service End Date:</label>
-              <span className="text-sm text-gray-800">{requestData.estimatedEndDate}</span>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Service End Date:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.estimatedEndDate}
+              </span>
             </div>
           </div>
         </div>
@@ -472,7 +580,11 @@ const CustomerServiceRequestDetails = () => {
           setSelectedPaymentId(null);
         }}
         paymentId={selectedPaymentId}
-        currentProof={requestData?.paymentHistory.find(p => p.payment_id === selectedPaymentId)?.proofOfPayment || '-'}
+        currentProof={
+          requestData?.paymentHistory.find(
+            (p) => p.payment_id === selectedPaymentId
+          )?.proofOfPayment || "-"
+        }
         onSuccess={handleUploadSuccess}
       />
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./hooks/useAuth";
-import { ServiceRequestProvider } from "./contexts/ServiceRequestContext"; // ADD THIS
+import { ServiceRequestProvider } from "./contexts/ServiceRequestContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // Public Pages
@@ -10,6 +10,7 @@ import AboutUsPage from "./pages/AboutUsPage";
 import ServicesPage from "./pages/ServicesPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import GoogleCallback from "./pages/GoogleCallback"; // ADD THIS
 
 // Admin Pages
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
@@ -38,7 +39,7 @@ import Services from "./pages/customer/Services";
 function App() {
   return (
     <AuthProvider>
-      <ServiceRequestProvider> {/* WRAP Router with this */}
+      <ServiceRequestProvider>
         <Router>
           <div className="App">
             <Routes>
@@ -50,6 +51,7 @@ function App() {
               {/* Authentication Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/auth/google/callback" element={<GoogleCallback />} /> {/* ADD THIS */}
 
               {/* Protected Admin Routes */}
               <Route
@@ -268,7 +270,7 @@ function App() {
             </Routes>
           </div>
         </Router>
-      </ServiceRequestProvider> {/* CLOSE the provider here */}
+      </ServiceRequestProvider>
     </AuthProvider>
   );
 }

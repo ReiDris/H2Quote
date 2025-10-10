@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Download } from "lucide-react";
+import { paymentsAPI } from '../../config/api';
 
 const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
   const [loading, setLoading] = useState(true);
@@ -26,15 +27,7 @@ const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("h2quote_token");
-      const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentId}/proof`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await paymentsAPI.getPaymentProof(paymentId);
 
       if (!response.ok) {
         throw new Error("Failed to load payment proof");

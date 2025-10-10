@@ -1,48 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react";
+import { authAPI } from '../../config/api'
 
 const PasswordResetPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    newPassword: '',
-    confirmPassword: '',
+    newPassword: "",
+    confirmPassword: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [isValidating, setIsValidating] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
 
-  const token = searchParams.get('token');
-  const email = searchParams.get('email');
+  const token = searchParams.get("token");
+  const email = searchParams.get("email");
 
   // Validate token on component mount
   useEffect(() => {
     const validateToken = async () => {
       if (!token || !email) {
-        setError('Invalid reset link. Please request a new password reset.');
+        setError("Invalid reset link. Please request a new password reset.");
         setIsValidating(false);
         return;
       }
 
       try {
-        const response = await fetch(
-          `http://localhost:5000/api/auth/validate-reset-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
-        );
+        const response = await authAPI.validateResetToken(token, email);
         const data = await response.json();
 
         if (data.success) {
           setTokenValid(true);
         } else {
-          setError(data.message || 'Invalid or expired reset token');
+          setError(data.message || "Invalid or expired reset token");
         }
       } catch (error) {
-        console.error('Token validation error:', error);
-        setError('Network error. Please try again.');
+        console.error("Token validation error:", error);
+        setError("Network error. Please try again.");
       } finally {
         setIsValidating(false);
       }
@@ -53,15 +52,16 @@ const PasswordResetPage = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-    setError('');
+    setError("");
   };
 
   const validatePassword = (password) => {
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+    const regex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
     return regex.test(password);
   };
 
@@ -69,36 +69,32 @@ const PasswordResetPage = () => {
     e.preventDefault();
 
     if (!formData.newPassword || !formData.confirmPassword) {
-      setError('Both password fields are required');
+      setError("Both password fields are required");
       return;
     }
 
     if (!validatePassword(formData.newPassword)) {
-      setError('Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character');
+      setError(
+        "Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+      );
       return;
     }
 
     if (formData.newPassword !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
 
     setIsSubmitting(true);
-    setError('');
+    setError("");
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/reset-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          token,
-          email,
-          newPassword: formData.newPassword,
-          confirmPassword: formData.confirmPassword,
-        }),
-      });
+      const response = await authAPI.resetPassword(
+  token,
+  email,
+  formData.newPassword,
+  formData.confirmPassword
+);
 
       const data = await response.json();
 
@@ -106,19 +102,20 @@ const PasswordResetPage = () => {
         setIsSuccess(true);
         // Redirect to login after 3 seconds
         setTimeout(() => {
-          navigate('/login', { 
-            state: { 
-              message: 'Password reset successfully! You can now log in with your new password.',
-              email: email 
-            }
+          navigate("/login", {
+            state: {
+              message:
+                "Password reset successfully! You can now log in with your new password.",
+              email: email,
+            },
           });
         }, 3000);
       } else {
-        setError(data.message || 'Failed to reset password');
+        setError(data.message || "Failed to reset password");
       }
     } catch (error) {
-      console.error('Password reset error:', error);
-      setError('Network error. Please try again.');
+      console.error("Password reset error:", error);
+      setError("Network error. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -145,7 +142,9 @@ const PasswordResetPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-[#004785] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 text-xs lg:text-sm">Validating reset link...</p>
+          <p className="text-gray-600 text-xs lg:text-sm">
+            Validating reset link...
+          </p>
         </div>
       </div>
     );
@@ -156,7 +155,9 @@ const PasswordResetPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-gray-50 rounded-4xl p-10 text-center m-10">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
-          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-4">Invalid Reset Link</h2>
+          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-4">
+            Invalid Reset Link
+          </h2>
           <p className="text-xs lg:text-sm text-gray-600 mb-8">{error}</p>
           <Link
             to="/login"
@@ -174,9 +175,12 @@ const PasswordResetPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-gray-50 rounded-4xl p-10 text-center m-10">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-6" />
-          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-4">Password Reset Successful!</h2>
+          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-4">
+            Password Reset Successful!
+          </h2>
           <p className="text-xs lg:text-sm text-gray-600 mb-8">
-            Your password has been reset successfully. You will be redirected to the login page shortly.
+            Your password has been reset successfully. You will be redirected to
+            the login page shortly.
           </p>
           <Link
             to="/login"
@@ -200,8 +204,12 @@ const PasswordResetPage = () => {
               className="w-32 lg:w-40 xl:w-48 mx-auto mb-6 cursor-pointer hover:opacity-80 transition-opacity"
             />
           </Link>
-          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-2">Reset Your Password</h2>
-          <p className="text-xs lg:text-sm text-gray-600">Enter your new password below</p>
+          <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-2">
+            Reset Your Password
+          </h2>
+          <p className="text-xs lg:text-sm text-gray-600">
+            Enter your new password below
+          </p>
         </div>
 
         {error && (
@@ -213,7 +221,10 @@ const PasswordResetPage = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* New Password */}
           <div>
-            <label htmlFor="newPassword" className="block text-xs lg:text-sm xl:text-lg text-gray-700 mb-2">
+            <label
+              htmlFor="newPassword"
+              className="block text-xs lg:text-sm xl:text-lg text-gray-700 mb-2"
+            >
               New Password
             </label>
             <div className="relative">
@@ -247,28 +258,38 @@ const PasswordResetPage = () => {
                       className={`h-2 flex-1 rounded ${
                         passwordStrength.strength >= level
                           ? passwordStrength.strength <= 2
-                            ? 'bg-red-500'
+                            ? "bg-red-500"
                             : passwordStrength.strength <= 4
-                            ? 'bg-yellow-500'
-                            : 'bg-green-500'
-                          : 'bg-gray-200'
+                            ? "bg-yellow-500"
+                            : "bg-green-500"
+                          : "bg-gray-200"
                       }`}
                     />
                   ))}
                 </div>
                 <div className="text-xs space-y-1">
-                  {Object.entries(passwordStrength.checks).map(([key, passed]) => (
-                    <div key={key} className={`flex items-center ${passed ? 'text-green-600' : 'text-gray-400'}`}>
-                      <span className="mr-1 text-xs">{passed ? '✓' : '○'}</span>
-                      <span className="text-xs">
-                        {key === 'length' && 'At least 12 characters'}
-                        {key === 'lowercase' && 'One lowercase letter'}
-                        {key === 'uppercase' && 'One uppercase letter'}
-                        {key === 'numbers' && 'One number'}
-                        {key === 'special' && 'One special character (@$!%*?&)'}
-                      </span>
-                    </div>
-                  ))}
+                  {Object.entries(passwordStrength.checks).map(
+                    ([key, passed]) => (
+                      <div
+                        key={key}
+                        className={`flex items-center ${
+                          passed ? "text-green-600" : "text-gray-400"
+                        }`}
+                      >
+                        <span className="mr-1 text-xs">
+                          {passed ? "✓" : "○"}
+                        </span>
+                        <span className="text-xs">
+                          {key === "length" && "At least 12 characters"}
+                          {key === "lowercase" && "One lowercase letter"}
+                          {key === "uppercase" && "One uppercase letter"}
+                          {key === "numbers" && "One number"}
+                          {key === "special" &&
+                            "One special character (@$!%*?&)"}
+                        </span>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             )}
@@ -276,7 +297,10 @@ const PasswordResetPage = () => {
 
           {/* Confirm Password */}
           <div>
-            <label htmlFor="confirmPassword" className="block text-xs lg:text-sm xl:text-lg text-gray-700 mb-2">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-xs lg:text-sm xl:text-lg text-gray-700 mb-2"
+            >
               Confirm New Password
             </label>
             <div className="relative">
@@ -299,15 +323,22 @@ const PasswordResetPage = () => {
                 {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
-            {formData.confirmPassword && formData.newPassword !== formData.confirmPassword && (
-              <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
-            )}
+            {formData.confirmPassword &&
+              formData.newPassword !== formData.confirmPassword && (
+                <p className="mt-1 text-xs text-red-600">
+                  Passwords do not match
+                </p>
+              )}
           </div>
 
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isSubmitting || !validatePassword(formData.newPassword) || formData.newPassword !== formData.confirmPassword}
+              disabled={
+                isSubmitting ||
+                !validatePassword(formData.newPassword) ||
+                formData.newPassword !== formData.confirmPassword
+              }
               className="w-full bg-[#004785] text-white text-xs lg:text-sm xl:text-md font-light py-3 lg:py-3 xl:py-4 px-3 rounded-4xl hover:bg-[#0056A3] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 cursor-pointer"
             >
               {isSubmitting ? (
@@ -316,7 +347,7 @@ const PasswordResetPage = () => {
                   Resetting Password...
                 </div>
               ) : (
-                'Reset Password'
+                "Reset Password"
               )}
             </button>
           </div>
