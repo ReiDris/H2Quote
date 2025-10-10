@@ -1,161 +1,136 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Hero from "../components/common/Hero";
 import Footer from "../components/common/Footer";
 import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
 import Vincent from "../components/common/Vincent";
+import { serviceRequestsAPI } from "../config/api";
 
 const ServicesPage = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [services, setServices] = useState([]);
+  const [chemicals, setChemicals] = useState([]);
+  const [refrigerants, setRefrigerants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const servicesPerPage = 6;
 
-  // Sample services data - replace with your actual services
-  const allServices = [
-    // Services
-    {
-      id: 1,
-      title: "Boiler Tube Cleaning",
-      description:
-        "Chemical cleaning of industrial equipment, descaling and maintenance services for optimal boiler performance.",
-      image: "/images/services/boiler-cleaning.jpg",
-      category: "Chemical Cleaning",
-      type: "Services",
-      price: "P10,000",
-    },
-    {
-      id: 2,
-      title: "Cooling Water Treatment",
-      description:
-        "Comprehensive cooling water treatment solutions including chemical dosing and system optimization.",
-      image: "/images/services/cooling-water.jpg",
-      category: "Water Treatment",
-      type: "Services",
-      price: "P10,000",
-    },
-    {
-      id: 3,
-      title: "Water Testing & Analysis",
-      description:
-        "Complete laboratory analysis for water monitoring, chlorine residual testing, and bacteria testing.",
-      image: "/images/services/water-testing.jpg",
-      category: "Laboratory Services",
-      type: "Services",
-      price: "P10,000",
-    },
-    {
-      id: 4,
-      title: "Pipeline Disinfection",
-      description:
-        "Professional water pipeline disinfection services ensuring safe and clean water distribution.",
-      image: "/images/services/pipeline.jpg",
-      category: "Disinfection",
-      type: "Services",
-      price: "P10,000",
-    },
-    {
-      id: 5,
-      title: "Cooling Tower Installation",
-      description:
-        "Expert installation of cooling tower systems, assembly, and water cooling tower systems.",
-      image: "/images/services/cooling-tower.jpg",
-      category: "Installation",
-      type: "Services",
-      price: "P10,000",
-    },
-    {
-      id: 6,
-      title: "System Maintenance",
-      description:
-        "Routine maintenance services for cooling towers and water treatment equipment.",
-      image: "/images/services/maintenance.jpg",
-      category: "Maintenance",
-      type: "Services",
-      price: "P10,000",
-    },
-    // Chemicals
-    {
-      id: 7,
-      title: "Corrosion Inhibitors",
-      description:
-        "High-quality corrosion inhibitors to protect metal surfaces in water systems and industrial equipment.",
-      image: "/images/services/corrosion-inhibitors.jpg",
-      category: "Chemical Supply",
-      type: "Chemicals",
-      price: "P10,000",
-    },
-    {
-      id: 8,
-      title: "Disinfectants",
-      description:
-        "Professional-grade disinfectants for water treatment and sanitization applications.",
-      image: "/images/services/disinfectants.jpg",
-      category: "Chemical Supply",
-      type: "Chemicals",
-      price: "P10,000",
-    },
-    {
-      id: 9,
-      title: "Descaling Chemicals",
-      description:
-        "Effective descaling chemicals for removing mineral deposits and scale buildup.",
-      image: "/images/services/descaling-chemicals.jpg",
-      category: "Chemical Supply",
-      type: "Chemicals",
-      price: "P10,000",
-    },
-    {
-      id: 10,
-      title: "Water Treatment Polymers",
-      description:
-        "Specialized polymers for various water treatment applications and system optimization.",
-      image: "/images/services/polymers.jpg",
-      category: "Chemical Supply",
-      type: "Chemicals",
-      price: "P10,000",
-    },
-    // Refrigerants
-    {
-      id: 11,
-      title: "R-134a Refrigerant",
-      description:
-        "High-purity R-134a refrigerant for automotive and commercial cooling applications.",
-      image: "/images/services/r134a.jpg",
-      category: "Refrigerant Supply",
-      type: "Refrigerants",
-      price: "P10,000",
-    },
-    {
-      id: 12,
-      title: "R-410A Refrigerant",
-      description:
-        "Premium R-410A refrigerant for residential and commercial air conditioning systems.",
-      image: "/images/services/r410a.jpg",
-      category: "Refrigerant Supply",
-      type: "Refrigerants",
-      price: "P10,000",
-    },
-    {
-      id: 13,
-      title: "R-22 Refrigerant",
-      description:
-        "R-22 refrigerant for legacy HVAC systems and specialized cooling applications.",
-      image: "/images/services/r22.jpg",
-      category: "Refrigerant Supply",
-      type: "Refrigerants",
-      price: "P10,000",
-    },
-    {
-      id: 14,
-      title: "Industrial Refrigerants",
-      description:
-        "Wide range of industrial refrigerants for large-scale cooling and refrigeration systems.",
-      image: "/images/services/industrial-refrigerants.jpg",
-      category: "Refrigerant Supply",
-      type: "Refrigerants",
-      price: "P10,000",
-    },
-  ];
+  useEffect(() => {
+    fetchCatalogData();
+  }, []);
+
+  const fetchCatalogData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch services
+      const servicesResponse = await serviceRequestsAPI.getServicesCatalog();
+      const servicesData = await servicesResponse.json();
+
+      // Fetch chemicals (with error handling)
+      let chemicalsData = { success: true, data: [] };
+      try {
+        const chemicalsResponse = await serviceRequestsAPI.getChemicalsCatalog();
+        chemicalsData = await chemicalsResponse.json();
+      } catch (chemError) {
+        console.log("Chemicals not accessible:", chemError);
+      }
+
+      // Fetch refrigerants (with error handling)
+      let refrigerantsData = { success: true, data: [] };
+      try {
+        const refrigerantsResponse = await serviceRequestsAPI.getRefrigerantsCatalog();
+        refrigerantsData = await refrigerantsResponse.json();
+      } catch (refrigerantError) {
+        console.log("Refrigerants not accessible:", refrigerantError);
+      }
+
+      // Transform services data
+      if (servicesData.success) {
+        const transformedServices = servicesData.data.map((service) => ({
+          id: service.service_id,
+          title: service.name,
+          description: service.description || "Professional service",
+          category: service.category || "Services",
+          type: "Services",
+          price: `₱${service.base_price?.toLocaleString() || "10,000"}`,
+          basePrice: service.base_price || 10000,
+          duration: service.estimated_duration_hours
+            ? Math.ceil(service.estimated_duration_hours / 24)
+            : 3,
+          estimated_duration_hours: service.estimated_duration_hours,
+          requiresSiteVisit: service.requires_site_visit || false,
+          chemicalsRequired: service.chemicals_required,
+        }));
+
+        setServices(transformedServices);
+      }
+
+      // Transform chemicals data
+      if (chemicalsData.success && chemicalsData.data.length > 0) {
+        const transformedChemicals = chemicalsData.data.map((chemical) => ({
+          id: `chem_${chemical.id}`,
+          title: chemical.name,
+          description: chemical.description || "High-quality chemical product",
+          category: "Chemical Supply",
+          type: "Chemicals",
+          price: `₱${chemical.base_price?.toLocaleString() || "10,000"}`,
+          basePrice: chemical.base_price || 10000,
+          capacity: chemical.capacity,
+          hazardType: chemical.hazard_type,
+          uses: chemical.uses,
+        }));
+
+        setChemicals(transformedChemicals);
+      }
+
+      // Transform refrigerants data
+      if (refrigerantsData.success && refrigerantsData.data.length > 0) {
+        const transformedRefrigerants = refrigerantsData.data.map(
+          (refrigerant) => ({
+            id: `refrig_${refrigerant.id}`,
+            title: refrigerant.name,
+            description: refrigerant.description || "High-quality refrigerant",
+            category: "Refrigerant Supply",
+            type: "Refrigerants",
+            price: `₱${refrigerant.base_price?.toLocaleString() || "10,000"}`,
+            basePrice: refrigerant.base_price || 10000,
+            capacity: refrigerant.capacity,
+            hazardType: refrigerant.hazard_type,
+            chemicalComponents: refrigerant.chemical_components,
+          })
+        );
+
+        setRefrigerants(transformedRefrigerants);
+      }
+    } catch (error) {
+      console.error("Error fetching catalog:", error);
+      setError("Failed to load services catalog");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getServiceIcon = (type) => {
+    switch (type) {
+      case "Services":
+        return "🔧";
+      case "Chemicals":
+        return "⚗️";
+      case "Refrigerants":
+        return "❄️";
+      default:
+        return "🔧";
+    }
+  };
+
+  const allServices = useMemo(() => {
+    return [...services, ...chemicals, ...refrigerants];
+  }, [services, chemicals, refrigerants]);
 
   // Filter services based on search term and active filter
   const filteredServices = useMemo(() => {
@@ -180,7 +155,7 @@ const ServicesPage = () => {
     }
 
     return filtered;
-  }, [searchTerm, activeFilter]);
+  }, [searchTerm, activeFilter, allServices]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredServices.length / servicesPerPage);
@@ -219,6 +194,70 @@ const ServicesPage = () => {
       element.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  const handleRequestClick = () => {
+    setShowAuthModal(true);
+  };
+
+  const handleLoginRedirect = () => {
+    navigate("/login");
+  };
+
+  const handleSignupRedirect = () => {
+    navigate("/signup");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Hero
+          title="SERVICES"
+          subtitle="TRISHKAYE ENTERPRISES & ALLIED SERVICES"
+          showButton={false}
+          sectionId="services-hero"
+          titleWeight="font-bold"
+          subtitleWeight="font-extralight"
+          titleSize="text-4xl lg:text-5xl xl:text-7xl"
+          subtitleSize="text-4xl xl:text-6xl"
+        />
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+        </div>
+        <Footer />
+        <Vincent />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Hero
+          title="SERVICES"
+          subtitle="TRISHKAYE ENTERPRISES & ALLIED SERVICES"
+          showButton={false}
+          sectionId="services-hero"
+          titleWeight="font-bold"
+          subtitleWeight="font-extralight"
+          titleSize="text-4xl lg:text-5xl xl:text-7xl"
+          subtitleSize="text-4xl xl:text-6xl"
+        />
+        <div className="py-16 mx-18 lg:mx-30 xl:mx-60">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-600">{error}</p>
+            <button
+              onClick={fetchCatalogData}
+              className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+        <Footer />
+        <Vincent />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -338,32 +377,16 @@ const ServicesPage = () => {
                     key={service.id}
                     className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col"
                   >
-                    {/* Service Image */}
+                    {/* Service Image/Icon */}
                     <div className="h-48 bg-gradient-to-br from-[#004785] to-[#0066b3] flex items-center justify-center">
-                      <img
-                        src={service.image}
-                        alt={service.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback icons based on service type
-                          const icons = {
-                            Services: "🔧",
-                            Chemicals: "⚗️",
-                            Refrigerants: "❄️",
-                          };
-                          e.target.style.display = "none";
-                          e.target.parentElement.innerHTML = `
-                            <div class="text-white text-center p-8">
-                              <div class="text-4xl mb-2">${
-                                icons[service.type] || "🔧"
-                              }</div>
-                              <div class="text-sm font-medium">${
-                                service.type
-                              }</div>
-                            </div>
-                          `;
-                        }}
-                      />
+                      <div className="text-white text-center p-8">
+                        <div className="text-4xl mb-2">
+                          {getServiceIcon(service.type)}
+                        </div>
+                        <div className="text-sm font-medium">
+                          {service.type}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Service Content */}
@@ -377,7 +400,10 @@ const ServicesPage = () => {
                       <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
                         Starts at {service.price}
                       </p>
-                      <button className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto">
+                      <button 
+                        onClick={handleRequestClick}
+                        className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto"
+                      >
                         Request
                       </button>
                     </div>
@@ -494,6 +520,40 @@ const ServicesPage = () => {
       {/* Footer */}
       <Footer />
       <Vincent />
+
+      {/* Authentication Required Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-xl">
+            <h2 className="text-2xl font-bold text-[#004785] mb-4">
+              Authentication Required
+            </h2>
+            <p className="text-gray-600 mb-6">
+              You need to sign up or log in to request services. Please choose an option below.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleLoginRedirect}
+                className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer"
+              >
+                Log In
+              </button>
+              <button
+                onClick={handleSignupRedirect}
+                className="w-full bg-white text-[#004785] border-2 border-[#004785] py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors duration-300 font-medium cursor-pointer"
+              >
+                Sign Up
+              </button>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="w-full bg-gray-200 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
