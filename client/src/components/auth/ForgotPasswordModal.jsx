@@ -67,12 +67,9 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
           {!isSuccess ? (
             <>
               {/* Header */}
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-[#004785] bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Mail className="text-[#004785]" size={24} />
-                </div>
-                <h2 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785] mb-4">
-                  Forgot Password?
+              <div className="text-center mb-8 mt-5">
+                <h2 className="text-2xl lg:text-3xl xl:text-3xl font-bold text-[#004785] mb-4">
+                  Forgot your Password?
                 </h2>
                 <p className="text-xs lg:text-sm text-gray-600">
                   Enter your email address and we'll send you a link to reset
@@ -127,7 +124,7 @@ const ForgotPasswordModal = ({ isOpen, onClose }) => {
               </form>
 
               {/* Back to Login */}
-              <div className="text-center mt-6">
+              <div className="text-center mt-5">
                 <button
                   onClick={handleClose}
                   className="text-xs lg:text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-200 cursor-pointer"
