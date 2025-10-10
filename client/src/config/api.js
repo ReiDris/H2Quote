@@ -6,6 +6,24 @@
 // In production: uses VITE_API_URL from .env
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+// Helper function to make PUBLIC API calls (no auth required)
+export const fetchPublic = async (endpoint, options = {}) => {
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+  };
+
+  const config = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+  };
+
+  const response = await fetch(`${API_URL}${endpoint}`, config);
+  return response;
+};
+
 // Helper function to make authenticated API calls
 export const fetchWithAuth = async (endpoint, options = {}) => {
   const token = localStorage.getItem('h2quote_token');
@@ -67,26 +85,26 @@ export const serviceRequestsAPI = {
     });
   },
 
-  // Get services catalog
+  // Get services catalog - PUBLIC (no auth required)
   getServicesCatalog: (category) => {
     const queryString = category ? `?category=${category}` : '';
-    return fetchWithAuth(`/service-requests/services/catalog${queryString}`);
+    return fetchPublic(`/service-requests/services/catalog${queryString}`);
   },
 
-  // Get chemicals catalog
+  // Get chemicals catalog - PUBLIC (no auth required)
   getChemicalsCatalog: () => {
-    return fetchWithAuth('/service-requests/chemicals/catalog');
+    return fetchPublic('/service-requests/chemicals/catalog');
   },
 
-  // Get refrigerants catalog
+  // Get refrigerants catalog - PUBLIC (no auth required)
   getRefrigerantsCatalog: () => {
-    return fetchWithAuth('/service-requests/refrigerants/catalog');
+    return fetchPublic('/service-requests/refrigerants/catalog');
   },
 
-  // Get catalog by type (generic method)
+  // Get catalog by type (generic method) - PUBLIC (no auth required)
   getCatalog: (type) => {
     // type can be: 'services', 'chemicals', 'refrigerants'
-    return fetchWithAuth(`/service-requests/${type}/catalog`);
+    return fetchPublic(`/service-requests/${type}/catalog`);
   },
 
   // Add chemicals to a request
