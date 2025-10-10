@@ -23,12 +23,13 @@ const requireCustomer = (req, res, next) => {
   next();
 };
 
-router.use(authenticateToken);
-
 // Specific routes FIRST (no parameters)
 router.get('/services/catalog', serviceRequestController.getServicesCatalog);
 router.get('/chemicals/catalog', serviceRequestController.getChemicalsCatalog);
 router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCatalog);
+
+router.use(authenticateToken);
+
 router.get('/staff-list', requireAdminOrStaff, serviceRequestController.getStaffList); 
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
 

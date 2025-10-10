@@ -34,7 +34,8 @@ const ServicesPage = () => {
       // Fetch chemicals (with error handling)
       let chemicalsData = { success: true, data: [] };
       try {
-        const chemicalsResponse = await serviceRequestsAPI.getChemicalsCatalog();
+        const chemicalsResponse =
+          await serviceRequestsAPI.getChemicalsCatalog();
         chemicalsData = await chemicalsResponse.json();
       } catch (chemError) {
         console.log("Chemicals not accessible:", chemError);
@@ -43,7 +44,8 @@ const ServicesPage = () => {
       // Fetch refrigerants (with error handling)
       let refrigerantsData = { success: true, data: [] };
       try {
-        const refrigerantsResponse = await serviceRequestsAPI.getRefrigerantsCatalog();
+        const refrigerantsResponse =
+          await serviceRequestsAPI.getRefrigerantsCatalog();
         refrigerantsData = await refrigerantsResponse.json();
       } catch (refrigerantError) {
         console.log("Refrigerants not accessible:", refrigerantError);
@@ -213,7 +215,8 @@ const ServicesPage = () => {
         <Hero
           title="SERVICES"
           subtitle="TRISHKAYE ENTERPRISES & ALLIED SERVICES"
-          showButton={false}
+          showButton={true}
+          onButtonClick={() => handleNavigation("services-content")}
           sectionId="services-hero"
           titleWeight="font-bold"
           subtitleWeight="font-extralight"
@@ -235,7 +238,8 @@ const ServicesPage = () => {
         <Hero
           title="SERVICES"
           subtitle="TRISHKAYE ENTERPRISES & ALLIED SERVICES"
-          showButton={false}
+          showButton={true}
+          onButtonClick={() => handleNavigation("services-content")}
           sectionId="services-hero"
           titleWeight="font-bold"
           subtitleWeight="font-extralight"
@@ -400,7 +404,7 @@ const ServicesPage = () => {
                       <p className="text-[#004785] text-sm leading-relaxed mb-4 font-semibold">
                         Starts at {service.price}
                       </p>
-                      <button 
+                      <button
                         onClick={handleRequestClick}
                         className="w-full bg-[#004785] text-white py-3 px-4 rounded-lg hover:bg-[#003366] transition-colors duration-300 font-medium cursor-pointer mt-auto"
                       >
@@ -529,7 +533,8 @@ const ServicesPage = () => {
               Authentication Required
             </h2>
             <p className="text-gray-600 mb-6">
-              You need to sign up or log in to request services. Please choose an option below.
+              You need to sign up or log in to request services. Please choose
+              an option below.
             </p>
             <div className="flex flex-col gap-3">
               <button
