@@ -3,8 +3,7 @@ const router = express.Router();
 const { uploadVerificationFile, handleUploadError } = require('../middleware/supabaseFileUpload');
 const { authenticateToken } = require('../middleware/auth');
 const authController = require('../controllers/authController');
-// const googleAuthController = require('../controllers/googleAuthController'); // ← COMMENTED OUT
-
+const googleAuthController = require('../controllers/googleAuthController');
 const { validateSignup } = require('../middleware/validation');
 
 router.post('/signup',
@@ -15,7 +14,7 @@ router.post('/signup',
 );
 
 router.post('/login', authController.login);
-// router.post('/google-auth', googleAuthController.googleAuth); // ← COMMENTED OUT
+router.post('/google-auth', googleAuthController.googleAuth); 
 router.get('/me', authenticateToken, authController.getCurrentUser);
 router.post('/logout', authenticateToken, authController.logout);
 router.post('/forgot-password', authController.forgotPassword);

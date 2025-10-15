@@ -2,16 +2,15 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-// 🔍 COMMENT OUT ROUTES ONE BY ONE TO FIND THE PROBLEM
 const authRoutes = require('./routes/googleOAuth');
-// const adminRoutes = require('./routes/admin');
-// const healthRoutes = require('./routes/health');
-// const serviceRequestRoutes = require('./routes/serviceRequests');
-// const messageRoutes = require('./routes/messaging');
-// const chatbotRoutes = require('./routes/chatbot');
-// const accountSettingsRoutes = require('./routes/accountSettings'); 
-// const paymentRoutes = require('./routes/payment');
-// const notificationRoutes = require('./routes/notifications');
+const adminRoutes = require('./routes/admin');
+const healthRoutes = require('./routes/health');
+const serviceRequestRoutes = require('./routes/serviceRequests');
+const messageRoutes = require('./routes/messaging');
+const chatbotRoutes = require('./routes/chatbot');
+const accountSettingsRoutes = require('./routes/accountSettings'); 
+const paymentRoutes = require('./routes/payment');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 
@@ -64,14 +63,14 @@ console.log('🎉 All route files loaded successfully!');
 console.log('Now registering routes...');
 
 app.use('/api/auth', authRoutes);
-// app.use('/api/admin', adminRoutes);
-// app.use('/api', healthRoutes);
-// app.use('/api/service-requests', serviceRequestRoutes);
-// app.use('/api/messaging', messageRoutes);
-// app.use('/api/chatbot', chatbotRoutes);
-// app.use('/api/account', accountSettingsRoutes); 
-// app.use('/api/payments', paymentRoutes);
-// app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api', healthRoutes);
+app.use('/api/service-requests', serviceRequestRoutes);
+app.use('/api/messaging', messageRoutes);
+app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/account', accountSettingsRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 console.log('✅ Routes registered successfully!');
 
