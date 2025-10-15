@@ -346,11 +346,25 @@ const createBulkNotifications = async (userIds, notificationType, subject, messa
   }
 };
 
+const createServiceRequestNotification = async (userId, requestNumber, requestId, status, customMessage) => {
+  try {
+    const notificationType = 'Service Request';
+    const subject = `Service Request Update - ${requestNumber}`;
+    const messageBody = customMessage || `Your service request #${requestNumber} has been updated. Status: ${status}`;
+    
+    return await createNotification(userId, notificationType, subject, messageBody);
+  } catch (error) {
+    console.error('Create service request notification error:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   getUserNotifications,
   markAsRead,
   markAllAsRead,
   deleteNotification,
   createNotification,
-  createBulkNotifications
+  createBulkNotifications,
+  createServiceRequestNotification
 };
