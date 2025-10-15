@@ -128,7 +128,8 @@ const CustomerServiceRequestDetails = () => {
         Pending: "bg-gray-100 text-gray-800",
         Assigned: "bg-orange-200 text-orange-600",
         Processing: "bg-yellow-100 text-yellow-800",
-        Approval: "bg-purple-100 text-purple-800",
+        "Waiting for Approval": "bg-purple-100 text-purple-800",
+        Approved: "bg-purple-100 text-purple-800",
         Ongoing: "bg-blue-100 text-blue-800",
         Completed: "bg-green-100 text-green-800",
         Cancelled: "bg-red-100 text-red-800",
@@ -160,7 +161,8 @@ const CustomerServiceRequestDetails = () => {
     const steps = [
       { label: "Pending", key: "pending" },
       { label: "Assigned for Processing", key: "processing" },
-      { label: "Approval", key: "approval" },
+      { label: "Waiting for Approval", key: "waiting_approval" },
+      { label: "Approved", key: "approved" },
       { label: "Service Ongoing", key: "ongoing" },
       { label: "Completed", key: "completed" },
     ];
@@ -174,12 +176,14 @@ const CustomerServiceRequestDetails = () => {
         case "Assigned":
         case "Processing":
           return 1;
-        case "Approval":
+        case "Waiting for Approval":
           return 2;
-        case "Ongoing":
+        case "Approved":
           return 3;
-        case "Completed":
+        case "Ongoing":
           return 4;
+        case "Completed":
+          return 5;
         default:
           return 0;
       }
@@ -218,7 +222,7 @@ const CustomerServiceRequestDetails = () => {
               {index < steps.length - 1 && (
                 <div className="flex items-center -mt-10">
                   <div
-                    className={`w-9 lg:w-22 xl:w-42 2xl:w-58 h-0.5 flex-shrink-0 ${
+                    className={`w-2 lg:w-10 xl:w-25 2xl:w-40 h-0.5 flex-shrink-0 ${
                       index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
                     }`}
                   />
