@@ -195,7 +195,7 @@ const rejectUser = async (req, res) => {
 const serveVerificationFile = async (req, res) => {
   try {
     const { userId } = req.params;
-
+    
     const { data: user, error } = await supabase
       .from('users')
       .select('verification_file_path, verification_file_original_name')
@@ -209,21 +209,27 @@ const serveVerificationFile = async (req, res) => {
       });
     }
     
-    const filePath = user.verification_file_path;
-
-    // Get signed URL from Supabase Storage (valid for 1 hour)
+    // Get signed URL from Supabase Storage
     const { data: signedUrlData, error: urlError } = await supabase.storage
       .from('verification-documents')
-      .createSignedUrl(filePath, 3600); // 1 hour expiry
-
+      .createSignedUrl(user.verification_file_path, 3600); // 1 hour expiry
+    
     if (urlError) {
-      console.error('Error getting signed URL:', urlError);
+      console.error('Error creating signed URL:', urlError);
       return res.status(500).json({
         success: false,
-        message: 'Failed to retrieve file'
+        message: 'Failed to generate file URL',
+        error: process.env.NODE_ENV === 'development' ? urlError.message : undefined
       });
     }
 
+    if (!signedUrlData || !signedUrlData.signedUrl) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate file URL'
+      });
+    }
+    
     // Redirect to signed URL
     res.redirect(signedUrlData.signedUrl);
     
@@ -231,7 +237,8 @@ const serveVerificationFile = async (req, res) => {
     console.error('Error serving file:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to serve file'
+      message: 'Failed to serve file',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

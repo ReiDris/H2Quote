@@ -1,12 +1,18 @@
 const pool = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Configure multer for payment proof uploads
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+// Configure multer for temporary local storage before uploading to Supabase
 const paymentStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = 'uploads/payment_proofs';
+    const uploadDir = 'uploads/temp_payments';
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -50,13 +56,17 @@ const uploadPaymentProof = async (req, res) => {
 
     // Verify payment belongs to user's request
     const paymentCheck = await client.query(`
-      SELECT p.payment_id, p.request_id, sr.requested_by_user_id
+      SELECT p.payment_id, p.request_id, sr.requested_by_user_id, sr.request_number
       FROM payments p
       JOIN service_requests sr ON p.request_id = sr.request_id
       WHERE p.payment_id = $1
     `, [paymentId]);
 
     if (paymentCheck.rows.length === 0) {
+      // Clean up temp file
+      if (req.file && req.file.path) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(404).json({
         success: false,
         message: 'Payment not found'
@@ -67,13 +77,41 @@ const uploadPaymentProof = async (req, res) => {
 
     // Check if user owns this request
     if (payment.requested_by_user_id !== userId) {
+      // Clean up temp file
+      if (req.file && req.file.path) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to upload proof for this payment'
       });
     }
 
-    // Update payment with proof file
+    // Upload file to Supabase Storage
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const fileName = `${payment.request_number}-payment${paymentId}-${Date.now()}${path.extname(req.file.originalname)}`;
+    const filePath = `payment-proofs/${fileName}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('payment-documents')
+      .upload(filePath, fileBuffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+
+    // Clean up local temp file after upload attempt
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (cleanupError) {
+      console.error("Failed to clean up temp file:", cleanupError);
+    }
+
+    if (uploadError) {
+      console.error("Supabase upload error:", uploadError);
+      throw new Error(`Failed to upload payment proof: ${uploadError.message}`);
+    }
+
+    // Update payment with proof file path
     const updateQuery = `
       UPDATE payments 
       SET proof_of_payment_file = $1,
@@ -82,7 +120,7 @@ const uploadPaymentProof = async (req, res) => {
       RETURNING payment_id, proof_of_payment_file
     `;
 
-    const result = await client.query(updateQuery, [req.file.path, paymentId]);
+    const result = await client.query(updateQuery, [filePath, paymentId]);
 
     await client.query('COMMIT');
 
@@ -91,37 +129,45 @@ const uploadPaymentProof = async (req, res) => {
       message: 'Payment proof uploaded successfully',
       data: {
         paymentId: result.rows[0].payment_id,
-        fileName: path.basename(result.rows[0].proof_of_payment_file)
+        fileName: fileName
       }
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
     
-    // Clean up uploaded file on error
-    if (req.file) {
-      fs.unlinkSync(req.file.path);
+    // Clean up uploaded temp file on error
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.error("Failed to clean up temp file:", cleanupError);
+      }
     }
 
     console.error('Upload payment proof error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload payment proof'
+      message: 'Failed to upload payment proof',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     client.release();
   }
 };
 
-// View payment proof (for admin/staff)
+// View payment proof (for admin/staff/customer)
 const viewPaymentProof = async (req, res) => {
   try {
     const { paymentId } = req.params;
+    const userId = req.user.id;
+    const userType = req.user.userType;
 
     const query = `
-      SELECT proof_of_payment_file 
-      FROM payments 
-      WHERE payment_id = $1
+      SELECT p.proof_of_payment_file, sr.requested_by_user_id
+      FROM payments p
+      JOIN service_requests sr ON p.request_id = sr.request_id
+      WHERE p.payment_id = $1
     `;
 
     const result = await pool.query(query, [paymentId]);
@@ -133,24 +179,48 @@ const viewPaymentProof = async (req, res) => {
       });
     }
 
-    const filePath = result.rows[0].proof_of_payment_file;
+    const payment = result.rows[0];
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
+    // Check authorization (customer can only view their own, admin/staff can view all)
+    if (userType === 'client' && payment.requested_by_user_id !== userId) {
+      return res.status(403).json({
         success: false,
-        message: 'File not found on server'
+        message: 'Unauthorized to view this payment proof'
       });
     }
 
-    const fileName = path.basename(filePath);
-    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    res.sendFile(path.resolve(filePath));
+    const filePath = payment.proof_of_payment_file;
+
+    // Get signed URL from Supabase Storage (valid for 1 hour)
+    const { data: signedUrlData, error: urlError } = await supabase.storage
+      .from('payment-documents')
+      .createSignedUrl(filePath, 3600);
+
+    if (urlError) {
+      console.error('Error creating signed URL:', urlError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve payment proof',
+        error: process.env.NODE_ENV === 'development' ? urlError.message : undefined
+      });
+    }
+
+    if (!signedUrlData || !signedUrlData.signedUrl) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate file URL'
+      });
+    }
+
+    // Redirect to signed URL
+    res.redirect(signedUrlData.signedUrl);
 
   } catch (error) {
     console.error('View payment proof error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to retrieve payment proof'
+      message: 'Failed to retrieve payment proof',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -189,9 +259,16 @@ const deletePaymentProof = async (req, res) => {
       });
     }
 
-    // Delete file from disk
-    if (payment.proof_of_payment_file && fs.existsSync(payment.proof_of_payment_file)) {
-      fs.unlinkSync(payment.proof_of_payment_file);
+    // Delete file from Supabase Storage
+    if (payment.proof_of_payment_file) {
+      const { error: deleteError } = await supabase.storage
+        .from('payment-documents')
+        .remove([payment.proof_of_payment_file]);
+
+      if (deleteError) {
+        console.error('Error deleting file from storage:', deleteError);
+        // Continue with database update even if file deletion fails
+      }
     }
 
     // Update database
@@ -214,7 +291,8 @@ const deletePaymentProof = async (req, res) => {
     console.error('Delete payment proof error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to delete payment proof'
+      message: 'Failed to delete payment proof',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     client.release();
@@ -301,9 +379,8 @@ const updatePaymentStatus = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // ✅ SEND NOTIFICATIONS
+    // Send notifications
     try {
-      // Notify customer about payment status change
       if (status !== payment.current_status) {
         await createNotification(
           payment.requested_by_user_id,
@@ -315,7 +392,6 @@ const updatePaymentStatus = async (req, res) => {
         console.log(`Payment notification sent to customer ${payment.customer_email}`);
       }
 
-      // If payment is confirmed as Paid, notify admin
       if (status === 'Paid') {
         const adminQuery = `SELECT user_id, email FROM users WHERE user_type = 'admin' AND status = 'Active'`;
         const admins = await client.query(adminQuery);
@@ -333,7 +409,6 @@ const updatePaymentStatus = async (req, res) => {
       }
     } catch (notifError) {
       console.error('Failed to create payment notifications:', notifError);
-      // Don't fail the update if notifications fail
     }
 
     res.json({
@@ -351,13 +426,13 @@ const updatePaymentStatus = async (req, res) => {
     console.error('Update payment status error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update payment status'
+      message: 'Failed to update payment status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     client.release();
   }
 };
-
 
 module.exports = {
   paymentUpload,
