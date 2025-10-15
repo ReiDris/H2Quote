@@ -51,10 +51,42 @@ const signup = async (req, res) => {
     const existingUsers = await client.query(existingUserQuery, [email]);
 
     if (existingUsers.rows.length > 0) {
+      // Clean up uploaded file
+      if (req.file && req.file.path) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+          console.error("Failed to clean up file:", cleanupError);
+        }
+      }
       return res.status(409).json({
         success: false,
         message: "Email already registered",
       });
+    }
+
+    // Upload file to Supabase Storage
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const fileName = `${Date.now()}-${req.file.originalname}`;
+    const filePath = `verification/${fileName}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('verification-documents')
+      .upload(filePath, fileBuffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+
+    // Clean up local file after upload attempt
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (cleanupError) {
+      console.error("Failed to clean up local file:", cleanupError);
+    }
+
+    if (uploadError) {
+      console.error("Supabase upload error:", uploadError);
+      throw new Error(`Failed to upload verification document: ${uploadError.message}`);
     }
 
     let companyId;
@@ -68,11 +100,11 @@ const signup = async (req, res) => {
       companyId = existingCompanies.rows[0].company_id;
     } else {
       const insertCompanyQuery = `
-                INSERT INTO companies 
-                (company_name, phone, email, status, created_at, updated_at) 
-                VALUES ($1, $2, $3, 'Inactive', NOW(), NOW())
-                RETURNING company_id
-            `;
+        INSERT INTO companies 
+        (company_name, phone, email, status, created_at, updated_at) 
+        VALUES ($1, $2, $3, 'Inactive', NOW(), NOW())
+        RETURNING company_id
+      `;
       const companyResult = await client.query(insertCompanyQuery, [
         companyName,
         contactNo,
@@ -92,13 +124,13 @@ const signup = async (req, res) => {
     const lastName = nameParts.slice(1).join(" ") || "";
 
     const insertUserQuery = `
-            INSERT INTO users 
-            (company_id, first_name, last_name, email, phone, user_type, password_hash, 
-             is_primary_contact, status, verification_token, verification_file_path, 
-             verification_file_original_name, created_at, updated_at) 
-            VALUES ($1, $2, $3, $4, $5, 'client', $6, true, 'Inactive', $7, $8, $9, NOW(), NOW())
-            RETURNING user_id
-        `;
+      INSERT INTO users 
+      (company_id, first_name, last_name, email, phone, user_type, password_hash, 
+       is_primary_contact, status, verification_token, verification_file_path, 
+       verification_file_original_name, created_at, updated_at) 
+      VALUES ($1, $2, $3, $4, $5, 'client', $6, true, 'Inactive', $7, $8, $9, NOW(), NOW())
+      RETURNING user_id
+    `;
 
     const userResult = await client.query(insertUserQuery, [
       companyId,
@@ -108,19 +140,17 @@ const signup = async (req, res) => {
       contactNo,
       hashedPassword,
       verificationToken,
-      req.file.path,
+      filePath,  // Store Supabase Storage path (verification/filename.jpg)
       req.file.originalname,
     ]);
 
     const userId = userResult.rows[0].user_id;
 
     try {
-        await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
-        // FIXED: Removed userId parameter to match function signature
-        await sendAdminNotificationEmail(customerName, companyName, email, contactNo);
+      await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
+      await sendAdminNotificationEmail(customerName, companyName, email, contactNo);
     } catch (emailError) {
-        console.error('Failed to send emails:', emailError);
-       
+      console.error('Failed to send emails:', emailError);
     }
 
     await client.query("COMMIT");
@@ -143,7 +173,8 @@ const signup = async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
 
-    if (req.file && req.file.path) {
+    // Clean up local file on error (if it still exists)
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
       try {
         fs.unlinkSync(req.file.path);
       } catch (cleanupError) {
