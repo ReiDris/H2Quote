@@ -2,18 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-const authRoutes = require('./routes/googleOAuth');
-const adminRoutes = require('./routes/admin');
-const healthRoutes = require('./routes/health');
-const serviceRequestRoutes = require('./routes/serviceRequests');
-const messageRoutes = require('./routes/messaging');
-const chatbotRoutes = require('./routes/chatbot');
-const accountSettingsRoutes = require('./routes/accountSettings'); 
-const paymentRoutes = require('./routes/payment');
-const notificationRoutes = require('./routes/notifications');
-
 const app = express();
 
+// Environment variable check
 if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY || 
     !process.env.SUPABASE_DB_HOST || !process.env.SUPABASE_DB_PASSWORD) {
     console.error('Missing required environment variables');
@@ -21,6 +12,7 @@ if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABAS
     process.exit(1);
 }
 
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -59,21 +51,172 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-console.log('🎉 All route files loaded successfully!');
-console.log('Now registering routes...');
+// Import routes with error handling
+console.log('Loading route files...');
 
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api', healthRoutes);
-app.use('/api/service-requests', serviceRequestRoutes);
-app.use('/api/messaging', messageRoutes);
-app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/account', accountSettingsRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/notifications', notificationRoutes);
+let authRoutes, adminRoutes, healthRoutes, serviceRequestRoutes;
+let messageRoutes, chatbotRoutes, accountSettingsRoutes, paymentRoutes, notificationRoutes;
 
-console.log('✅ Routes registered successfully!');
+try {
+  authRoutes = require('./routes/googleOAuth');
+  console.log('✓ Auth routes loaded');
+} catch (error) {
+  console.error('✗ Error loading auth routes:', error.message);
+  process.exit(1);
+}
 
+try {
+  adminRoutes = require('./routes/admin');
+  console.log('✓ Admin routes loaded');
+} catch (error) {
+  console.error('✗ Error loading admin routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  healthRoutes = require('./routes/health');
+  console.log('✓ Health routes loaded');
+} catch (error) {
+  console.error('✗ Error loading health routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  serviceRequestRoutes = require('./routes/serviceRequests');
+  console.log('✓ Service request routes loaded');
+} catch (error) {
+  console.error('✗ Error loading service request routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  messageRoutes = require('./routes/messaging');
+  console.log('✓ Message routes loaded');
+} catch (error) {
+  console.error('✗ Error loading message routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  chatbotRoutes = require('./routes/chatbot');
+  console.log('✓ Chatbot routes loaded');
+} catch (error) {
+  console.error('✗ Error loading chatbot routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  accountSettingsRoutes = require('./routes/accountSettings');
+  console.log('✓ Account settings routes loaded');
+} catch (error) {
+  console.error('✗ Error loading account settings routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  paymentRoutes = require('./routes/payment');
+  console.log('✓ Payment routes loaded');
+} catch (error) {
+  console.error('✗ Error loading payment routes:', error.message);
+  process.exit(1);
+}
+
+try {
+  notificationRoutes = require('./routes/notifications');
+  console.log('✓ Notification routes loaded');
+} catch (error) {
+  console.error('✗ Error loading notification routes:', error.message);
+  process.exit(1);
+}
+
+console.log('\nAll route files loaded successfully!');
+console.log('Now registering routes...\n');
+
+// Register routes with individual error handling
+try {
+  app.use('/api/auth', authRoutes);
+  console.log('✓ Auth routes registered at /api/auth');
+} catch (error) {
+  console.error('✗ Error registering auth routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/admin', adminRoutes);
+  console.log('✓ Admin routes registered at /api/admin');
+} catch (error) {
+  console.error('✗ Error registering admin routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api', healthRoutes);
+  console.log('✓ Health routes registered at /api');
+} catch (error) {
+  console.error('✗ Error registering health routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/service-requests', serviceRequestRoutes);
+  console.log('✓ Service request routes registered at /api/service-requests');
+} catch (error) {
+  console.error('✗ Error registering service request routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/messaging', messageRoutes);
+  console.log('✓ Message routes registered at /api/messaging');
+} catch (error) {
+  console.error('✗ Error registering message routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/chatbot', chatbotRoutes);
+  console.log('✓ Chatbot routes registered at /api/chatbot');
+} catch (error) {
+  console.error('✗ Error registering chatbot routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/account', accountSettingsRoutes);
+  console.log('✓ Account settings routes registered at /api/account');
+} catch (error) {
+  console.error('✗ Error registering account settings routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/payments', paymentRoutes);
+  console.log('✓ Payment routes registered at /api/payments');
+} catch (error) {
+  console.error('✗ Error registering payment routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/notifications', notificationRoutes);
+  console.log('✓ Notification routes registered at /api/notifications');
+} catch (error) {
+  console.error('✗ Error registering notification routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+console.log('\n✅ All routes registered successfully!');
+
+// Error handler middleware
 app.use((error, req, res, next) => {
     console.error('Unhandled error:', error);
     res.status(500).json({
@@ -83,6 +226,7 @@ app.use((error, req, res, next) => {
     });
 });
 
+// 404 handler
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -90,9 +234,10 @@ app.use((req, res) => {
     });
 });
 
+// Start server
 const PORT = process.env.PORT || 5000;  
 app.listen(PORT, () => {
-    console.log(`H2Quote server running on port ${PORT}`);
+    console.log(`\nH2Quote server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

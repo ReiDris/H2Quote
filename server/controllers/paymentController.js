@@ -24,19 +24,6 @@ const paymentStorage = multer.diskStorage({
   }
 });
 
-const paymentUpload = multer({
-  storage: paymentStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only JPG, PNG, and PDF are allowed.'));
-    }
-  }
-}).single('paymentProof');
-
 // Upload payment proof
 const uploadPaymentProof = async (req, res) => {
   const client = await pool.connect();
@@ -435,8 +422,7 @@ const updatePaymentStatus = async (req, res) => {
 };
 
 module.exports = {
-  paymentUpload,
-  uploadPaymentProof,
+  uploadPaymentProof,   // ✅ Keep only these
   viewPaymentProof,
   deletePaymentProof,
   updatePaymentStatus
