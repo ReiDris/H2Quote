@@ -1,8 +1,9 @@
 const { createClient } = require("@supabase/supabase-js");
 const pool = require("../config/database");
-const { createNotification } = require('./notificationController');
-const { createServiceRequestNotification } = require('./notificationController');
-
+const { createNotification } = require("./notificationController");
+const {
+  createServiceRequestNotification,
+} = require("./notificationController");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -126,7 +127,6 @@ const recreatePayments = async (requestId) => {
     client.release();
   }
 };
-
 
 const createServiceRequest = async (req, res) => {
   const client = await pool.connect();
@@ -331,12 +331,12 @@ const createServiceRequest = async (req, res) => {
         customerId,
         requestNumber,
         requestId,
-        'Pending',
+        "Pending",
         `Your service request #${requestNumber} has been submitted successfully. Total cost: ₱${totalCost.toLocaleString()}. We will review it shortly.`
       );
-      console.log('Customer notification sent for new request');
+      console.log("Customer notification sent for new request");
     } catch (notifError) {
-      console.error('Failed to send customer notification:', notifError);
+      console.error("Failed to send customer notification:", notifError);
     }
 
     // ✅ SEND NOTIFICATIONS TO ADMIN AND STAFF
@@ -348,21 +348,25 @@ const createServiceRequest = async (req, res) => {
       `;
       const staffResult = await pool.query(staffQuery);
 
-      console.log(`Creating notifications for ${staffResult.rows.length} admin/staff users`);
+      console.log(
+        `Creating notifications for ${staffResult.rows.length} admin/staff users`
+      );
 
       for (const staff of staffResult.rows) {
         await createNotification(
           staff.user_id,
-          'Service Request',
+          "Service Request",
           `New Service Request - ${requestNumber}`,
-          `A new service request #${requestNumber} has been submitted by ${req.user.email}. Total cost: ₱${totalCost.toLocaleString()}`,
+          `A new service request #${requestNumber} has been submitted by ${
+            req.user.email
+          }. Total cost: ₱${totalCost.toLocaleString()}`,
           staff.email
         );
       }
 
-      console.log('Admin/staff notifications sent successfully');
+      console.log("Admin/staff notifications sent successfully");
     } catch (notifError) {
-      console.error('Failed to create admin/staff notifications:', notifError);
+      console.error("Failed to create admin/staff notifications:", notifError);
     }
 
     res.status(201).json({
@@ -615,11 +619,17 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
+    // ✅ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
+      WITH payment_total AS (
+        SELECT SUM(amount) as total
+        FROM payments
+        WHERE request_id = $1
+      )
       SELECT 
         payment_id,
         payment_phase as phase,
-        CONCAT(ROUND((amount::numeric / NULLIF($1, 0) * 100), 0), '%') as percentage,
+        CONCAT(ROUND((amount::numeric / NULLIF((SELECT total FROM payment_total), 0) * 100), 0), '%') as percentage,
         CONCAT('₱', amount::text) as amount,
         COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
         CASE 
@@ -627,17 +637,16 @@ const getRequestDetails = async (req, res) => {
           ELSE 'Pending'
         END as "paidOn",
         status as "paymentStatus"
-      FROM payments p
-      WHERE p.request_id = $2
+      FROM payments
+      WHERE request_id = $1
       ORDER BY payment_id
     `;
-    const paymentResult = await pool.query(paymentQuery, [
-      totalCostAfterDiscount,
-      requestId,
-    ]);
+    
+    const paymentResult = await pool.query(paymentQuery, [requestId]);
 
     let paymentHistory = paymentResult.rows;
 
+    // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
@@ -1072,13 +1081,15 @@ const createQuotation = async (req, res) => {
         request.requested_by_user_id,
         request.request_number,
         requestId,
-        'Quote Prepared',
-        `A quotation (${quotationNumber}) has been prepared for your service request #${request.request_number}. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
+        "Quote Prepared",
+        `A quotation (${quotationNumber}) has been prepared for your service request #${
+          request.request_number
+        }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
-      
+
       console.log(`Quotation notification sent to ${request.customer_email}`);
     } catch (notifError) {
-      console.error('Failed to send quotation notification:', notifError);
+      console.error("Failed to send quotation notification:", notifError);
     }
 
     res.json({
@@ -1173,21 +1184,26 @@ const respondToQuotation = async (req, res) => {
 
     // ✅ SEND NOTIFICATION TO CUSTOMER ABOUT THEIR RESPONSE
     try {
-      const message = approved 
+      const message = approved
         ? `You have approved the quotation for service request #${quotation.request_number}. We will begin work shortly. Thank you for your confirmation!`
         : `You have rejected the quotation for service request #${quotation.request_number}. Our team will contact you to discuss alternatives and address your concerns.`;
-      
+
       await createServiceRequestNotification(
         customerId,
         quotation.request_number,
         quotation.request_id,
-        approved ? 'Quote Approved' : 'Under Review',
+        approved ? "Quote Approved" : "Under Review",
         message
       );
-      
-      console.log(`Quotation response notification sent to ${quotation.customer_email}`);
+
+      console.log(
+        `Quotation response notification sent to ${quotation.customer_email}`
+      );
     } catch (notifError) {
-      console.error('Failed to send quotation response notification:', notifError);
+      console.error(
+        "Failed to send quotation response notification:",
+        notifError
+      );
     }
 
     // ✅ NOTIFY ADMIN/STAFF ABOUT CUSTOMER'S DECISION
@@ -1201,16 +1217,22 @@ const respondToQuotation = async (req, res) => {
       for (const staff of staffResult.rows) {
         await createNotification(
           staff.user_id,
-          'Quotation Response',
-          `Quotation ${approved ? 'Approved' : 'Rejected'} - ${quotation.request_number}`,
-          `Customer ${quotation.customer_name} has ${approved ? 'approved' : 'rejected'} the quotation for service request #${quotation.request_number}. ${customerNotes ? `Note: ${customerNotes}` : ''}`,
+          "Quotation Response",
+          `Quotation ${approved ? "Approved" : "Rejected"} - ${
+            quotation.request_number
+          }`,
+          `Customer ${quotation.customer_name} has ${
+            approved ? "approved" : "rejected"
+          } the quotation for service request #${quotation.request_number}. ${
+            customerNotes ? `Note: ${customerNotes}` : ""
+          }`,
           staff.email
         );
       }
-      
+
       console.log(`Admin/staff notifications sent about quotation response`);
     } catch (notifError) {
-      console.error('Failed to notify staff:', notifError);
+      console.error("Failed to notify staff:", notifError);
     }
 
     res.json({
@@ -1570,8 +1592,8 @@ const updateRequestStatus = async (req, res) => {
     const userType = req.user.userType;
 
     // ✅ Log for debugging
-    console.log('Update request:', requestId);
-    console.log('New service status:', serviceStatus);
+    console.log("Update request:", requestId);
+    console.log("New service status:", serviceStatus);
 
     let whereClause = "request_id = $1";
     let queryParams = [requestId];
@@ -1600,7 +1622,7 @@ const updateRequestStatus = async (req, res) => {
     const currentRequest = requestCheck.rows[0];
     const currentStatusName = currentRequest.current_status_name;
 
-    console.log('Current status in DB:', currentStatusName);
+    console.log("Current status in DB:", currentStatusName);
 
     // ✅ Status mapping and order
     const statusMapping = {
@@ -1613,33 +1635,33 @@ const updateRequestStatus = async (req, res) => {
     };
 
     const statusOrder = [
-      "New",                // 0 - Pending
-      "Under Review",       // 1 - Assigned
-      "Quote Prepared",     // 2 - Processing
-      "Quote Approved",     // 3 - Approval
-      "In Progress",        // 4 - Ongoing
-      "Completed"           // 5 - Completed
+      "New", // 0 - Pending
+      "Under Review", // 1 - Assigned
+      "Quote Prepared", // 2 - Processing
+      "Quote Approved", // 3 - Approval
+      "In Progress", // 4 - Ongoing
+      "Completed", // 5 - Completed
     ];
 
     let newStatusId = currentRequest.status_id;
-    
+
     // ✅ Only validate if serviceStatus is being changed
     if (serviceStatus) {
       const backendStatus = statusMapping[serviceStatus] || serviceStatus;
-      console.log('Mapped backend status:', backendStatus);
+      console.log("Mapped backend status:", backendStatus);
 
       // ✅ Check if trying to move backward BEFORE querying database
       const currentIndex = statusOrder.indexOf(currentStatusName);
       const newIndex = statusOrder.indexOf(backendStatus);
-      
-      console.log('Current index:', currentIndex, 'New index:', newIndex);
-      
+
+      console.log("Current index:", currentIndex, "New index:", newIndex);
+
       if (currentIndex === -1) {
-        console.error('Current status not found in order:', currentStatusName);
+        console.error("Current status not found in order:", currentStatusName);
       }
-      
+
       if (newIndex === -1) {
-        console.error('New status not found in order:', backendStatus);
+        console.error("New status not found in order:", backendStatus);
       }
 
       // ✅ Prevent backward movement
@@ -1649,7 +1671,7 @@ const updateRequestStatus = async (req, res) => {
           success: false,
           message: `Cannot move backward from "${currentStatusName}" to "${backendStatus}". Status can only progress forward.`,
           currentStatus: currentStatusName,
-          attemptedStatus: backendStatus
+          attemptedStatus: backendStatus,
         });
       }
 
@@ -1784,7 +1806,7 @@ const updateRequestStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update service request",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
     client.release();
@@ -2457,7 +2479,6 @@ const updateItemWarranty = async (req, res) => {
   }
 };
 
-
 const updateServiceRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2487,16 +2508,18 @@ const updateServiceRequest = async (req, res) => {
       JOIN users u ON sr.requested_by_user_id = u.user_id
       WHERE sr.request_id = $1
     `;
-    const currentRequestResult = await client.query(currentRequestQuery, [requestId]);
-    
+    const currentRequestResult = await client.query(currentRequestQuery, [
+      requestId,
+    ]);
+
     if (currentRequestResult.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
-        message: "Service request not found"
+        message: "Service request not found",
       });
     }
-    
+
     const currentRequest = currentRequestResult.rows[0];
     const currentStatusName = currentRequest.current_status_name;
 
@@ -2515,7 +2538,7 @@ const updateServiceRequest = async (req, res) => {
       "Quote Prepared",
       "Quote Approved",
       "In Progress",
-      "Completed"
+      "Completed",
     ];
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
@@ -2531,7 +2554,7 @@ const updateServiceRequest = async (req, res) => {
           success: false,
           message: `Cannot move backward from "${currentStatusName}" to "${backendStatus}". Status can only progress forward.`,
           currentStatus: currentStatusName,
-          attemptedStatus: backendStatus
+          attemptedStatus: backendStatus,
         });
       }
     }
@@ -2546,7 +2569,7 @@ const updateServiceRequest = async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
-        message: `Invalid status: ${serviceStatus}`
+        message: `Invalid status: ${serviceStatus}`,
       });
     }
 
@@ -2574,7 +2597,10 @@ const updateServiceRequest = async (req, res) => {
 
     // Auto-set actual_completion_date when status changes to Completed
     let actualCompletionDate = currentRequest.actual_completion_date;
-    if (backendStatus === "Completed" && !currentRequest.actual_completion_date) {
+    if (
+      backendStatus === "Completed" &&
+      !currentRequest.actual_completion_date
+    ) {
       actualCompletionDate = new Date().toISOString().split("T")[0];
     }
 
@@ -2627,7 +2653,12 @@ const updateServiceRequest = async (req, res) => {
         `UPDATE service_request_items
         SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
         WHERE request_id = $4`,
-        [warrantyMonths, warrantyStartDate, warrantyEndDate.toISOString().split("T")[0], requestId]
+        [
+          warrantyMonths,
+          warrantyStartDate,
+          warrantyEndDate.toISOString().split("T")[0],
+          requestId,
+        ]
       );
 
       await client.query(
@@ -2652,7 +2683,13 @@ const updateServiceRequest = async (req, res) => {
               `UPDATE service_request_items
               SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
               WHERE request_id = $4 AND service_id = $5`,
-              [months, service.warranty_start_date, warrantyEndDate, requestId, service.service_id]
+              [
+                months,
+                service.warranty_start_date,
+                warrantyEndDate,
+                requestId,
+                service.service_id,
+              ]
             );
           }
         }
@@ -2680,16 +2717,18 @@ const updateServiceRequest = async (req, res) => {
       // Status change notification
       if (backendStatus !== currentStatusName) {
         let notificationMessage = `Your service request #${currentRequest.request_number} status has been updated to ${serviceStatus}.`;
-        
+
         if (assignedStaffId && staffName) {
           notificationMessage += ` Assigned to: ${staffName}.`;
         }
-        
-        if (backendStatus === 'In Progress' && serviceStartDate) {
-          notificationMessage += ` Service will begin on ${new Date(serviceStartDate).toLocaleDateString()}.`;
+
+        if (backendStatus === "In Progress" && serviceStartDate) {
+          notificationMessage += ` Service will begin on ${new Date(
+            serviceStartDate
+          ).toLocaleDateString()}.`;
         }
-        
-        if (backendStatus === 'Completed') {
+
+        if (backendStatus === "Completed") {
           notificationMessage += ` Thank you for choosing our services!`;
         }
 
@@ -2700,41 +2739,51 @@ const updateServiceRequest = async (req, res) => {
           serviceStatus,
           notificationMessage
         );
-        
-        console.log(`Status update notification sent to ${currentRequest.customer_email}`);
+
+        console.log(
+          `Status update notification sent to ${currentRequest.customer_email}`
+        );
       }
 
       // Staff assignment notification (if staff changed)
-      if (assignedStaffId && assignedStaffId !== currentRequest.assigned_to_staff_id && staffName) {
+      if (
+        assignedStaffId &&
+        assignedStaffId !== currentRequest.assigned_to_staff_id &&
+        staffName
+      ) {
         await createServiceRequestNotification(
           currentRequest.requested_by_user_id,
           currentRequest.request_number,
           requestId,
-          'Assigned',
+          "Assigned",
           `Your service request #${currentRequest.request_number} has been assigned to ${staffName}. They will contact you shortly to discuss the service details.`
         );
-        
-        console.log(`Staff assignment notification sent to ${currentRequest.customer_email}`);
+
+        console.log(
+          `Staff assignment notification sent to ${currentRequest.customer_email}`
+        );
       }
 
       // Payment notification
       if (paymentBreakdown && paymentBreakdown.length > 0) {
-        const paidPayments = paymentBreakdown.filter(p => p.paymentStatus === 'Paid');
+        const paidPayments = paymentBreakdown.filter(
+          (p) => p.paymentStatus === "Paid"
+        );
         if (paidPayments.length > 0) {
-          const paidPhases = paidPayments.map(p => p.phase).join(', ');
+          const paidPhases = paidPayments.map((p) => p.phase).join(", ");
           await createServiceRequestNotification(
             currentRequest.requested_by_user_id,
             currentRequest.request_number,
             requestId,
-            'Payment Confirmed',
+            "Payment Confirmed",
             `Payment received for service request #${currentRequest.request_number}. Phase(s): ${paidPhases}. Thank you!`
           );
-          
-          console.log('Payment notification sent to customer');
+
+          console.log("Payment notification sent to customer");
         }
       }
     } catch (notifError) {
-      console.error('Failed to create customer notification:', notifError);
+      console.error("Failed to create customer notification:", notifError);
     }
 
     res.json({
@@ -2753,7 +2802,6 @@ const updateServiceRequest = async (req, res) => {
     client.release();
   }
 };
-
 
 const setServiceWarranty = async (req, res) => {
   const client = await pool.connect();
