@@ -1,4 +1,4 @@
-require('dotenv').config();
+/*require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
@@ -98,9 +98,9 @@ app.listen(PORT, () => {
     console.log(`CORS enabled for origins:`, allowedOrigins);
 });
 
-module.exports = app;
+module.exports = app;*/
 
-/*require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/googleOAuth');
@@ -214,4 +214,4 @@ app.listen(PORT, () => {
     console.log(`CORS enabled for origins:`, allowedOrigins);
 });
 
-module.exports = app;*/
+module.exports = app;
