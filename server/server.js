@@ -20,11 +20,12 @@ if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABAS
     process.exit(1);
 }
 
-// CORS configuration - allows multiple origins
+// IMPROVED CORS CONFIGURATION
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://h2-quote.vercel.app'
+  'https://h2-quote.vercel.app',
+  'https://h2quote.onrender.com'
 ];
 
 // Add environment URLs if they exist
@@ -35,19 +36,42 @@ if (process.env.CLIENT_URL) {
   allowedOrigins.push(process.env.CLIENT_URL);
 }
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, curl, etc.)
+    if (!origin) {
+      console.log('Request with no origin (allowed)');
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('CORS allowed for origin:', origin);
+      callback(null, true);
+    } else {
+      console.log('CORS blocked for origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true, // Allow cookies and authorization headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600, // Cache preflight requests for 10 minutes
+  optionsSuccessStatus: 200 // For legacy browser support
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Debug middleware - logs all incoming requests
 app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path}`);
+  console.log(`${req.method} ${req.path} from ${req.get('origin') || 'no origin'}`);
   next();
 });
 
@@ -67,13 +91,14 @@ app.use((error, req, res, next) => {
     console.error('Unhandled error:', error);
     res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
 });
 
 // 404 handler
 app.use((req, res) => {
-    console.log('❌ 404: Route not found for', req.path);
+    console.log('404: Route not found for', req.method, req.path);
     res.status(404).json({
         success: false,
         message: 'Route not found'
@@ -83,7 +108,8 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 5000;  
 app.listen(PORT, () => {
     console.log(`H2Quote server running on port ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`CORS enabled for origins:`, allowedOrigins);
 });
 
 module.exports = app;
