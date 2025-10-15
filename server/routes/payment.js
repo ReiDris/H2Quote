@@ -13,14 +13,22 @@ const requireAdminOrStaff = (req, res, next) => {
   next();
 };
 
+// All routes require authentication
 router.use(authenticateToken);
 
-// Customer routes
-router.post('/:paymentId/upload-proof', paymentController.paymentUpload, paymentController.uploadPaymentProof);
+// Upload payment proof (customer)
+router.post('/:paymentId/upload-proof', 
+  paymentController.paymentUpload, 
+  paymentController.uploadPaymentProof
+);
+
+// View payment proof (customer/admin/staff)
+router.get('/:paymentId/proof', paymentController.viewPaymentProof);
+
+// Delete payment proof (customer)
 router.delete('/:paymentId/proof', paymentController.deletePaymentProof);
 
-// Admin/Staff routes
-router.get('/:paymentId/proof', requireAdminOrStaff, paymentController.viewPaymentProof);
-router.put('/:paymentId/status', requireAdminOrStaff, paymentController.updatePaymentStatus);  // ✅ New route
+// Update payment status (admin/staff only)
+router.put('/:paymentId/status', requireAdminOrStaff, paymentController.updatePaymentStatus);
 
 module.exports = router;
