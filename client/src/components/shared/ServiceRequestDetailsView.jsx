@@ -25,6 +25,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
+  
   const formatPaymentMode = (mode) => {
     const modeMap = {
       bank_transfer: "Bank Transfer",
@@ -77,134 +78,134 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
   // Fetch staff list
   const fetchStaffList = async () => {
-  try {
-    const response = await serviceRequestsAPI.getStaffList();
-    const data = await response.json();
-    
-    if (data.success) {
-      setStaffList(data.data);
+    try {
+      const response = await serviceRequestsAPI.getStaffList();
+      const data = await response.json();
+      
+      if (data.success) {
+        setStaffList(data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching staff list:", error);
     }
-  } catch (error) {
-    console.error("Error fetching staff list:", error);
-  }
-};
+  };
 
   // Fetch request details from backend
   const fetchRequestDetails = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    // Use getAll with search parameter
-    const searchResponse = await serviceRequestsAPI.getAll({
-      search: requestNumber,
-      limit: 1
-    });
+      // Use getAll with search parameter
+      const searchResponse = await serviceRequestsAPI.getAll({
+        search: requestNumber,
+        limit: 1
+      });
 
-    if (!searchResponse.ok) {
-      throw new Error("Failed to find service request");
+      if (!searchResponse.ok) {
+        throw new Error("Failed to find service request");
+      }
+
+      const searchData = await searchResponse.json();
+
+      if (!searchData.success || searchData.data.requests.length === 0) {
+        setError("Service request not found");
+        return;
+      }
+
+      const request = searchData.data.requests[0];
+      setRequestId(request.request_id);
+
+      // Use getDetails (not getRequestDetails)
+      const detailResponse = await serviceRequestsAPI.getDetails(request.request_id);
+
+      if (!detailResponse.ok) {
+        throw new Error("Failed to fetch request details");
+      }
+
+      const detailData = await detailResponse.json();
+
+      if (detailData.success) {
+        const {
+          request: requestDetails,
+          items,
+          paymentHistory,
+        } = detailData.data;
+
+        const actualTotalCost = items.reduce((sum, item) => {
+          const lineTotal =
+            typeof item.line_total === "string"
+              ? parseFloat(item.line_total.replace(/[₱,]/g, ""))
+              : parseFloat(item.line_total) || 0;
+          return sum + lineTotal;
+        }, 0);
+
+        const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`;
+
+        const transformedData = {
+          id: requestDetails.request_number,
+          requestedAt: requestDetails.requested_at,
+          requestAcknowledgedDate:
+            requestDetails.request_acknowledged_date || "-",
+          actualCompletionDate: requestDetails.actual_completion_date || "-",
+          customer: {
+            name: requestDetails.customer_name,
+            company: requestDetails.company_name,
+            email: requestDetails.email || "Not provided",
+            contact: requestDetails.phone || "Not provided",
+          },
+          services: items.map((item) => ({
+            service_id: item.service_id,
+            category: item.service_category || item.category,
+            service: item.name,
+            remarks: item.remarks || "-",
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            totalPrice: item.total_price,
+            itemType: item.item_type,
+            warranty_months: item.warranty_months || 6,
+            warranty_start_date: item.warranty_start_date || "",
+            warranty_status: item.warranty_status || "Not Set",
+          })),
+          paymentHistory: requestDetails.paymentHistory || [],
+          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+          totalCost: formattedTotalCost,
+          paymentMode: requestDetails.payment_mode || "Bank Transfer",
+          paymentTerms:
+            requestDetails.payment_terms || "50% Down, 50% upon Completion",
+          paymentDeadline: requestDetails.payment_deadline || "Not set",
+          assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
+          warranty: requestDetails.warranty || "6 months",
+          warrantyStatus: requestDetails.warranty_status || "Pending",
+          remarks: requestDetails.remarks || "-",
+          serviceStatus: requestDetails.service_status || "Pending",
+        };
+
+        setRequestData(transformedData);
+        setPaymentBreakdown(requestDetails.paymentHistory || []);
+
+        setServiceStatus(requestDetails.service_status || "Pending");
+        setPaymentStatus(requestDetails.payment_status || "Pending");
+        setWarrantyStatus(requestDetails.warranty_status || "Pending");
+        setServiceStartDate(requestDetails.service_start_date || "");
+        setServiceEndDate(requestDetails.actual_completion_date || "");
+        setSelectedDiscount(
+          requestDetails.discount_percentage
+            ? `${requestDetails.discount_percentage}%`
+            : "No Discount"
+        );
+      } else {
+        setError(detailData.message || "Failed to fetch request details");
+      }
+    } catch (error) {
+      console.error("Error fetching request details:", error);
+      setError("Failed to fetch request details");
+    } finally {
+      setLoading(false);
     }
-
-    const searchData = await searchResponse.json();
-
-    if (!searchData.success || searchData.data.requests.length === 0) {
-      setError("Service request not found");
-      return;
-    }
-
-    const request = searchData.data.requests[0];
-    setRequestId(request.request_id);
-
-    // Use getDetails (not getRequestDetails)
-    const detailResponse = await serviceRequestsAPI.getDetails(request.request_id);
-
-    if (!detailResponse.ok) {
-      throw new Error("Failed to fetch request details");
-    }
-
-    const detailData = await detailResponse.json();
-
-    if (detailData.success) {
-      const {
-        request: requestDetails,
-        items,
-        paymentHistory,
-      } = detailData.data;
-
-      const actualTotalCost = items.reduce((sum, item) => {
-        const lineTotal =
-          typeof item.line_total === "string"
-            ? parseFloat(item.line_total.replace(/[₱,]/g, ""))
-            : parseFloat(item.line_total) || 0;
-        return sum + lineTotal;
-      }, 0);
-
-      const formattedTotalCost = `₱${actualTotalCost.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`;
-
-      const transformedData = {
-        id: requestDetails.request_number,
-        requestedAt: requestDetails.requested_at,
-        requestAcknowledgedDate:
-          requestDetails.request_acknowledged_date || "-",
-        actualCompletionDate: requestDetails.actual_completion_date || "-",
-        customer: {
-          name: requestDetails.customer_name,
-          company: requestDetails.company_name,
-          email: requestDetails.email || "Not provided",
-          contact: requestDetails.phone || "Not provided",
-        },
-        services: items.map((item) => ({
-          service_id: item.service_id,
-          category: item.service_category || item.category,
-          service: item.name,
-          remarks: item.remarks || "-",
-          quantity: item.quantity,
-          unitPrice: item.unit_price,
-          totalPrice: item.total_price,
-          itemType: item.item_type,
-          warranty_months: item.warranty_months || 6,
-          warranty_start_date: item.warranty_start_date || "",
-          warranty_status: item.warranty_status || "Not Set",
-        })),
-        paymentHistory: requestDetails.paymentHistory || [],
-        estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-        totalCost: formattedTotalCost,
-        paymentMode: requestDetails.payment_mode || "Bank Transfer",
-        paymentTerms:
-          requestDetails.payment_terms || "50% Down, 50% upon Completion",
-        paymentDeadline: requestDetails.payment_deadline || "Not set",
-        assignedStaff: requestDetails.assigned_staff_name || "Not assigned",
-        warranty: requestDetails.warranty || "6 months",
-        warrantyStatus: requestDetails.warranty_status || "Pending",
-        remarks: requestDetails.remarks || "-",
-        serviceStatus: requestDetails.service_status || "Pending",
-      };
-
-      setRequestData(transformedData);
-      setPaymentBreakdown(requestDetails.paymentHistory || []);
-
-      setServiceStatus(requestDetails.service_status || "Pending");
-      setPaymentStatus(requestDetails.payment_status || "Pending");
-      setWarrantyStatus(requestDetails.warranty_status || "Pending");
-      setServiceStartDate(requestDetails.service_start_date || "");
-      setServiceEndDate(requestDetails.actual_completion_date || "");
-      setSelectedDiscount(
-        requestDetails.discount_percentage
-          ? `${requestDetails.discount_percentage}%`
-          : "No Discount"
-      );
-    } else {
-      setError(detailData.message || "Failed to fetch request details");
-    }
-  } catch (error) {
-    console.error("Error fetching request details:", error);
-    setError("Failed to fetch request details");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     if (requestNumber) {
@@ -233,6 +234,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       serviceStatus: {
         Pending: "bg-gray-100 text-gray-800",
         Assigned: "bg-orange-200 text-orange-600",
+        Processing: "bg-yellow-100 text-yellow-800",
+        "Waiting for Approval": "bg-purple-100 text-purple-800",
+        Approved: "bg-purple-100 text-purple-800",
         Ongoing: "bg-blue-100 text-blue-800",
         Completed: "bg-green-100 text-green-800",
         Cancelled: "bg-red-100 text-red-800",
@@ -265,7 +269,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     const steps = [
       { label: "Pending", key: "pending" },
       { label: "Assigned for Processing", key: "processing" },
-      { label: "Approval", key: "approval" },
+      { label: "Waiting for Approval", key: "waiting_approval" },
+      { label: "Approved", key: "approved" },
       { label: "Service Ongoing", key: "ongoing" },
       { label: "Completed", key: "completed" },
     ];
@@ -275,15 +280,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         case "Pending":
           return 0;
         case "Assigned":
-          return 1;
         case "Processing":
           return 1;
-        case "Approval":
+        case "Waiting for Approval":
           return 2;
-        case "Ongoing":
+        case "Approved":
           return 3;
-        case "Completed":
+        case "Ongoing":
           return 4;
+        case "Completed":
+          return 5;
         default:
           return 0;
       }
@@ -322,7 +328,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               {index < steps.length - 1 && (
                 <div className="flex items-center -mt-10">
                   <div
-                    className={`w-9 lg:w-22 xl:w-42 2xl:w-58 h-0.5 flex-shrink-0 ${
+                    className={`w-2 lg:w-10 xl:w-25 2xl:w-40 h-0.5 flex-shrink-0 ${
                       index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
                     }`}
                   />
@@ -342,48 +348,48 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   };
 
   const handleSaveChanges = async () => {
-  try {
-    const updatePayload = {
-      serviceStatus: serviceStatus,
-      paymentStatus: paymentStatus,
-      warrantyStatus: warrantyStatus,
-      assignedStaff: requestData.assignedStaff,
-      serviceStartDate: serviceStartDate || null,
-      serviceEndDate: serviceEndDate || null,
-      discount: selectedDiscount,
-      services: requestData.services.map((service) => ({
-        service_id: service.service_id,
-        itemType: service.itemType,
-        warranty_months: service.warranty_months,
-        warranty_start_date: service.warranty_start_date || null,
-        warranty_status: service.warranty_status,
-      })),
-      paymentBreakdown: paymentBreakdown.map((payment) => ({
-        phase: payment.phase,
-        paymentStatus: payment.paymentStatus,
-      })),
-    };
+    try {
+      const updatePayload = {
+        serviceStatus: serviceStatus,
+        paymentStatus: paymentStatus,
+        warrantyStatus: warrantyStatus,
+        assignedStaff: requestData.assignedStaff,
+        serviceStartDate: serviceStartDate || null,
+        serviceEndDate: serviceEndDate || null,
+        discount: selectedDiscount,
+        services: requestData.services.map((service) => ({
+          service_id: service.service_id,
+          itemType: service.itemType,
+          warranty_months: service.warranty_months,
+          warranty_start_date: service.warranty_start_date || null,
+          warranty_status: service.warranty_status,
+        })),
+        paymentBreakdown: paymentBreakdown.map((payment) => ({
+          phase: payment.phase,
+          paymentStatus: payment.paymentStatus,
+        })),
+      };
 
-    console.log("Sending update payload:", updatePayload);
+      console.log("Sending update payload:", updatePayload);
 
-    // Use updateRequest (not updateRequestDetails)
-    const response = await serviceRequestsAPI.updateRequest(requestId, updatePayload);
-    const data = await response.json();
+      // Use updateRequest (not updateRequestDetails)
+      const response = await serviceRequestsAPI.updateRequest(requestId, updatePayload);
+      const data = await response.json();
 
-    if (data.success) {
-      setSuccessMessage("Changes saved successfully!");
-      setShowSuccessModal(true);
-      fetchRequestDetails();
-    } else {
-      setSuccessMessage("Failed to save changes: " + data.message);
+      if (data.success) {
+        setSuccessMessage("Changes saved successfully!");
+        setShowSuccessModal(true);
+        fetchRequestDetails();
+      } else {
+        setSuccessMessage("Failed to save changes: " + data.message);
+        setShowSuccessModal(true);
+      }
+    } catch (error) {
+      console.error("Save changes error:", error);
+      setSuccessMessage("Failed to save changes. Please try again.");
       setShowSuccessModal(true);
     }
-  } catch (error) {
-    console.error("Save changes error:", error);
-    setSuccessMessage("Failed to save changes. Please try again.");
-    setShowSuccessModal(true);
-  }
-};
+  };
 
   if (loading) {
     return (
@@ -484,12 +490,13 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <select
               value={serviceStatus}
               onChange={(e) => setServiceStatus(e.target.value)}
-              className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-50 cursor-pointer"
+              className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-55 cursor-pointer"
             >
               <option value="Pending">Pending</option>
-              <option value="Processing">Processing</option>
-              <option value="Assigned">Assigned</option>
-              <option value="Ongoing">Ongoing</option>
+              <option value="Processing">Assigned for Processing</option>
+              <option value="Waiting for Approval">Waiting for Approval</option>
+              <option value="Approved">Approved</option>
+              <option value="Ongoing">Service Ongoing</option>
               <option value="Completed">Completed</option>
             </select>
           </div>
