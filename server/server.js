@@ -53,38 +53,120 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, // Allow cookies and authorization headers
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600, // Cache preflight requests for 10 minutes
-  optionsSuccessStatus: 200 // For legacy browser support
+  maxAge: 600,
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
-
-// Handle preflight requests explicitly
 app.options('*', cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Debug middleware - logs all incoming requests
+// Debug middleware
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path} from ${req.get('origin') || 'no origin'}`);
   next();
 });
 
-// Routes
-app.use('/api/auth', authRoutes);  
-app.use('/api/admin', adminRoutes);
-app.use('/api', healthRoutes);
-app.use('/api/service-requests', serviceRequestRoutes);
-app.use('/api/messaging', messageRoutes);
-app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/account', accountSettingsRoutes); 
-app.use('/api/payments', paymentRoutes);
-app.use('/api/notifications', notificationRoutes);
+// 🔍 DEBUG: Load routes with error catching
+console.log('🔍 Starting route registration...');
+
+try {
+  console.log('Loading auth routes...');
+  app.use('/api/auth', authRoutes);
+  console.log('✅ Auth routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in auth routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading admin routes...');
+  app.use('/api/admin', adminRoutes);
+  console.log('✅ Admin routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in admin routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading health routes...');
+  app.use('/api', healthRoutes);
+  console.log('✅ Health routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in health routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading service request routes...');
+  app.use('/api/service-requests', serviceRequestRoutes);
+  console.log('✅ Service request routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in service request routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading messaging routes...');
+  app.use('/api/messaging', messageRoutes);
+  console.log('✅ Messaging routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in messaging routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading chatbot routes...');
+  app.use('/api/chatbot', chatbotRoutes);
+  console.log('✅ Chatbot routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in chatbot routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading account settings routes...');
+  app.use('/api/account', accountSettingsRoutes);
+  console.log('✅ Account settings routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in account settings routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading payment routes...');
+  app.use('/api/payments', paymentRoutes);
+  console.log('✅ Payment routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in payment routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+try {
+  console.log('Loading notification routes...');
+  app.use('/api/notifications', notificationRoutes);
+  console.log('✅ Notification routes loaded successfully');
+} catch (error) {
+  console.error('❌ ERROR in notification routes:', error.message);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
+
+console.log('🎉 All routes loaded successfully!');
 
 // Error handling middleware
 app.use((error, req, res, next) => {
