@@ -23,31 +23,37 @@ const requireCustomer = (req, res, next) => {
   next();
 };
 
-// Specific routes FIRST (no parameters)
+// PUBLIC routes - MUST be FIRST (before authenticateToken)
 router.get('/services/catalog', serviceRequestController.getServicesCatalog);
 router.get('/chemicals/catalog', serviceRequestController.getChemicalsCatalog);
 router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCatalog);
 
+// Apply authentication to all routes below
 router.use(authenticateToken);
 
-router.get('/staff-list', requireAdminOrStaff, serviceRequestController.getStaffList); 
+// Authenticated specific routes (no parameters)
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
+router.get('/staff-list', requireAdminOrStaff, serviceRequestController.getStaffList);
 
-// Routes with parameters (AFTER all specific routes)
+// Generic routes (before parameterized routes to avoid conflicts)
+router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
+router.post('/', requireCustomer, serviceRequestController.createServiceRequest);
+
+// Quotation routes
+router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
+
+// Parameterized routes - specific paths before generic
 router.get('/:requestId/details', serviceRequestController.getRequestDetails);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
 router.post('/:requestId/add-chemicals', requireAdminOrStaff, serviceRequestController.addChemicalsToRequest);
-router.delete('/:requestId/remove-chemicals', requireAdminOrStaff, serviceRequestController.removeChemicalsFromRequest);
 router.post('/:requestId/add-refrigerants', requireAdminOrStaff, serviceRequestController.addRefrigerantsToRequest);
+router.delete('/:requestId/remove-chemicals', requireAdminOrStaff, serviceRequestController.removeChemicalsFromRequest);
 router.delete('/:requestId/remove-refrigerants', requireAdminOrStaff, serviceRequestController.removeRefrigerantsFromRequest);
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
-router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 router.put('/:requestId/update', requireAdminOrStaff, serviceRequestController.updateServiceRequest);
 router.post('/:requestId/warranty', requireAdminOrStaff, serviceRequestController.setServiceWarranty);
-router.put('/:requestId/items/:itemId/warranty', requireAdminOrStaff, serviceRequestController.updateIndividualServiceWarranty); 
 
-// Generic routes LAST
-router.get('/', requireAdminOrStaff, serviceRequestController.getAllRequests);
-router.post('/', requireCustomer, serviceRequestController.createServiceRequest);
+// Routes with multiple parameters - MUST be last
+router.put('/:requestId/items/:itemId/warranty', requireAdminOrStaff, serviceRequestController.updateIndividualServiceWarranty);
 
 module.exports = router;
