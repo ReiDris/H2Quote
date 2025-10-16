@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import { adminAPI } from "../../config/api";
 import API_URL from "../../config/api";
 
 const VerifyAccountsPage = () => {
@@ -92,6 +93,11 @@ const VerifyAccountsPage = () => {
       setIsProcessing(false);
     }
   };
+
+  const handleRejectClick = (user) => {
+  setUserToReject(user);
+  setShowRejectModal(true);
+};
 
   const handleApprove = async () => {
     if (!selectedUser || !selectedRole) return;

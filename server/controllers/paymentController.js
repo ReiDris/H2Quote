@@ -34,12 +34,23 @@ const uploadPaymentProof = async (req, res) => {
     const { paymentId } = req.params;
     const userId = req.user.id;
 
+    console.log('Starting payment proof upload...');
+    console.log('Payment ID:', paymentId);
+    console.log('User ID:', userId);
+
     if (!req.file) {
       return res.status(400).json({
         success: false,
         message: 'No file uploaded'
       });
     }
+
+    console.log('File received:', {
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path
+    });
 
     // Verify payment belongs to user's request
     const paymentCheck = await client.query(`
@@ -50,6 +61,7 @@ const uploadPaymentProof = async (req, res) => {
     `, [paymentId]);
 
     if (paymentCheck.rows.length === 0) {
+      console.log('ERROR: Payment not found');
       // Clean up temp file
       if (req.file && req.file.path) {
         fs.unlinkSync(req.file.path);
@@ -61,9 +73,15 @@ const uploadPaymentProof = async (req, res) => {
     }
 
     const payment = paymentCheck.rows[0];
+    console.log('SUCCESS: Payment found:', {
+      paymentId: payment.payment_id,
+      requestId: payment.request_id,
+      requestNumber: payment.request_number
+    });
 
     // Check if user owns this request
     if (payment.requested_by_user_id !== userId) {
+      console.log('ERROR: User not authorized');
       // Clean up temp file
       if (req.file && req.file.path) {
         fs.unlinkSync(req.file.path);
@@ -75,9 +93,19 @@ const uploadPaymentProof = async (req, res) => {
     }
 
     // Upload file to Supabase Storage
+    console.log('Reading file buffer...');
     const fileBuffer = fs.readFileSync(req.file.path);
     const fileName = `${payment.request_number}-payment${paymentId}-${Date.now()}${path.extname(req.file.originalname)}`;
     const filePath = `payment-proofs/${fileName}`;
+
+    console.log('Preparing Supabase upload...');
+    console.log('Bucket:', 'payment-documents');
+    console.log('File path:', filePath);
+    console.log('File name:', fileName);
+    console.log('Buffer size:', fileBuffer.length, 'bytes');
+    console.log('Content type:', req.file.mimetype);
+    console.log('Supabase URL:', process.env.SUPABASE_URL);
+    console.log('Has Service Key:', !!process.env.SUPABASE_SERVICE_KEY);
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('payment-documents')
@@ -89,14 +117,22 @@ const uploadPaymentProof = async (req, res) => {
     // Clean up local temp file after upload attempt
     try {
       fs.unlinkSync(req.file.path);
+      console.log('Temp file cleaned up');
     } catch (cleanupError) {
-      console.error("Failed to clean up temp file:", cleanupError);
+      console.error("WARNING: Failed to clean up temp file:", cleanupError);
     }
 
     if (uploadError) {
-      console.error("Supabase upload error:", uploadError);
+      console.error("ERROR: Supabase upload failed");
+      console.error('Error message:', uploadError.message);
+      console.error('Error name:', uploadError.name);
+      console.error('Error code:', uploadError.statusCode);
+      console.error('Full error:', JSON.stringify(uploadError, null, 2));
       throw new Error(`Failed to upload payment proof: ${uploadError.message}`);
     }
+
+    console.log('SUCCESS: Supabase upload completed');
+    console.log('Upload data:', uploadData);
 
     // Update payment with proof file path
     const updateQuery = `
@@ -108,6 +144,7 @@ const uploadPaymentProof = async (req, res) => {
     `;
 
     const result = await client.query(updateQuery, [filePath, paymentId]);
+    console.log('SUCCESS: Database updated with file path');
 
     await client.query('COMMIT');
 
@@ -132,7 +169,8 @@ const uploadPaymentProof = async (req, res) => {
       }
     }
 
-    console.error('Upload payment proof error:', error);
+    console.error('ERROR: Upload payment proof failed:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Failed to upload payment proof',
