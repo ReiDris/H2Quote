@@ -4,11 +4,10 @@ const cors = require('cors');
 
 const app = express();
 
-// Environment variable validation
+// Environment validation
 if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY || 
     !process.env.SUPABASE_DB_HOST || !process.env.SUPABASE_DB_PASSWORD) {
     console.error('❌ Missing required environment variables');
-    console.log('Required: JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_DB_HOST, SUPABASE_DB_PASSWORD');
     process.exit(1);
 }
 
@@ -20,18 +19,12 @@ const allowedOrigins = [
   'https://h2quote.onrender.com'
 ];
 
-if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
-}
-if (process.env.CLIENT_URL) {
-  allowedOrigins.push(process.env.CLIENT_URL);
-}
+if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
+if (process.env.CLIENT_URL) allowedOrigins.push(process.env.CLIENT_URL);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) {
-      return callback(null, true);
-    }
+    if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -46,21 +39,12 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply middleware
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging (development only)
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`);
-    next();
-  });
-}
-
-// Load and register routes AFTER app is created (this is the safe way)
+// Load routes (this pattern works, keep it!)
 const authRoutes = require('./routes/googleOAuth');
 const adminRoutes = require('./routes/admin');
 const healthRoutes = require('./routes/health');
@@ -71,7 +55,7 @@ const accountSettingsRoutes = require('./routes/accountSettings');
 const paymentRoutes = require('./routes/payment');
 const notificationRoutes = require('./routes/notifications');
 
-// Register API routes
+// Register routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', healthRoutes);
@@ -82,17 +66,12 @@ app.use('/api/account', accountSettingsRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Error handling middleware
+// Error handling
 app.use((error, req, res, next) => {
     console.error('Error:', error.message);
-    
     if (error.message === 'Not allowed by CORS') {
-        return res.status(403).json({
-            success: false,
-            message: 'CORS policy: Origin not allowed'
-        });
+        return res.status(403).json({ success: false, message: 'CORS policy violation' });
     }
-    
     res.status(500).json({
         success: false,
         message: 'Internal server error',
@@ -102,10 +81,7 @@ app.use((error, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        message: 'Route not found'
-    });
+    res.status(404).json({ success: false, message: 'Route not found' });
 });
 
 // Start server
