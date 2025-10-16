@@ -2,17 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-// Import route modules
-const authRoutes = require('./routes/googleOAuth');
-const adminRoutes = require('./routes/admin');
-const healthRoutes = require('./routes/health');
-const serviceRequestRoutes = require('./routes/serviceRequests');
-const messageRoutes = require('./routes/messaging');
-const chatbotRoutes = require('./routes/chatbot');
-const accountSettingsRoutes = require('./routes/accountSettings');
-const paymentRoutes = require('./routes/payment');
-const notificationRoutes = require('./routes/notifications');
-
 const app = express();
 
 // Environment variable validation
@@ -40,7 +29,6 @@ if (process.env.CLIENT_URL) {
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, curl)
     if (!origin) {
       return callback(null, true);
     }
@@ -72,6 +60,17 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+// Load and register routes AFTER app is created (this is the safe way)
+const authRoutes = require('./routes/googleOAuth');
+const adminRoutes = require('./routes/admin');
+const healthRoutes = require('./routes/health');
+const serviceRequestRoutes = require('./routes/serviceRequests');
+const messageRoutes = require('./routes/messaging');
+const chatbotRoutes = require('./routes/chatbot');
+const accountSettingsRoutes = require('./routes/accountSettings');
+const paymentRoutes = require('./routes/payment');
+const notificationRoutes = require('./routes/notifications');
+
 // Register API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -87,7 +86,6 @@ app.use('/api/notifications', notificationRoutes);
 app.use((error, req, res, next) => {
     console.error('Error:', error.message);
     
-    // Handle CORS errors
     if (error.message === 'Not allowed by CORS') {
         return res.status(403).json({
             success: false,
@@ -95,7 +93,6 @@ app.use((error, req, res, next) => {
         });
     }
     
-    // Handle other errors
     res.status(500).json({
         success: false,
         message: 'Internal server error',
@@ -103,7 +100,7 @@ app.use((error, req, res, next) => {
     });
 });
 
-// 404 handler - must be last
+// 404 handler
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -117,7 +114,7 @@ app.listen(PORT, () => {
     console.log(`\n🚀 H2Quote Server`);
     console.log(`📍 Port: ${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'production'}`);
-    console.log(`✅ Server running at https://h2quote.onrender.com\n`);
+    console.log(`✅ Server running\n`);
 });
 
 module.exports = app;
