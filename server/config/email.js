@@ -47,21 +47,19 @@ if (!useOAuth2 && !process.env.EMAIL_PASSWORD) {
 // Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
 
-// Verify transporter
-transporter.verify((error, success) => {
-    if (error) {
-        console.error('Email transporter configuration error:', error);
-        console.log('\n=== EMAIL SETUP TROUBLESHOOTING ===');
-        console.log('If you\'re seeing authentication errors:');
-        console.log('1. Enable 2-Factor Authentication on your Gmail account');
-        console.log('2. Generate an App Password at https://myaccount.google.com/apppasswords');
-        console.log('3. Use the App Password (not your regular password) in EMAIL_PASSWORD');
-        console.log('4. Or set up OAuth2 for production use');
-        console.log('=====================================\n');
-    } else {
-        console.log('✅ Email server is ready to send messages');
-        console.log(`Using ${useOAuth2 ? 'OAuth2' : 'App Password'} authentication`);
-    }
+// Verify transporter connection (non-blocking, runs in background)
+// This won't block server startup if it times out
+setImmediate(() => {
+    transporter.verify((error, success) => {
+        if (error) {
+            console.log('⚠️  Email verification warning:', error.message);
+            console.log('   Email service may still work when actually sending messages.');
+            console.log('   If emails fail, check your EMAIL_PASSWORD or Gmail settings.\n');
+        } else {
+            console.log('✅ Email server verified successfully');
+            console.log(`   Using ${useOAuth2 ? 'OAuth2' : 'App Password'} authentication\n`);
+        }
+    });
 });
 
 // Generic send email function
