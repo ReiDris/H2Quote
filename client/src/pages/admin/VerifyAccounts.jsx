@@ -94,6 +94,11 @@ const VerifyAccountsPage = () => {
     }
   };
 
+  const handleRejectClick = (user) => {
+  setUserToReject(user);
+  setShowRejectModal(true);
+};
+
   const handleApprove = async () => {
     if (!selectedUser || !selectedRole) return;
 
