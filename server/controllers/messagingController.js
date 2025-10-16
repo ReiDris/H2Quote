@@ -297,6 +297,168 @@ const sendMessage = async (req, res) => {
   }
 };
 
+const createServiceRequestMessage = async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    const { requestId } = req.params;
+    const { subject, content } = req.body;
+    const senderId = req.user.id;
+    const senderType = req.user.userType;
+
+    // Validate inputs
+    if (!subject || !content) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject and content are required'
+      });
+    }
+
+    // Verify the service request exists and the customer owns it
+    const requestQuery = `
+      SELECT 
+        sr.request_id, 
+        sr.request_number, 
+        sr.requested_by_user_id,
+        sr.assigned_to_staff_id,
+        u.email as customer_email,
+        CONCAT(u.first_name, ' ', u.last_name) as customer_name
+      FROM service_requests sr
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      WHERE sr.request_id = $1
+    `;
+    
+    const requestResult = await client.query(requestQuery, [requestId]);
+    
+    if (requestResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Service request not found'
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    // Only allow customer to initiate message
+    if (senderType !== 'client') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        success: false,
+        message: 'Only customers can initiate service request messages'
+      });
+    }
+
+    // Verify the customer owns this request
+    if (request.requested_by_user_id !== senderId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        success: false,
+        message: 'You can only message about your own service requests'
+      });
+    }
+
+    // Get all admin and staff users to notify
+    const recipientsQuery = `
+      SELECT user_id, email, first_name, last_name 
+      FROM users 
+      WHERE user_type IN ('admin', 'staff') AND status = 'Active'
+      ORDER BY 
+        CASE 
+          WHEN user_id = $1 THEN 0  -- Prioritize assigned staff
+          WHEN user_type = 'admin' THEN 1
+          ELSE 2
+        END
+    `;
+    
+    const recipientsResult = await client.query(recipientsQuery, [request.assigned_to_staff_id]);
+    
+    if (recipientsResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'No staff available to receive message'
+      });
+    }
+
+    // Send message to the first available recipient (assigned staff or first admin)
+    const primaryRecipient = recipientsResult.rows[0];
+
+    // Create the message with service request context
+    const insertQuery = `
+      INSERT INTO messages (
+        sender_id, 
+        recipient_id, 
+        subject, 
+        content, 
+        message_type, 
+        related_request_id
+      )
+      VALUES ($1, $2, $3, $4, 'service_request', $5)
+      RETURNING message_id, sent_at
+    `;
+
+    const fullSubject = `[Request #${request.request_number}] ${subject}`;
+    const fullContent = `Regarding Service Request: ${request.request_number}\n\n${content}`;
+
+    const messageResult = await client.query(insertQuery, [
+      senderId,
+      primaryRecipient.user_id,
+      fullSubject,
+      fullContent,
+      requestId
+    ]);
+
+    const messageId = messageResult.rows[0].message_id;
+
+    await client.query('COMMIT');
+
+    // ✅ SEND EMAIL NOTIFICATIONS TO ALL ADMIN/STAFF
+    try {
+      for (const recipient of recipientsResult.rows) {
+        const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
+        const messagePreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+        
+        await createNotification(
+          recipient.user_id,
+          'Service Request Message',
+          `Message about Request #${request.request_number}`,
+          `${request.customer_name} sent a message about service request #${request.request_number}. Subject: ${subject}. ${messagePreview}`,
+          recipient.email
+        );
+      }
+      
+      console.log(`✅ Service request message notifications sent to ${recipientsResult.rows.length} staff members`);
+    } catch (notifError) {
+      console.error('❌ Failed to send message notifications:', notifError);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Message sent successfully to TRISHKAYE team',
+      data: {
+        messageId: messageId,
+        sentAt: messageResult.rows[0].sent_at,
+        recipientCount: recipientsResult.rows.length,
+        requestNumber: request.request_number
+      }
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Create service request message error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send message',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    client.release();
+  }
+};
+
 const replyToMessage = async (req, res) => {
   const client = await pool.connect();
   
@@ -306,6 +468,7 @@ const replyToMessage = async (req, res) => {
     const { messageId } = req.params;
     const { content } = req.body;
     const senderId = req.user.id;
+    const senderType = req.user.userType;
 
     if (!content || content.trim().length === 0) {
       return res.status(400).json({
@@ -315,9 +478,26 @@ const replyToMessage = async (req, res) => {
     }
 
     const originalQuery = `
-      SELECT sender_id, recipient_id, subject, related_request_id, message_type
-      FROM messages 
-      WHERE message_id = $1 AND (sender_id = $2 OR recipient_id = $2)
+      SELECT 
+        m.sender_id, 
+        m.recipient_id, 
+        m.subject, 
+        m.related_request_id, 
+        m.message_type,
+        sender.user_type as sender_user_type,
+        sender.email as sender_email,
+        sender.first_name as sender_first_name,
+        sender.last_name as sender_last_name,
+        recipient.user_type as recipient_user_type,
+        recipient.email as recipient_email,
+        recipient.first_name as recipient_first_name,
+        recipient.last_name as recipient_last_name,
+        sr.request_number
+      FROM messages m
+      JOIN users sender ON m.sender_id = sender.user_id
+      JOIN users recipient ON m.recipient_id = recipient.user_id
+      LEFT JOIN service_requests sr ON m.related_request_id = sr.request_id
+      WHERE m.message_id = $1 AND (m.sender_id = $2 OR m.recipient_id = $2)
     `;
     
     const originalResult = await client.query(originalQuery, [messageId, senderId]);
@@ -330,15 +510,42 @@ const replyToMessage = async (req, res) => {
     }
 
     const original = originalResult.rows[0];
+
+    // ✅ IMPORTANT: Restrict replies for service_request messages
+    if (original.message_type === 'service_request') {
+      // Only allow admin/staff to reply to customer messages
+      if (senderType === 'client') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          success: false,
+          message: 'Customers cannot reply to service request messages. Please create a new message instead.'
+        });
+      }
+
+      // Verify staff/admin is replying to a customer message
+      if (original.sender_user_type !== 'client') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          success: false,
+          message: 'Can only reply to customer messages'
+        });
+      }
+    }
+
     const replyRecipient = original.sender_id === senderId ? original.recipient_id : original.sender_id;
     const replySubject = original.subject.startsWith('Re: ') ? original.subject : `Re: ${original.subject}`;
 
-    // Get recipient details for notification
-    const recipientQuery = await client.query(
-      'SELECT email, first_name, last_name FROM users WHERE user_id = $1',
-      [replyRecipient]
-    );
-    const recipient = recipientQuery.rows[0];
+    // Determine recipient details (who will receive this reply)
+    let recipientEmail, recipientFirstName, recipientLastName;
+    if (replyRecipient === original.sender_id) {
+      recipientEmail = original.sender_email;
+      recipientFirstName = original.sender_first_name;
+      recipientLastName = original.sender_last_name;
+    } else {
+      recipientEmail = original.recipient_email;
+      recipientFirstName = original.recipient_first_name;
+      recipientLastName = original.recipient_last_name;
+    }
 
     const replyQuery = `
       INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
@@ -360,22 +567,46 @@ const replyToMessage = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT
+    // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT (Customer or Staff)
     try {
-      const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
+      const recipientName = `${recipientFirstName} ${recipientLastName}`.trim();
       const replyPreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      const senderName = req.user.email; // You can also use req.user first/last name if available
       
+      // Different notification based on recipient type and message type
+      let notificationTitle, notificationBody;
+      
+      if (original.message_type === 'service_request') {
+        // For service request messages - customer receiving reply
+        notificationTitle = `Response to Your Service Request Message`;
+        notificationBody = `TRISHKAYE team replied to your message about Service Request #${original.request_number}.
+
+Subject: ${replySubject}
+
+${replyPreview}
+
+Please log in to view and respond: ${process.env.FRONTEND_URL || 'https://h2-quote.vercel.app'}/customer/messages`;
+      } else {
+        // For general messages
+        notificationTitle = `New Reply: ${replySubject}`;
+        notificationBody = `${senderName} replied to your message.
+
+${replyPreview}
+
+Please log in to view the full conversation: ${process.env.FRONTEND_URL || 'https://h2-quote.vercel.app'}/messages`;
+      }
+
       await createNotification(
         replyRecipient,
         'Message Reply',
-        `New Reply: ${replySubject}`,
-        `${req.user.email} replied to your message. ${replyPreview}`,
-        recipient.email
+        notificationTitle,
+        notificationBody,
+        recipientEmail
       );
       
-      console.log(`Reply notification sent to ${recipient.email}`);
+      console.log(`✅ Reply notification sent to ${recipientEmail} (${recipientName})`);
     } catch (notifError) {
-      console.error('Failed to send reply notification:', notifError);
+      console.error('❌ Failed to send reply notification:', notifError);
     }
 
     res.status(201).json({
@@ -383,7 +614,9 @@ const replyToMessage = async (req, res) => {
       message: 'Reply sent successfully',
       data: {
         messageId: replyId,
-        sentAt: replyResult.rows[0].sent_at
+        sentAt: replyResult.rows[0].sent_at,
+        recipientEmail: recipientEmail,
+        recipientName: `${recipientFirstName} ${recipientLastName}`
       }
     });
 
@@ -546,5 +779,6 @@ module.exports = {
   getUnreadCount,
   markAsRead,
   deleteMessages,
-  getMessageableUsers
+  getMessageableUsers,
+  createServiceRequestMessage  
 };
