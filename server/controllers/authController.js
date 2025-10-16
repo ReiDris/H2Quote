@@ -40,54 +40,28 @@ const signup = async (req, res) => {
       });
     }
 
-    if (!req.file) {
+    if (!req.file || !req.file.path) {
       return res.status(400).json({
         success: false,
         message: "Verification document is required",
       });
     }
 
+    console.log('Verification file uploaded to Supabase at:', req.file.path);
+
     const existingUserQuery = "SELECT user_id FROM users WHERE email = $1";
     const existingUsers = await client.query(existingUserQuery, [email]);
 
     if (existingUsers.rows.length > 0) {
-      // Clean up uploaded file
-      if (req.file && req.file.path) {
-        try {
-          fs.unlinkSync(req.file.path);
-        } catch (cleanupError) {
-          console.error("Failed to clean up file:", cleanupError);
-        }
-      }
+      // File is already uploaded to Supabase, no cleanup needed
       return res.status(409).json({
         success: false,
         message: "Email already registered",
       });
     }
 
-    // Upload file to Supabase Storage
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const fileName = `${Date.now()}-${req.file.originalname}`;
-    const filePath = `verification/${fileName}`;
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('verification-documents')
-      .upload(filePath, fileBuffer, {
-        contentType: req.file.mimetype,
-        upsert: false
-      });
-
-    // Clean up local file after upload attempt
-    try {
-      fs.unlinkSync(req.file.path);
-    } catch (cleanupError) {
-      console.error("Failed to clean up local file:", cleanupError);
-    }
-
-    if (uploadError) {
-      console.error("Supabase upload error:", uploadError);
-      throw new Error(`Failed to upload verification document: ${uploadError.message}`);
-    }
+    // File is already uploaded to Supabase by the middleware
+    const filePath = req.file.path; // This is the Supabase storage path (e.g., "verification/123456-filename.jpg")
 
     let companyId;
     const existingCompanyQuery =
@@ -172,15 +146,6 @@ const signup = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-
-    // Clean up local file on error (if it still exists)
-    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (cleanupError) {
-        console.error("Failed to clean up uploaded file:", cleanupError);
-      }
-    }
 
     console.error("Signup error:", error);
     res.status(500).json({
