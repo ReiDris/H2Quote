@@ -15,14 +15,27 @@ const createDefaultPayments = async (requestId) => {
   try {
     await client.query("BEGIN");
 
-    const requestQuery = `
-      SELECT estimated_cost, downpayment_percentage, payment_terms
-      FROM service_requests 
-      WHERE request_id = $1
+    // FIXED: Calculate actual total from all item tables
+    const totalQuery = `
+      SELECT 
+        sr.downpayment_percentage, 
+        sr.payment_terms,
+        sr.discount_percentage,
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          sr.estimated_cost
+        ) as subtotal
+      FROM service_requests sr
+      WHERE sr.request_id = $1
     `;
-    const request = await client.query(requestQuery, [requestId]);
-    const { estimated_cost, downpayment_percentage, payment_terms } =
-      request.rows[0];
+    const result = await client.query(totalQuery, [requestId]);
+    const { subtotal, downpayment_percentage, payment_terms, discount_percentage } = result.rows[0];
+    
+    // Calculate total after discount
+    const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
+    const estimated_cost = subtotal - discountAmount;
 
     // Check if it's Full Payment
     if (payment_terms === "Full" || !downpayment_percentage) {
@@ -84,15 +97,27 @@ const recreatePayments = async (requestId) => {
       [requestId]
     );
 
-    // Recreate payments using the existing helper
-    const requestQuery = `
-      SELECT estimated_cost, downpayment_percentage, payment_terms
-      FROM service_requests 
-      WHERE request_id = $1
+    // FIXED: Calculate actual total from all item tables (same as createDefaultPayments)
+    const totalQuery = `
+      SELECT 
+        sr.downpayment_percentage, 
+        sr.payment_terms,
+        sr.discount_percentage,
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          sr.estimated_cost
+        ) as subtotal
+      FROM service_requests sr
+      WHERE sr.request_id = $1
     `;
-    const request = await client.query(requestQuery, [requestId]);
-    const { estimated_cost, downpayment_percentage, payment_terms } =
-      request.rows[0];
+    const result = await client.query(totalQuery, [requestId]);
+    const { subtotal, downpayment_percentage, payment_terms, discount_percentage } = result.rows[0];
+    
+    // Calculate total after discount
+    const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
+    const estimated_cost = subtotal - discountAmount;
 
     // Check if it's Full Payment
     if (payment_terms === "Full" || !downpayment_percentage) {
