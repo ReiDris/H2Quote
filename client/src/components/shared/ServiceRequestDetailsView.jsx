@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
 import PaymentProofViewer from "./PaymentProofViewer";
-import { serviceRequestsAPI } from '../../config/api';
+import { serviceRequestsAPI } from "../../config/api";
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
@@ -25,7 +25,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
-  
+
   const formatPaymentMode = (mode) => {
     const modeMap = {
       bank_transfer: "Bank Transfer",
@@ -81,7 +81,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     try {
       const response = await serviceRequestsAPI.getStaffList();
       const data = await response.json();
-      
+
       if (data.success) {
         setStaffList(data.data);
       }
@@ -98,7 +98,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       // Use getAll with search parameter
       const searchResponse = await serviceRequestsAPI.getAll({
         search: requestNumber,
-        limit: 1
+        limit: 1,
       });
 
       if (!searchResponse.ok) {
@@ -116,7 +116,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       setRequestId(request.request_id);
 
       // Use getDetails (not getRequestDetails)
-      const detailResponse = await serviceRequestsAPI.getDetails(request.request_id);
+      const detailResponse = await serviceRequestsAPI.getDetails(
+        request.request_id
+      );
 
       if (!detailResponse.ok) {
         throw new Error("Failed to fetch request details");
@@ -328,7 +330,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               {index < steps.length - 1 && (
                 <div className="flex items-center -mt-10">
                   <div
-                    className={`w-2 lg:w-10 xl:w-25 2xl:w-40 h-0.5 flex-shrink-0 ${
+                    className={`w-2 lg:w-10 xl:w-25 2xl:w-34 h-0.5 flex-shrink-0 ${
                       index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
                     }`}
                   />
@@ -373,7 +375,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       console.log("Sending update payload:", updatePayload);
 
       // Use updateRequest (not updateRequestDetails)
-      const response = await serviceRequestsAPI.updateRequest(requestId, updatePayload);
+      const response = await serviceRequestsAPI.updateRequest(
+        requestId,
+        updatePayload
+      );
       const data = await response.json();
 
       if (data.success) {
@@ -493,7 +498,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-55 cursor-pointer"
             >
               <option value="Pending">Pending</option>
-              <option value="Processing">Assigned for Processing</option>
+              <option value="Assigned">Assigned for Processing</option>
               <option value="Waiting for Approval">Waiting for Approval</option>
               <option value="Approved">Approved</option>
               <option value="Ongoing">Service Ongoing</option>

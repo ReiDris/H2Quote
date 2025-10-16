@@ -414,8 +414,8 @@ const getCustomerRequests = async (req, res) => {
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
           WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
           WHEN rs.status_name = 'Completed' THEN 'Completed'
           ELSE rs.status_name
@@ -478,8 +478,8 @@ const getRequestDetails = async (req, res) => {
     CASE 
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-      WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
       WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
       WHEN rs.status_name = 'Completed' THEN 'Completed'
       ELSE rs.status_name
@@ -619,7 +619,6 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
-    // ✅ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -746,8 +745,8 @@ const getAllRequests = async (req, res) => {
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
           WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
           WHEN rs.status_name = 'Completed' THEN 'Completed'
           ELSE rs.status_name
@@ -1591,7 +1590,6 @@ const updateRequestStatus = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType;
 
-    // ✅ Log for debugging
     console.log("Update request:", requestId);
     console.log("New service status:", serviceStatus);
 
@@ -1603,7 +1601,6 @@ const updateRequestStatus = async (req, res) => {
       queryParams.push(userId);
     }
 
-    // ✅ Modified to get current status name
     const requestCheck = await client.query(
       `SELECT sr.request_id, sr.status_id, rs.status_name as current_status_name
        FROM service_requests sr
@@ -1624,12 +1621,12 @@ const updateRequestStatus = async (req, res) => {
 
     console.log("Current status in DB:", currentStatusName);
 
-    // ✅ Status mapping and order
     const statusMapping = {
       Pending: "New",
       Assigned: "Under Review",
       Processing: "Quote Prepared",
-      Approval: "Quote Approved",
+      "Waiting for Approval": "Quote Sent",
+      Approved: "Quote Approved",
       Ongoing: "In Progress",
       Completed: "Completed",
     };
@@ -1638,19 +1635,18 @@ const updateRequestStatus = async (req, res) => {
       "New", // 0 - Pending
       "Under Review", // 1 - Assigned
       "Quote Prepared", // 2 - Processing
-      "Quote Approved", // 3 - Approval
-      "In Progress", // 4 - Ongoing
-      "Completed", // 5 - Completed
+      "Quote Sent", // 3 - Waiting for Approval
+      "Quote Approved", // 4 - Approved
+      "In Progress", // 5 - Ongoing
+      "Completed", // 6 - Completed
     ];
 
     let newStatusId = currentRequest.status_id;
 
-    // ✅ Only validate if serviceStatus is being changed
     if (serviceStatus) {
       const backendStatus = statusMapping[serviceStatus] || serviceStatus;
       console.log("Mapped backend status:", backendStatus);
 
-      // ✅ Check if trying to move backward BEFORE querying database
       const currentIndex = statusOrder.indexOf(currentStatusName);
       const newIndex = statusOrder.indexOf(backendStatus);
 
@@ -1664,7 +1660,6 @@ const updateRequestStatus = async (req, res) => {
         console.error("New status not found in order:", backendStatus);
       }
 
-      // ✅ Prevent backward movement
       if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
         await client.query("ROLLBACK");
         return res.status(400).json({
@@ -1675,7 +1670,6 @@ const updateRequestStatus = async (req, res) => {
         });
       }
 
-      // Get new status ID
       const statusResult = await client.query(
         "SELECT status_id FROM request_statuses WHERE status_name = $1",
         [backendStatus]
@@ -2496,7 +2490,6 @@ const updateServiceRequest = async (req, res) => {
       discount,
     } = req.body;
 
-    // Get current status BEFORE making changes
     const currentRequestQuery = `
       SELECT sr.assigned_to_staff_id, sr.actual_completion_date, 
              sr.request_acknowledged_date, rs.status_name as current_status_name,
@@ -2526,8 +2519,8 @@ const updateServiceRequest = async (req, res) => {
     const statusMapping = {
       Pending: "New",
       Assigned: "Under Review",
-      Processing: "Quote Prepared",
-      Approval: "Quote Approved",
+      "Waiting for Approval": "Quote Sent",
+      Approved: "Quote Approved",
       Ongoing: "In Progress",
       Completed: "Completed",
     };
@@ -2535,7 +2528,7 @@ const updateServiceRequest = async (req, res) => {
     const statusOrder = [
       "New",
       "Under Review",
-      "Quote Prepared",
+      "Quote Sent",
       "Quote Approved",
       "In Progress",
       "Completed",
@@ -2543,7 +2536,6 @@ const updateServiceRequest = async (req, res) => {
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
-    // Validate backward movement
     if (serviceStatus && backendStatus !== currentStatusName) {
       const currentIndex = statusOrder.indexOf(currentStatusName);
       const newIndex = statusOrder.indexOf(backendStatus);
@@ -2559,7 +2551,6 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // Get the status_id for the service status
     const statusResult = await client.query(
       "SELECT status_id FROM request_statuses WHERE status_name = $1",
       [backendStatus]
@@ -2575,7 +2566,6 @@ const updateServiceRequest = async (req, res) => {
 
     const statusId = statusResult.rows[0].status_id;
 
-    // Get assigned staff user_id if not "Not assigned"
     let assignedStaffId = null;
     let requestAcknowledgedDate = currentRequest.request_acknowledged_date;
     let staffName = null;
@@ -2595,7 +2585,6 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // Auto-set actual_completion_date when status changes to Completed
     let actualCompletionDate = currentRequest.actual_completion_date;
     if (
       backendStatus === "Completed" &&
@@ -2604,13 +2593,11 @@ const updateServiceRequest = async (req, res) => {
       actualCompletionDate = new Date().toISOString().split("T")[0];
     }
 
-    // Parse discount percentage
     let discountPercentage = 0;
     if (discount && discount !== "No Discount") {
       discountPercentage = parseFloat(discount.replace("%", ""));
     }
 
-    // Update service request
     const updateRequestQuery = `
       UPDATE service_requests 
       SET 
@@ -2636,13 +2623,11 @@ const updateServiceRequest = async (req, res) => {
       requestId,
     ]);
 
-    // Check if ANY service has manual warranty data
     const hasManualWarrantyData =
       services &&
       services.length > 0 &&
       services.some((s) => s.warranty_start_date);
 
-    // Auto-set warranty ONLY if status is Completed AND no manual warranty data provided
     if (backendStatus === "Completed" && !hasManualWarrantyData) {
       const warrantyStartDate = new Date().toISOString().split("T")[0];
       const warrantyMonths = 6;
@@ -2669,7 +2654,6 @@ const updateServiceRequest = async (req, res) => {
       );
     }
 
-    // Update warranty information for each service item (if manually provided)
     if (services && services.length > 0) {
       for (const service of services) {
         if (service.itemType === "service" && service.service_id) {
@@ -2696,7 +2680,6 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // Update payment statuses and set paid_on date when marked as Paid
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
         await client.query(
@@ -2712,9 +2695,7 @@ const updateServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ✅ SEND NOTIFICATION TO CUSTOMER ABOUT STATUS CHANGE
     try {
-      // Status change notification
       if (backendStatus !== currentStatusName) {
         let notificationMessage = `Your service request #${currentRequest.request_number} status has been updated to ${serviceStatus}.`;
 
@@ -2745,7 +2726,6 @@ const updateServiceRequest = async (req, res) => {
         );
       }
 
-      // Staff assignment notification (if staff changed)
       if (
         assignedStaffId &&
         assignedStaffId !== currentRequest.assigned_to_staff_id &&
@@ -2764,7 +2744,6 @@ const updateServiceRequest = async (req, res) => {
         );
       }
 
-      // Payment notification
       if (paymentBreakdown && paymentBreakdown.length > 0) {
         const paidPayments = paymentBreakdown.filter(
           (p) => p.paymentStatus === "Paid"
