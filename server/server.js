@@ -8,7 +8,6 @@ const app = express();
 if (!process.env.JWT_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY || 
     !process.env.SUPABASE_DB_HOST || !process.env.SUPABASE_DB_PASSWORD) {
     console.error('❌ Missing required environment variables');
-    console.log('Required variables: JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_DB_HOST, SUPABASE_DB_PASSWORD');
     process.exit(1);
 }
 
@@ -51,179 +50,127 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Import routes with detailed error tracking
-console.log('🔧 Loading route files...\n');
+console.log('🔍 BISECTION DEBUG - Loading routes one by one...\n');
 
-let authRoutes, adminRoutes, healthRoutes, serviceRequestRoutes;
-let messageRoutes, chatbotRoutes, accountSettingsRoutes, paymentRoutes, notificationRoutes;
-
+// Load routes one at a time with detailed error reporting
+console.log('Loading: googleOAuth...');
 try {
-  authRoutes = require('./routes/googleOAuth');
-  console.log('✅ Auth routes loaded');
-} catch (error) {
-  console.error('❌ Error loading auth routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  adminRoutes = require('./routes/admin');
-  console.log('✅ Admin routes loaded');
-} catch (error) {
-  console.error('❌ Error loading admin routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  healthRoutes = require('./routes/health');
-  console.log('✅ Health routes loaded');
-} catch (error) {
-  console.error('❌ Error loading health routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  serviceRequestRoutes = require('./routes/serviceRequests');
-  console.log('✅ Service request routes loaded');
-} catch (error) {
-  console.error('❌ Error loading service request routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  messageRoutes = require('./routes/messaging');
-  console.log('✅ Message routes loaded');
-} catch (error) {
-  console.error('❌ Error loading message routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  chatbotRoutes = require('./routes/chatbot');
-  console.log('✅ Chatbot routes loaded');
-} catch (error) {
-  console.error('❌ Error loading chatbot routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  accountSettingsRoutes = require('./routes/accountSettings');
-  console.log('✅ Account settings routes loaded');
-} catch (error) {
-  console.error('❌ Error loading account settings routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  paymentRoutes = require('./routes/payment');
-  console.log('✅ Payment routes loaded');
-} catch (error) {
-  console.error('❌ Error loading payment routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-try {
-  notificationRoutes = require('./routes/notifications');
-  console.log('✅ Notification routes loaded');
-} catch (error) {
-  console.error('❌ Error loading notification routes:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
-
-console.log('\n📋 All route files loaded successfully!');
-console.log('🔗 Now registering routes...\n');
-
-// Register routes with error handling
-try {
+  const authRoutes = require('./routes/googleOAuth');
+  console.log('✅ googleOAuth loaded successfully');
   app.use('/api/auth', authRoutes);
-  console.log('✅ Auth routes registered at /api/auth');
+  console.log('✅ googleOAuth registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering auth routes:', error.message);
+  console.error('❌❌❌ ERROR IN googleOAuth (auth.js) ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: admin...');
 try {
+  const adminRoutes = require('./routes/admin');
+  console.log('✅ admin loaded successfully');
   app.use('/api/admin', adminRoutes);
-  console.log('✅ Admin routes registered at /api/admin');
+  console.log('✅ admin registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering admin routes:', error.message);
+  console.error('❌❌❌ ERROR IN admin.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: health...');
 try {
+  const healthRoutes = require('./routes/health');
+  console.log('✅ health loaded successfully');
   app.use('/api', healthRoutes);
-  console.log('✅ Health routes registered at /api');
+  console.log('✅ health registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering health routes:', error.message);
+  console.error('❌❌❌ ERROR IN health.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: serviceRequests...');
 try {
+  const serviceRequestRoutes = require('./routes/serviceRequests');
+  console.log('✅ serviceRequests loaded successfully');
   app.use('/api/service-requests', serviceRequestRoutes);
-  console.log('✅ Service request routes registered at /api/service-requests');
+  console.log('✅ serviceRequests registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering service request routes:', error.message);
+  console.error('❌❌❌ ERROR IN serviceRequests.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: messaging...');
 try {
+  const messageRoutes = require('./routes/messaging');
+  console.log('✅ messaging loaded successfully');
   app.use('/api/messaging', messageRoutes);
-  console.log('✅ Message routes registered at /api/messaging');
+  console.log('✅ messaging registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering message routes:', error.message);
+  console.error('❌❌❌ ERROR IN messaging.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: chatbot...');
 try {
+  const chatbotRoutes = require('./routes/chatbot');
+  console.log('✅ chatbot loaded successfully');
   app.use('/api/chatbot', chatbotRoutes);
-  console.log('✅ Chatbot routes registered at /api/chatbot');
+  console.log('✅ chatbot registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering chatbot routes:', error.message);
+  console.error('❌❌❌ ERROR IN chatbot.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: accountSettings...');
 try {
+  const accountSettingsRoutes = require('./routes/accountSettings');
+  console.log('✅ accountSettings loaded successfully');
   app.use('/api/account', accountSettingsRoutes);
-  console.log('✅ Account settings routes registered at /api/account');
+  console.log('✅ accountSettings registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering account settings routes:', error.message);
+  console.error('❌❌❌ ERROR IN accountSettings.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: payment...');
 try {
+  const paymentRoutes = require('./routes/payment');
+  console.log('✅ payment loaded successfully');
   app.use('/api/payments', paymentRoutes);
-  console.log('✅ Payment routes registered at /api/payments');
+  console.log('✅ payment registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering payment routes:', error.message);
+  console.error('❌❌❌ ERROR IN payment.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
+console.log('Loading: notifications...');
 try {
+  const notificationRoutes = require('./routes/notifications');
+  console.log('✅ notifications loaded successfully');
   app.use('/api/notifications', notificationRoutes);
-  console.log('✅ Notification routes registered at /api/notifications');
+  console.log('✅ notifications registered successfully\n');
 } catch (error) {
-  console.error('❌ Error registering notification routes:', error.message);
+  console.error('❌❌❌ ERROR IN notifications.js ❌❌❌');
+  console.error('Error message:', error.message);
   console.error('Stack:', error.stack);
   process.exit(1);
 }
 
-console.log('\n✅ All routes registered successfully!');
+console.log('🎉 ALL ROUTES LOADED AND REGISTERED SUCCESSFULLY!\n');
 
 // Error handler middleware
 app.use((error, req, res, next) => {
