@@ -8,12 +8,19 @@ const supabase = createClient(
 
 const authenticateToken = async (req, res, next) => {
   try {
-    console.log('🔐 Auth middleware called for:', req.method, req.path);
+    console.log('🔍 Auth middleware called for:', req.method, req.path);
     
     const authHeader = req.headers['authorization'];
     console.log('📋 Auth header:', authHeader ? 'exists' : 'missing');
     
-    const token = authHeader && authHeader.split(' ')[1];
+    // Check for token in Authorization header first
+    let token = authHeader && authHeader.split(' ')[1];
+    
+    // Fallback to query parameter (for iframe and direct file access)
+    if (!token && req.query.token) {
+      token = req.query.token;
+      console.log('🔑 Token found in query parameter');
+    }
 
     if (!token) {
       console.log('❌ No token provided');
@@ -23,7 +30,7 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    console.log('🔓 Token found, verifying...');
+    console.log('🔐 Token found, verifying...');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log('✅ Token decoded:', { email: decoded.email, userId: decoded.userId });
 
