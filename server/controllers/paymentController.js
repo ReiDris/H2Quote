@@ -421,8 +421,22 @@ const updatePaymentStatus = async (req, res) => {
   }
 };
 
+const paymentUpload = multer({
+  storage: paymentStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPG, PNG, and PDF are allowed.'));
+    }
+  }
+}).single('paymentProof');
+
 module.exports = {
-  uploadPaymentProof,   // ✅ Keep only these
+  paymentUpload,
+  uploadPaymentProof,
   viewPaymentProof,
   deletePaymentProof,
   updatePaymentStatus
