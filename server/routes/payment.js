@@ -47,7 +47,7 @@ const paymentUpload = multer({
   }
 }).single('paymentProof');
 
-// Route definitions - fixed parameter syntax
+// Route definitions
 router.post('/:paymentId/upload-proof', 
   paymentUpload, 
   paymentController.uploadPaymentProof
