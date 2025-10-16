@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Eye, Upload } from "lucide-react";
+import { ArrowLeft, Eye, Upload, MessageCircle } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
@@ -37,83 +37,83 @@ const CustomerServiceRequestDetails = () => {
   }, [requestId]);
 
   const fetchRequestDetails = async () => {
-  try {
-    setLoading(true);
-    const token = localStorage.getItem("h2quote_token");
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("h2quote_token");
 
-    console.log("Fetching details for requestId:", requestId);
+      console.log("Fetching details for requestId:", requestId);
 
-    if (!token) {
-      console.log("No token found");
-      navigate("/login");
-      return;
-    }
-
-    const response = await serviceRequestsAPI.getDetails(requestId);
-
-    console.log("Response status:", response.status);
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem("h2quote_token");
+      if (!token) {
+        console.log("No token found");
         navigate("/login");
         return;
       }
-      if (response.status === 404) {
-        setError("Service request not found");
-        return;
+
+      const response = await serviceRequestsAPI.getDetails(requestId);
+
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("h2quote_token");
+          navigate("/login");
+          return;
+        }
+        if (response.status === 404) {
+          setError("Service request not found");
+          return;
+        }
+        throw new Error("Failed to fetch request details");
       }
-      throw new Error("Failed to fetch request details");
+
+      const data = await response.json();
+      console.log("Received data:", data);
+
+      if (data.success) {
+        const { request: requestDetails, items } = data.data;
+
+        const transformedData = {
+          id: requestDetails.request_number,
+          requestedAt: requestDetails.requested_at,
+          serviceStatus: requestDetails.service_status,
+          paymentStatus: requestDetails.payment_status,
+          warrantyStatus: requestDetails.warranty_status,
+          services: (items || []).map((item) => ({
+            category: item.service_category || item.category,
+            service: item.service || item.name,
+            remarks: item.remarks || "-",
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            totalPrice: item.total_price,
+          })),
+          paymentHistory: requestDetails.paymentHistory || [],
+          estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
+          totalCost: requestDetails.totalCost,
+          paymentMode: requestDetails.payment_mode || "-",
+          paymentTerms: requestDetails.payment_terms || "-",
+          paymentDeadline: requestDetails.payment_deadline || "-",
+          assignedStaff: requestDetails.assigned_staff_name || "-",
+          serviceStartDate: requestDetails.service_start_date || "-",
+          estimatedEndDate: requestDetails.estimated_end_date || "-",
+          warranty: requestDetails.warranty || "6 months",
+        };
+
+        console.log("Setting request data");
+        setRequestData(transformedData);
+        setError("");
+      } else {
+        setError(data.message || "Failed to fetch request details");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      setError("Failed to fetch request details");
+    } finally {
+      setLoading(false);
     }
-
-    const data = await response.json();
-    console.log("Received data:", data);
-
-    if (data.success) {
-      const { request: requestDetails, items } = data.data;
-
-      const transformedData = {
-        id: requestDetails.request_number,
-        requestedAt: requestDetails.requested_at,
-        serviceStatus: requestDetails.service_status,
-        paymentStatus: requestDetails.payment_status,
-        warrantyStatus: requestDetails.warranty_status,
-        services: (items || []).map((item) => ({
-          category: item.service_category || item.category,
-          service: item.service || item.name,
-          remarks: item.remarks || "-",
-          quantity: item.quantity,
-          unitPrice: item.unit_price,
-          totalPrice: item.total_price,
-        })),
-        paymentHistory: requestDetails.paymentHistory || [],
-        estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
-        totalCost: requestDetails.totalCost,
-        paymentMode: requestDetails.payment_mode || "-",
-        paymentTerms: requestDetails.payment_terms || "-",
-        paymentDeadline: requestDetails.payment_deadline || "-",
-        assignedStaff: requestDetails.assigned_staff_name || "-",
-        serviceStartDate: requestDetails.service_start_date || "-",
-        estimatedEndDate: requestDetails.estimated_end_date || "-",
-        warranty: requestDetails.warranty || "6 months",
-      };
-
-      console.log("Setting request data");
-      setRequestData(transformedData);
-      setError("");
-    } else {
-      setError(data.message || "Failed to fetch request details");
-    }
-  } catch (error) {
-    console.error("Error:", error);
-    setError("Failed to fetch request details");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleUploadSuccess = () => {
-    fetchRequestDetails(); // Refresh the data after upload
+    fetchRequestDetails();
   };
 
   const handleViewProof = (paymentId, fileName) => {
@@ -122,12 +122,20 @@ const CustomerServiceRequestDetails = () => {
     setIsViewerOpen(true);
   };
 
+  const handleMessageTrishkaye = () => {
+    navigate("/customer/messages");
+  };
+
+  const handleApproveQuotation = () => {
+    // TODO: Implement approval logic
+    console.log("Approve quotation clicked");
+  };
+
   const getStatusBadge = (status, type) => {
     const statusStyles = {
       serviceStatus: {
         Pending: "bg-gray-100 text-gray-800",
         Assigned: "bg-orange-200 text-orange-600",
-        Processing: "bg-yellow-100 text-yellow-800",
         "Waiting for Approval": "bg-purple-100 text-purple-800",
         Approved: "bg-purple-100 text-purple-800",
         Ongoing: "bg-blue-100 text-blue-800",
@@ -222,7 +230,7 @@ const CustomerServiceRequestDetails = () => {
               {index < steps.length - 1 && (
                 <div className="flex items-center -mt-10">
                   <div
-                    className={`w-2 lg:w-10 xl:w-25 2xl:w-40 h-0.5 flex-shrink-0 ${
+                    className={`w-2 lg:w-10 xl:w-25 2xl:w-34 h-0.5 flex-shrink-0 ${
                       index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
                     }`}
                   />
@@ -298,6 +306,45 @@ const CustomerServiceRequestDetails = () => {
         <div className="p-6">
           <StatusTracker />
         </div>
+
+        {/* Approval Notification Banner */}
+        {requestData.serviceStatus === "Waiting for Approval" && (
+          <div className="mx-6 mb-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-1">
+                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">!</span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-[#004785] font-semibold text-base mb-2">
+                    Quotation Revised – Please Review
+                  </h3>
+                  <p className="text-gray-700 text-sm mb-4">
+                    The final quotation for your request has been updated.
+                    Please review the details before proceeding.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button
+                      onClick={handleMessageTrishkaye}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-[#004785] text-[#004785] rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-sm font-medium"
+                    >
+                      <MessageCircle size={18} />
+                      Message TRISHKAYE
+                    </button>
+                    <button
+                      onClick={handleApproveQuotation}
+                      className="px-4 py-3 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer text-sm font-medium"
+                    >
+                      Approve Updated Quotation
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="p-6">
           <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
@@ -503,8 +550,13 @@ const CustomerServiceRequestDetails = () => {
                       {payment.proofOfPayment === "-" ? (
                         <span className="text-gray-400">Not uploaded</span>
                       ) : (
-                        <button 
-                          onClick={() => handleViewProof(payment.payment_id, payment.proofOfPayment)}
+                        <button
+                          onClick={() =>
+                            handleViewProof(
+                              payment.payment_id,
+                              payment.proofOfPayment
+                            )
+                          }
                           className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
                         >
                           <Eye size={16} />
