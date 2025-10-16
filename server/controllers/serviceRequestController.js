@@ -317,7 +317,7 @@ const createServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Create default payments
+    // IMPORTANT: Create default payments AFTER commit, using the final total cost
     try {
       await createDefaultPayments(requestId);
       console.log("Default payments created successfully");
@@ -640,7 +640,7 @@ const getRequestDetails = async (req, res) => {
       WHERE request_id = $1
       ORDER BY payment_id
     `;
-    
+
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
     let paymentHistory = paymentResult.rows;
