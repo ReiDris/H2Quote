@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import { adminAPI } from "../../config/api";
 import API_URL from "../../config/api";
 
 const VerifyAccountsPage = () => {
