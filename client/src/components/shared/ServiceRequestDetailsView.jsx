@@ -53,6 +53,33 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  // State for status restriction modal
+  const [showStatusRestrictionModal, setShowStatusRestrictionModal] = useState(false);
+  const [statusRestrictionMessage, setStatusRestrictionMessage] = useState("");
+
+  const handleServiceStatusChange = (newStatus) => {
+    // Check if trying to set to "Ongoing" without being "Approved"
+    if (newStatus === "Ongoing" && serviceStatus !== "Approved") {
+      setStatusRestrictionMessage(
+        "Cannot set status to Service Ongoing. Please wait for customer approval first."
+      );
+      setShowStatusRestrictionModal(true);
+      return;
+    }
+
+    // Check if trying to set to "Completed" without being "Ongoing"
+    if (newStatus === "Completed" && serviceStatus !== "Ongoing") {
+      setStatusRestrictionMessage(
+        "Cannot set status to Completed. The service must be ongoing first."
+      );
+      setShowStatusRestrictionModal(true);
+      return;
+    }
+
+    // If validation passes, update the status
+    setServiceStatus(newStatus);
+  };
+
   const calculateDiscountedTotal = () => {
     const baseTotal = parseFloat(requestData.totalCost.replace(/[₱,]/g, ""));
 
@@ -351,8 +378,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
   const handleSaveChanges = async () => {
     try {
+      // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
+      let finalServiceStatus = serviceStatus;
+      if (requestData.assignedStaff !== "Not assigned" && serviceStatus === "Pending") {
+        finalServiceStatus = "Assigned";
+        setServiceStatus("Assigned");
+      }
+
       const updatePayload = {
-        serviceStatus: serviceStatus,
+        serviceStatus: finalServiceStatus,
         paymentStatus: paymentStatus,
         warrantyStatus: warrantyStatus,
         assignedStaff: requestData.assignedStaff,
@@ -440,6 +474,33 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         <StatusTracker />
       </div>
 
+      {/* Approval Notification Banner */}
+      {requestData.serviceStatus === "Approved" && (
+        <div className="mx-6 mb-6">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-1">
+                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">✓</span>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-green-800 font-semibold text-base mb-2">
+                  Customer Approval Received
+                </h3>
+                <p className="text-gray-700 text-sm mb-3">
+                  The customer has reviewed and approved the updated service request, including all added services and the final quotation. You may now proceed with the next steps.
+                </p>
+                <div className="flex items-center gap-2 text-sm text-gray-600 bg-white rounded px-3 py-2 inline-flex">
+                  <span className="font-medium">Status:</span>
+                  <span className="text-green-700 font-semibold">Ready to Begin Service</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-4 pb-3 text-[#004785] border-b-2 border-gray-300">
           Customer Information
@@ -494,13 +555,21 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             </label>
             <select
               value={serviceStatus}
-              onChange={(e) => setServiceStatus(e.target.value)}
+              onChange={(e) => handleServiceStatusChange(e.target.value)}
               className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-55 cursor-pointer"
             >
-              <option value="Pending">Pending</option>
-              <option value="Assigned">Assigned for Processing</option>
+              {/* Pending is auto-set on request creation, not selectable */}
+              {serviceStatus === "Pending" && <option value="Pending">Pending</option>}
+              
+              {/* Assigned is auto-set when staff is assigned, not selectable */}
+              {serviceStatus === "Assigned" && <option value="Assigned">Assigned for Processing</option>}
+              
+              {/* Manual options */}
               <option value="Waiting for Approval">Waiting for Approval</option>
-              <option value="Approved">Approved</option>
+              
+              {/* Approved is auto-set by customer approval, not selectable */}
+              {serviceStatus === "Approved" && <option value="Approved">Approved</option>}
+              
               <option value="Ongoing">Service Ongoing</option>
               <option value="Completed">Completed</option>
             </select>
@@ -928,7 +997,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         </div>
       </div>
 
-      <div className="flex gap-4 mt-5">
+      <div className="flex gap-4 mt-5 mb-10">
         <button
           onClick={() => navigate(getBackPath())}
           className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl cursor-pointer hover:bg-gray-200 transition-all"
@@ -972,6 +1041,25 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowSuccessModal(false)}
+                className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStatusRestrictionModal && (
+        <div className="fixed inset-0 bg-black/60 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
+            <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
+              Status Restriction
+            </h2>
+            <p className="text-black mb-6 text-sm">{statusRestrictionMessage}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowStatusRestrictionModal(false)}
                 className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
               >
                 OK

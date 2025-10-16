@@ -88,12 +88,15 @@ const ServiceTracker = () => {
     const statusStyles = {
       serviceStatus: {
         Pending: "bg-gray-100 text-gray-800",
-        Assigned: "bg-orange-200 text-orange-600", 
-        Processing: "bg-blue-100 text-blue-800",
-        Approval: "bg-yellow-100 text-yellow-800",
-        Ongoing: "bg-blue-100 text-blue-800",
-        Completed: "bg-green-100 text-green-800",
-        Cancelled: "bg-red-100 text-red-800",
+        Assigned: "bg-orange-100 text-orange-700",
+        Processing: "bg-yellow-100 text-yellow-700",
+        Approval: "bg-purple-100 text-purple-700",
+        "Waiting for Approval": "bg-purple-100 text-purple-700",
+        Ongoing: "bg-blue-100 text-blue-700",
+        Completed: "bg-green-100 text-green-700",
+        Cancelled: "bg-red-100 text-red-700",
+        Approved: "bg-teal-100 text-teal-700",
+        "Quote Prepared": "bg-indigo-100 text-indigo-700",
       },
       paymentStatus: {
         Pending: "bg-gray-100 text-gray-800",
@@ -195,11 +198,6 @@ const ServiceTracker = () => {
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500 text-lg"
             />
           </div>
-
-          <button className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-md hover:border-gray-400 transition-all duration-200 cursor-pointer">
-            <ListFilter size={20} />
-            <span>Filters</span>
-          </button>
         </div>
 
         {/* Error Message */}

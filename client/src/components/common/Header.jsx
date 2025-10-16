@@ -15,6 +15,7 @@ const Header = () => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
   const notificationRef = useRef(null);
 
   // Fetch notifications from API
@@ -79,6 +80,7 @@ const Header = () => {
 
   const toggleNotifications = () => {
     setIsNotificationOpen(!isNotificationOpen);
+    setShowAllNotifications(false); // Reset to showing limited notifications when reopening
   };
 
   const openServiceRequestModal = () => {
@@ -91,11 +93,21 @@ const Header = () => {
 
   const handleFilterChange = (filter) => {
     setActiveFilter(filter);
+    setShowAllNotifications(false); // Reset when changing filters
   };
 
   const handleLogoClick = () => {
     window.open("/", "_blank");
   };
+
+  const toggleShowAllNotifications = () => {
+    setShowAllNotifications(!showAllNotifications);
+  };
+
+  // Determine which notifications to display
+  const displayedNotifications = showAllNotifications 
+    ? notifications 
+    : notifications.slice(0, 5);
 
   // Fetch notifications on mount and filter change
   useEffect(() => {
@@ -204,7 +216,7 @@ const Header = () => {
                   </div>
                 </div>
 
-                <div className="p-4 border-b border-gray-200 pb-10">
+                <div className="p-4 border-b border-gray-200 pb-5">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-black">New</h4>
                     {unreadCount > 0 && (
@@ -217,13 +229,20 @@ const Header = () => {
                     )}
                   </div>
 
-                  <div className="space-y-3">
+                  <div 
+                    className={`space-y-3 ${
+                      showAllNotifications 
+                        ? 'overflow-y-auto pr-2' 
+                        : ''
+                    }`}
+                    style={showAllNotifications ? { maxHeight: '630px' } : {}}
+                  >
                     {loading ? (
                       <div className="text-center py-8 text-gray-500">
                         <p className="text-sm">Loading...</p>
                       </div>
                     ) : notifications.length > 0 ? (
-                      notifications.slice(0, 5).map((notification) => (
+                      displayedNotifications.map((notification) => (
                         <div
                           key={notification.notification_id}
                           onClick={() => handleNotificationClick(notification)}
@@ -268,6 +287,21 @@ const Header = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* View All / Show Less Button */}
+                  {notifications.length > 5 && (
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={toggleShowAllNotifications}
+                        className="text-sm text-[#004785] hover:underline font-medium cursor-pointer"
+                      >
+                        {showAllNotifications 
+                          ? 'Show Less' 
+                          : `View All (${notifications.length})`
+                        }
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
