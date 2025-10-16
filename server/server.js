@@ -94,7 +94,7 @@ console.log("🌍 Environment: " + (process.env.NODE_ENV || "development"));
 
 let authRoutes, adminRoutes, healthRoutes, serviceRequestRoutes;
 let messageRoutes, chatbotRoutes, accountSettingsRoutes;
-let paymentRoutes, notificationRoutes;
+let paymentRoutes, notificationRoutes, clientRoutes, userRoutes; // ✅ Added clientRoutes, userRoutes
 
 try {
   authRoutes = require("./routes/googleOAuth");
@@ -160,6 +160,22 @@ try {
   console.error("❌ Failed to load notifications routes:", e.message);
 }
 
+// ✅ NEW: Load clients routes
+try {
+  clientRoutes = require("./routes/clients");
+  console.log("✅ Loaded: clients routes");
+} catch (e) {
+  console.error("❌ Failed to load clients routes:", e.message);
+}
+
+// ✅ NEW: Load users routes
+try {
+  userRoutes = require("./routes/users");
+  console.log("✅ Loaded: users routes");
+} catch (e) {
+  console.error("❌ Failed to load users routes:", e.message);
+}
+
 // === Register Routes ===
 console.log("\n📦 Registering API routes...");
 
@@ -206,6 +222,18 @@ if (paymentRoutes) {
 if (notificationRoutes) {
   app.use("/api/notifications", notificationRoutes);
   console.log("  ✓ /api/notifications");
+}
+
+// ✅ NEW: Register clients routes
+if (clientRoutes) {
+  app.use("/api/clients", clientRoutes);
+  console.log("  ✓ /api/clients");
+}
+
+// ✅ NEW: Register users routes
+if (userRoutes) {
+  app.use("/api/users", userRoutes);
+  console.log("  ✓ /api/users");
 }
 
 console.log("\n✅ Server running\n");
