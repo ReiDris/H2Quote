@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   LucideArrowLeft,
@@ -9,76 +9,64 @@ import AdminLayout from "../../layouts/AdminLayout";
 const ClientProfilesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Mock data for client profiles
-  const mockData = [
-    {
-      id: "#CLIENT01",
-      name: "John Doe",
-      company: "Company A",
-      email: "johndoe@gmail.com",
-      contactNo: "0283 555 0674",
-      yearsAsCustomer: 4,
-      eligibleDiscount: "10%",
-    },
-    {
-      id: "#CLIENT02",
-      name: "Jane Doe",
-      company: "Company B",
-      email: "janedoe@gmail.com",
-      contactNo: "0283 555 4001",
-      yearsAsCustomer: 5,
-      eligibleDiscount: "10%",
-    },
-    {
-      id: "#CLIENT03",
-      name: "Customer A",
-      company: "Company C",
-      email: "customera@gmail.com",
-      contactNo: "0928 555 8724",
-      yearsAsCustomer: 3,
-      eligibleDiscount: "5%",
-    },
-    {
-      id: "#CLIENT04",
-      name: "Customer B",
-      company: "Company D",
-      email: "customerb@gmail.com",
-      contactNo: "0932 555 9943",
-      yearsAsCustomer: 3,
-      eligibleDiscount: "5%",
-    },
-    {
-      id: "#CLIENT05",
-      name: "Customer C",
-      company: "Company E",
-      email: "customerc@gmail.com",
-      contactNo: "0933 555 6897",
-      yearsAsCustomer: 2,
-      eligibleDiscount: "5%",
-    },
-    {
-      id: "#CLIENT06",
-      name: "Customer D",
-      company: "Company F",
-      email: "customerd@gmail.com",
-      contactNo: "0929 555 5726",
-      yearsAsCustomer: 2,
-      eligibleDiscount: "5%",
-    },
-    {
-      id: "#CLIENT07",
-      name: "Customer E",
-      company: "Company G",
-      email: "customere@gmail.com",
-      contactNo: "0919 555 3815",
-      yearsAsCustomer: 1,
-      eligibleDiscount: "-",
-    },
-  ];
+  // Fetch clients from API
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('http://localhost:5000/api/clients', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      // Check if response is ok
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
+      }
+      
+      const data = await response.json();
+      
+      // Handle different response structures
+      if (data.success && data.data) {
+        setClients(data.data);
+      } else if (Array.isArray(data)) {
+        setClients(data);
+      } else {
+        throw new Error("Unexpected data format");
+      }
+      
+    } catch (err) {
+      setError(err.message);
+      console.error('Error fetching clients:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getDiscountBadge = (discount) => {
-    if (discount === "-") {
+    if (discount === "-" || !discount) {
       return (
         <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500">
           -
@@ -101,18 +89,52 @@ const ClientProfilesPage = () => {
     );
   };
 
-  const filteredData = mockData.filter(
+  const filteredData = clients.filter(
     (item) =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.email.toLowerCase().includes(searchTerm.toLowerCase())
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.client_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalPages = Math.ceil(filteredData.length / 10);
   const startIndex = (currentPage - 1) * 10;
   const endIndex = startIndex + 10;
   const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-600 text-lg">Loading clients...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminLayout>
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <div className="text-red-600 text-center">
+            <p className="font-semibold">Error loading clients</p>
+            <p className="text-sm mt-2">{error}</p>
+          </div>
+          <button
+            onClick={fetchClients}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -164,31 +186,39 @@ const ClientProfilesPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedData.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
-                      {item.id}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.name}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.company}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      {item.email}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.contactNo}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
-                      {item.yearsAsCustomer}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
-                      {item.eligibleDiscount}
+                {paginatedData.length > 0 ? (
+                  paginatedData.map((item, index) => (
+                    <tr key={item.client_id || index} className="hover:bg-gray-50">
+                      <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                        {item.client_id}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.name}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.company}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                        {item.email}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.contact_number}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
+                        {item.years_as_customer}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
+                        {item.eligible_discount ? `${item.eligible_discount}%` : '-'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="px-3 py-8 text-center text-gray-500">
+                      No clients found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

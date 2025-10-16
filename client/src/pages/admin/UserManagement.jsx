@@ -1,200 +1,214 @@
-import React, { useState } from "react";
-import {
-  LucideArrowLeft,
-  LucideArrowRight,
-} from "lucide-react";
+import React, { useState, useEffect } from "react";
 import AdminLayout from "../../layouts/AdminLayout";
 
 const UserManagementPage = () => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  const usersPerPage = 10;
 
-  // Mock data for user management
-  const mockData = [
-    {
-      id: "#USER01",
-      name: "Staff 1",
-      email: "sample@gmail.com",
-      role: "Administrator",
-    },
-    {
-      id: "#USER02",
-      name: "Staff 2",
-      email: "sample@gmail.com",
-      role: "Staff",
-    },
-    {
-      id: "#USER02",
-      name: "Staff 3",
-      email: "sample@gmail.com",
-      role: "Administrator",
-    },
-    {
-      id: "#USER02",
-      name: "Staff 4",
-      email: "dustin@gmail.com",
-      role: "Administrator",
-    },
-  ];
+  // Fetch users from API
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
-  const getRoleBadge = (role) => {
-    const roleStyles = {
-      Administrator: "bg-blue-100 text-blue-800",
-      Staff: "bg-green-100 text-green-800",
-      Customer: "bg-purple-100 text-purple-800",
-    };
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-    const style = roleStyles[role] || "bg-gray-100 text-gray-800";
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('http://localhost:5000/api/users', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        setUsers(data.data);
+      } else if (Array.isArray(data)) {
+        setUsers(data);
+      } else {
+        throw new Error("Unexpected data format");
+      }
+      
+    } catch (err) {
+      setError(err.message);
+      console.error('Error fetching users:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pagination logic
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  const currentUsers = users.slice(indexOfFirstUser, indexOfLastUser);
+  const totalPages = Math.ceil(users.length / usersPerPage);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const formatUserId = (userId) => {
+    return `#USER${userId.toString().padStart(2, '0')}`;
+  };
+
+  const formatRole = (userType) => {
+    if (userType === 'admin') return 'Administrator';
+    if (userType === 'staff') return 'Staff';
+    return 'Client';
+  };
+
+  if (loading) {
     return (
-      <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${style}`}>
-        {role}
-      </span>
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-600 text-lg">Loading users...</div>
+        </div>
+      </AdminLayout>
     );
-  };
+  }
 
-  const handleEdit = (userId) => {
-    // Handle edit logic here
-    console.log(`Editing user: ${userId}`);
-  };
-
-  const totalPages = Math.ceil(mockData.length / 10);
-  const startIndex = (currentPage - 1) * 10;
-  const endIndex = startIndex + 10;
-  const paginatedData = mockData.slice(startIndex, endIndex);
+  if (error) {
+    return (
+      <AdminLayout>
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <div className="text-red-600 text-center">
+            <p className="font-semibold">Error loading users</p>
+            <p className="text-sm mt-2">{error}</p>
+          </div>
+          <button
+            onClick={fetchUsers}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785]">Users</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-[#004785]">Users</h1>
         </div>
 
         {/* Table Section */}
-        <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-100 border-b">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
                     User Id
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
                     Name
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
                     Email
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
                     Role
                   </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
                     More Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedData.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
-                      {item.id}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.name}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      {item.email}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.role}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-center">
-                      <button
-                        onClick={() => handleEdit(item.id)}
-                        className="text-[#004785] hover:text-blue-800 cursor-pointer"
-                      >
-                        Edit
-                      </button>
+                {currentUsers.length > 0 ? (
+                  currentUsers.map((user) => (
+                    <tr key={user.user_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatUserId(user.user_id)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {`${user.first_name} ${user.last_name}`.trim()}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {user.email}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatRole(user.user_type)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button className="text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                      No users found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Pagination */}
-          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
-            {/* Previous Button */}
+          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between">
             <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              onClick={handlePreviousPage}
               disabled={currentPage === 1}
-              className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                 currentPage === 1
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-gray-700 hover:bg-gray-100"
               }`}
             >
-              <LucideArrowLeft className="w-4 mr-2" />
-              Previous
+              ← Previous
             </button>
-
-            {/* Page Numbers - Centered */}
-            <div className="flex items-center space-x-3">
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
-                      currentPage === pageNum
-                        ? "bg-gray-200 text-gray-600"
-                        : "text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-
-              {/* Ellipsis if needed */}
-              {totalPages > 5 && currentPage < totalPages - 2 && (
-                <>
-                  <span className="px-2 py-2 text-base text-gray-400">...</span>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              )}
+            
+            <div className="flex items-center gap-2">
+              <span className="px-4 py-2 text-sm font-medium bg-gray-100 rounded-md">
+                {currentPage}
+              </span>
             </div>
-
-            {/* Next Button */}
+            
             <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-              }
-              disabled={currentPage === totalPages}
-              className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
-                currentPage === totalPages
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                currentPage === totalPages || totalPages === 0
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-gray-700 hover:bg-gray-100"
               }`}
             >
-              Next
-              <LucideArrowRight className="w-4 ms-2" />
+              Next →
             </button>
           </div>
         </div>
