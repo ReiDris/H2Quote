@@ -6,27 +6,38 @@ if (!process.env.EMAIL_USER) {
     process.exit(1);
 }
 
-// App Password Configuration (fallback)
+// App Password Configuration - Using SSL (Port 465) for better reliability
 const appPasswordConfig = {
-    service: 'gmail',
+    host: 'smtp.gmail.com',      // ✅ Explicit host instead of 'service'
+    port: 465,                    // ✅ SSL port (more reliable than 587)
+    secure: true,                 // ✅ Use SSL
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
     },
-    // ✅ ADD TIMEOUT SETTINGS
-    connectionTimeout: 10000,  // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    // ✅ ADD CONNECTION POOLING
+    // ✅ Timeout settings
+    connectionTimeout: 15000,     // 15 seconds
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
+    // ✅ Connection pooling
     pool: true,
     maxConnections: 5,
     maxMessages: 10,
-    rateLimit: 5  // max 5 emails per second
+    rateLimit: 5,                 // max 5 emails per second
+    // ✅ TLS settings
+    tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
+    },
+    logger: false,                // Set to true for debugging
+    debug: false                  // Set to true for debugging
 };
 
 // OAuth2 Configuration (preferred)
 const oauth2Config = {
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
         type: 'OAuth2',
         user: process.env.EMAIL_USER,
@@ -35,14 +46,17 @@ const oauth2Config = {
         refreshToken: process.env.GMAIL_REFRESH_TOKEN,
         accessToken: process.env.GMAIL_ACCESS_TOKEN
     },
-    // ✅ ADD TIMEOUT SETTINGS FOR OAUTH2 TOO
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
     pool: true,
     maxConnections: 5,
     maxMessages: 10,
-    rateLimit: 5
+    rateLimit: 5,
+    tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
+    }
 };
 
 // Determine which config to use
@@ -61,64 +75,86 @@ if (!useOAuth2 && !process.env.EMAIL_PASSWORD) {
     process.exit(1);
 }
 
+console.log('📧 Email Configuration:');
+console.log('   Email User:', process.env.EMAIL_USER);
+console.log('   Using:', useOAuth2 ? 'OAuth2' : 'App Password (Port 465 SSL)');
+console.log('   Admin Email:', process.env.ADMIN_EMAIL || 'Not set');
+
 // Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
 
-// ✅ ADD GRACEFUL ERROR HANDLING
+// ✅ Graceful error handling
 transporter.on('error', (error) => {
     console.error('❌ Transporter error:', error.message);
 });
 
-// Verify transporter connection (non-blocking, runs in background)
-// This won't block server startup if it times out
+// Verify transporter connection (non-blocking)
 setImmediate(() => {
     const verifyTimeout = setTimeout(() => {
         console.log('⚠️  Email verification taking too long, skipping...');
         console.log('   Email service may still work when actually sending messages.\n');
-    }, 8000); // 8 second timeout for verification
+    }, 10000); // 10 second timeout for verification
 
     transporter.verify((error, success) => {
         clearTimeout(verifyTimeout);
         if (error) {
             console.log('⚠️  Email verification warning:', error.message);
             console.log('   Email service may still work when actually sending messages.');
-            console.log('   If emails fail, check your EMAIL_PASSWORD or Gmail settings.\n');
+            console.log('   If emails continue to fail, check:');
+            console.log('   1. EMAIL_PASSWORD is a valid Gmail App Password (16 chars, no spaces)');
+            console.log('   2. Your Gmail account allows App Passwords (2FA must be enabled)');
+            console.log('   3. Visit https://accounts.google.com/DisplayUnlockCaptcha\n');
         } else {
             console.log('✅ Email server verified successfully');
-            console.log(`   Using ${useOAuth2 ? 'OAuth2' : 'App Password'} authentication\n`);
+            console.log(`   Ready to send emails via ${useOAuth2 ? 'OAuth2' : 'Gmail App Password'}\n`);
         }
     });
 });
 
-// ✅ IMPROVED: Generic send email function with better error handling
-const sendEmail = async (to, subject, htmlContent) => {
-    try {
-        // ✅ Add timeout to sendMail operation
-        const sendPromise = transporter.sendMail({
-            from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
-            to,
-            subject,
-            html: htmlContent
-        });
+// ✅ Improved send email function with retry logic
+const sendEmail = async (to, subject, htmlContent, retries = 2) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            console.log(`📤 Attempting to send email to: ${to} (Attempt ${attempt}/${retries})`);
+            
+            const sendPromise = transporter.sendMail({
+                from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
+                to,
+                subject,
+                html: htmlContent
+            });
 
-        // ✅ Add 15 second timeout for sending
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Email send timeout after 15 seconds')), 15000)
-        );
+            // 20 second timeout for sending
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Email send timeout after 20 seconds')), 20000)
+            );
 
-        const info = await Promise.race([sendPromise, timeoutPromise]);
-        
-        console.log('✅ Email sent successfully to:', to);
-        console.log('   Message ID:', info.messageId);
-        return true;
-    } catch (error) {
-        console.error('❌ Email sending failed to:', to);
-        console.error('   Error:', error.message);
-        
-        // ✅ Don't throw error, just return false
-        // This prevents email failures from breaking signup
-        return false;
+            const info = await Promise.race([sendPromise, timeoutPromise]);
+            
+            console.log('✅ Email sent successfully!');
+            console.log('   To:', to);
+            console.log('   Subject:', subject);
+            console.log('   Message ID:', info.messageId);
+            return true;
+            
+        } catch (error) {
+            console.error(`❌ Email sending failed (Attempt ${attempt}/${retries})`);
+            console.error('   To:', to);
+            console.error('   Error:', error.message);
+            
+            // If this was the last attempt, return false
+            if (attempt === retries) {
+                console.error('   All retry attempts exhausted');
+                return false;
+            }
+            
+            // Wait 2 seconds before retry
+            console.log('   Retrying in 2 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
     }
+    
+    return false;
 };
 
 // Email template generators
@@ -181,7 +217,7 @@ const generateAdminNotificationEmail = (customerName, companyName, email, contac
                 </div>
                 
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/pending-users" 
+                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/verify-accounts" 
                        style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
                         Review Application
                     </a>
