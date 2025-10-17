@@ -12,7 +12,16 @@ const appPasswordConfig = {
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
-    }
+    },
+    // ✅ ADD TIMEOUT SETTINGS
+    connectionTimeout: 10000,  // 10 seconds
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    // ✅ ADD CONNECTION POOLING
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 10,
+    rateLimit: 5  // max 5 emails per second
 };
 
 // OAuth2 Configuration (preferred)
@@ -25,7 +34,15 @@ const oauth2Config = {
         clientSecret: process.env.GMAIL_CLIENT_SECRET,
         refreshToken: process.env.GMAIL_REFRESH_TOKEN,
         accessToken: process.env.GMAIL_ACCESS_TOKEN
-    }
+    },
+    // ✅ ADD TIMEOUT SETTINGS FOR OAUTH2 TOO
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 10,
+    rateLimit: 5
 };
 
 // Determine which config to use
@@ -47,10 +64,21 @@ if (!useOAuth2 && !process.env.EMAIL_PASSWORD) {
 // Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
 
+// ✅ ADD GRACEFUL ERROR HANDLING
+transporter.on('error', (error) => {
+    console.error('❌ Transporter error:', error.message);
+});
+
 // Verify transporter connection (non-blocking, runs in background)
 // This won't block server startup if it times out
 setImmediate(() => {
+    const verifyTimeout = setTimeout(() => {
+        console.log('⚠️  Email verification taking too long, skipping...');
+        console.log('   Email service may still work when actually sending messages.\n');
+    }, 8000); // 8 second timeout for verification
+
     transporter.verify((error, success) => {
+        clearTimeout(verifyTimeout);
         if (error) {
             console.log('⚠️  Email verification warning:', error.message);
             console.log('   Email service may still work when actually sending messages.');
@@ -62,22 +90,33 @@ setImmediate(() => {
     });
 });
 
-// Generic send email function
+// ✅ IMPROVED: Generic send email function with better error handling
 const sendEmail = async (to, subject, htmlContent) => {
     try {
-        const info = await transporter.sendMail({
+        // ✅ Add timeout to sendMail operation
+        const sendPromise = transporter.sendMail({
             from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
             to,
             subject,
             html: htmlContent
         });
+
+        // ✅ Add 15 second timeout for sending
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Email send timeout after 15 seconds')), 15000)
+        );
+
+        const info = await Promise.race([sendPromise, timeoutPromise]);
         
-        console.log('Email sent successfully to:', to);
-        console.log('Message ID:', info.messageId);
+        console.log('✅ Email sent successfully to:', to);
+        console.log('   Message ID:', info.messageId);
         return true;
     } catch (error) {
-        console.error('Email sending failed to:', to);
-        console.error('Error:', error.message);
+        console.error('❌ Email sending failed to:', to);
+        console.error('   Error:', error.message);
+        
+        // ✅ Don't throw error, just return false
+        // This prevents email failures from breaking signup
         return false;
     }
 };

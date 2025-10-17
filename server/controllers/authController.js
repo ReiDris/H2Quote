@@ -47,21 +47,20 @@ const signup = async (req, res) => {
       });
     }
 
-    console.log('Verification file uploaded to Supabase at:', req.file.path);
+    console.log('✅ Verification file uploaded to Supabase at:', req.file.path);
 
     const existingUserQuery = "SELECT user_id FROM users WHERE email = $1";
     const existingUsers = await client.query(existingUserQuery, [email]);
 
     if (existingUsers.rows.length > 0) {
-      // File is already uploaded to Supabase, no cleanup needed
+      await client.query("ROLLBACK");
       return res.status(409).json({
         success: false,
         message: "Email already registered",
       });
     }
 
-    // File is already uploaded to Supabase by the middleware
-    const filePath = req.file.path; // This is the Supabase storage path (e.g., "verification/123456-filename.jpg")
+    const filePath = req.file.path;
 
     let companyId;
     const existingCompanyQuery =
@@ -114,21 +113,35 @@ const signup = async (req, res) => {
       contactNo,
       hashedPassword,
       verificationToken,
-      filePath,  // Store Supabase Storage path (verification/filename.jpg)
+      filePath,
       req.file.originalname,
     ]);
 
     const userId = userResult.rows[0].user_id;
 
-    try {
-      await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
-      await sendAdminNotificationEmail(customerName, companyName, email, contactNo);
-    } catch (emailError) {
-      console.error('Failed to send emails:', emailError);
-    }
-
+    // ✅ COMMIT FIRST - don't let email failures block signup
     await client.query("COMMIT");
+    
+    console.log('✅ User created successfully with ID:', userId);
 
+    // ✅ SEND EMAILS ASYNCHRONOUSLY (after commit)
+    setImmediate(async () => {
+      try {
+        await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
+        console.log('✅ Welcome email sent to:', email);
+      } catch (emailError) {
+        console.error('❌ Failed to send welcome email:', emailError.message);
+      }
+
+      try {
+        await sendAdminNotificationEmail(customerName, companyName, email, contactNo);
+        console.log('✅ Admin notification email sent');
+      } catch (emailError) {
+        console.error('❌ Failed to send admin notification:', emailError.message);
+      }
+    });
+
+    // ✅ RESPOND IMMEDIATELY (don't wait for emails)
     res.status(201).json({
       success: true,
       message: "Your account has been created successfully!\n\nYour account is currently pending admin verification.\n\nYou will receive an email notification once approved.",
@@ -147,7 +160,7 @@ const signup = async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
 
-    console.error("Signup error:", error);
+    console.error("❌ Signup error:", error);
     res.status(500).json({
       success: false,
       message: "Registration failed. Please try again.",
