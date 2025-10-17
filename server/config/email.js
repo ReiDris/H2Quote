@@ -15,16 +15,15 @@ const appPasswordConfig = {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
     },
-    // ✅ Timeout settings
     connectionTimeout: 15000,     
     greetingTimeout: 15000,
     socketTimeout: 15000,
-    // ✅ Connection pooling
+    
     pool: true,
     maxConnections: 5,
     maxMessages: 10,
     rateLimit: 5,                 
-    // ✅ TLS settings
+    
     tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
