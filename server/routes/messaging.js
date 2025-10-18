@@ -11,6 +11,9 @@ router.get('/sent', messagingController.getSentMessages);
 router.get('/unread-count', messagingController.getUnreadCount);     
 router.get('/users/messageable', messagingController.getMessageableUsers);
 
+// ✅ FIXED: Use correct path and controller reference
+router.post('/service-request/:requestId/message', messagingController.createServiceRequestMessage);
+
 router.post('/', messagingController.sendMessage);                   
 router.put('/mark-read', messagingController.markAsRead);            
 router.delete('/', messagingController.deleteMessages);             

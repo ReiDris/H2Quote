@@ -6,18 +6,37 @@ if (!process.env.EMAIL_USER) {
     process.exit(1);
 }
 
-// App Password Configuration (fallback)
+// App Password Configuration - Using SSL (Port 465) for better reliability
 const appPasswordConfig = {
-    service: 'gmail',
+    host: 'smtp.gmail.com',      
+    port: 465,                    
+    secure: true,                 
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
-    }
+    },
+    connectionTimeout: 15000,     
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
+    
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 10,
+    rateLimit: 5,                 
+    
+    tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
+    },
+    logger: false,                
+    debug: false                  
 };
 
 // OAuth2 Configuration (preferred)
 const oauth2Config = {
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
         type: 'OAuth2',
         user: process.env.EMAIL_USER,
@@ -25,6 +44,17 @@ const oauth2Config = {
         clientSecret: process.env.GMAIL_CLIENT_SECRET,
         refreshToken: process.env.GMAIL_REFRESH_TOKEN,
         accessToken: process.env.GMAIL_ACCESS_TOKEN
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 10,
+    rateLimit: 5,
+    tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
     }
 };
 
@@ -44,42 +74,86 @@ if (!useOAuth2 && !process.env.EMAIL_PASSWORD) {
     process.exit(1);
 }
 
+console.log('📧 Email Configuration:');
+console.log('   Email User:', process.env.EMAIL_USER);
+console.log('   Using:', useOAuth2 ? 'OAuth2' : 'App Password (Port 465 SSL)');
+console.log('   Admin Email:', process.env.ADMIN_EMAIL || 'Not set');
+
 // Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
 
-// Verify transporter connection (non-blocking, runs in background)
-// This won't block server startup if it times out
+// ✅ Graceful error handling
+transporter.on('error', (error) => {
+    console.error('❌ Transporter error:', error.message);
+});
+
+// Verify transporter connection (non-blocking)
 setImmediate(() => {
+    const verifyTimeout = setTimeout(() => {
+        console.log('⚠️  Email verification taking too long, skipping...');
+        console.log('   Email service may still work when actually sending messages.\n');
+    }, 10000); // 10 second timeout for verification
+
     transporter.verify((error, success) => {
+        clearTimeout(verifyTimeout);
         if (error) {
             console.log('⚠️  Email verification warning:', error.message);
             console.log('   Email service may still work when actually sending messages.');
-            console.log('   If emails fail, check your EMAIL_PASSWORD or Gmail settings.\n');
+            console.log('   If emails continue to fail, check:');
+            console.log('   1. EMAIL_PASSWORD is a valid Gmail App Password (16 chars, no spaces)');
+            console.log('   2. Your Gmail account allows App Passwords (2FA must be enabled)');
+            console.log('   3. Visit https://accounts.google.com/DisplayUnlockCaptcha\n');
         } else {
             console.log('✅ Email server verified successfully');
-            console.log(`   Using ${useOAuth2 ? 'OAuth2' : 'App Password'} authentication\n`);
+            console.log(`   Ready to send emails via ${useOAuth2 ? 'OAuth2' : 'Gmail App Password'}\n`);
         }
     });
 });
 
-// Generic send email function
-const sendEmail = async (to, subject, htmlContent) => {
-    try {
-        const info = await transporter.sendMail({
-            from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
-            to,
-            subject,
-            html: htmlContent
-        });
-        
-        console.log('Email sent successfully to:', to);
-        console.log('Message ID:', info.messageId);
-        return true;
-    } catch (error) {
-        console.error('Email sending failed to:', to);
-        console.error('Error:', error.message);
-        return false;
+// ✅ Improved send email function with retry logic
+const sendEmail = async (to, subject, htmlContent, retries = 2) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            console.log(`📤 Attempting to send email to: ${to} (Attempt ${attempt}/${retries})`);
+            
+            const sendPromise = transporter.sendMail({
+                from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
+                to,
+                subject,
+                html: htmlContent
+            });
+
+            // 20 second timeout for sending
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Email send timeout after 20 seconds')), 20000)
+            );
+
+            const info = await Promise.race([sendPromise, timeoutPromise]);
+            
+            console.log('✅ Email sent successfully!');
+            console.log('   To:', to);
+            console.log('   Subject:', subject);
+            console.log('   Message ID:', info.messageId);
+            return true;
+            
+        } catch (error) {
+            console.error(`❌ Email sending failed (Attempt ${attempt}/${retries})`);
+            console.error('   To:', to);
+            console.error('   Error:', error.message);
+            
+            // If this was the last attempt, return false
+            if (attempt === retries) {
+                console.error('   All retry attempts exhausted');
+                return false;
+            }
+            
+            // Wait 2 seconds before retry
+            console.log('   Retrying in 2 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
     }
+    
+    return false;
 };
 
 // Email template generators
@@ -142,7 +216,7 @@ const generateAdminNotificationEmail = (customerName, companyName, email, contac
                 </div>
                 
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/pending-users" 
+                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/verify-accounts" 
                        style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
                         Review Application
                     </a>
