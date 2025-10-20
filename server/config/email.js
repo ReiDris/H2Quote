@@ -9,27 +9,28 @@ if (!process.env.EMAIL_USER) {
 // App Password Configuration - Using SSL (Port 465) for better reliability
 const appPasswordConfig = {
     host: 'smtp.gmail.com',      
-    port: 465,                    
-    secure: true,                 
+    port: 2525,                   // ✅ Changed to port 2525
+    secure: false,                // ✅ false for port 2525 (uses STARTTLS)
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
     },
-    connectionTimeout: 15000,     
-    greetingTimeout: 15000,
-    socketTimeout: 15000,
+    connectionTimeout: 30000,     // 30 seconds
+    greetingTimeout: 15000,       // 15 seconds
+    socketTimeout: 30000,         // 30 seconds
     
     pool: true,
     maxConnections: 5,
     maxMessages: 10,
-    rateLimit: 5,                 
+    rateLimit: 5,
     
+    requireTLS: true,             // ✅ Require STARTTLS
     tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
     },
-    logger: false,                
-    debug: false                  
+    logger: false,
+    debug: false
 };
 
 // OAuth2 Configuration (preferred)
@@ -76,7 +77,7 @@ if (!useOAuth2 && !process.env.EMAIL_PASSWORD) {
 
 console.log('📧 Email Configuration:');
 console.log('   Email User:', process.env.EMAIL_USER);
-console.log('   Using:', useOAuth2 ? 'OAuth2' : 'App Password (Port 465 SSL)');
+console.log('   Using:', useOAuth2 ? 'OAuth2' : 'App Password (Port 2525 STARTTLS)');
 console.log('   Admin Email:', process.env.ADMIN_EMAIL || 'Not set');
 
 // Create transporter
