@@ -513,23 +513,15 @@ const replyToMessage = async (req, res) => {
 
     const original = originalResult.rows[0];
 
-    // ✅ IMPORTANT: Restrict replies for service_request messages
+    // ✅ UPDATED: Allow back-and-forth replies for service_request messages
     if (original.message_type === 'service_request') {
-      // Only allow admin/staff to reply to customer messages
-      if (senderType === 'client') {
+      // Both customer and staff can reply to each other
+      // Just verify the user is part of the conversation
+      if (original.sender_id !== senderId && original.recipient_id !== senderId) {
         await client.query('ROLLBACK');
         return res.status(403).json({
           success: false,
-          message: 'Customers cannot reply to service request messages. Please create a new message instead.'
-        });
-      }
-
-      // Verify staff/admin is replying to a customer message
-      if (original.sender_user_type !== 'client') {
-        await client.query('ROLLBACK');
-        return res.status(403).json({
-          success: false,
-          message: 'Can only reply to customer messages'
+          message: 'You are not part of this conversation'
         });
       }
     }
@@ -600,7 +592,7 @@ Please log in to view the full conversation: ${process.env.FRONTEND_URL || 'http
 
       await createNotification(
         replyRecipient,
-        'Service Request',  // Changed from 'New Message' to allowed type
+        'Message Reply',  // Using the new allowed type
         notificationTitle,
         notificationBody,
         recipientEmail
