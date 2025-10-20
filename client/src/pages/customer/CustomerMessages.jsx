@@ -1,20 +1,37 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { CheckCircle } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import { messagingAPI } from '../../config/api';  
 
 const CustomerMessages = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedMessages, setSelectedMessages] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
     totalCount: 0,
     totalPages: 0
   });
+
+  useEffect(() => {
+    // Check for success message from navigation state
+    if (location.state?.successMessage) {
+      setSuccessMessage(location.state.successMessage);
+      // Clear the navigation state
+      window.history.replaceState({}, document.title);
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+    }
+  }, [location]);
 
   useEffect(() => {
     fetchMessages();
@@ -82,7 +99,10 @@ const CustomerMessages = () => {
     return (
       <CustomerLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Loading messages...</div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading messages...</p>
+          </div>
         </div>
       </CustomerLayout>
     );
@@ -100,6 +120,21 @@ const CustomerMessages = () => {
             Double check the message inquiry before proceeding
           </p>
         </div>
+
+        {/* Success Message Banner */}
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="text-green-600 flex-shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="text-green-800 font-medium">{successMessage}</p>
+                <p className="text-green-700 text-sm mt-1">
+                  You'll receive a response via email and in this Messages tab.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Messages Tab */}
         <div className="border-b border-gray-200">
