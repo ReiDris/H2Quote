@@ -4,7 +4,6 @@ import { ArrowLeft, Eye, Upload, MessageCircle } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
-import ServiceRequestMessageModal from "./ServiceRequestMessageModal"; // NEW IMPORT
 import { serviceRequestsAPI } from "../../config/api";
 
 const CustomerServiceRequestDetails = () => {
