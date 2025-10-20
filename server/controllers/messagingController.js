@@ -267,7 +267,7 @@ const sendMessage = async (req, res) => {
       
       await createNotification(
         recipientId,
-        'New Message',
+        'New Message',  // Using the new allowed type
         `New Message: ${subject}`,
         `You have received a new message from ${req.user.email}. Subject: ${subject}. ${messagePreview}`,
         recipient.email
@@ -600,7 +600,7 @@ Please log in to view the full conversation: ${process.env.FRONTEND_URL || 'http
 
       await createNotification(
         replyRecipient,
-        'Message Reply',
+        'Service Request',  // Changed from 'New Message' to allowed type
         notificationTitle,
         notificationBody,
         recipientEmail
