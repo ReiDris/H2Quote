@@ -116,40 +116,53 @@ const sendEmail = async (to, subject, htmlContent, retries = 2) => {
         try {
             console.log(`📤 Attempting to send email to: ${to} (Attempt ${attempt}/${retries})`);
             
-            const sendPromise = transporter.sendMail({
-                from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
-                to,
-                subject,
-                html: htmlContent
-            });
-
-            // 20 second timeout for sending
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Email send timeout after 20 seconds')), 20000)
-            );
-
-            const info = await Promise.race([sendPromise, timeoutPromise]);
+            // Create abort controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
             
-            console.log('✅ Email sent successfully!');
-            console.log('   To:', to);
-            console.log('   Subject:', subject);
-            console.log('   Message ID:', info.messageId);
-            return true;
+            try {
+                const info = await transporter.sendMail({
+                    from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
+                    to,
+                    subject,
+                    html: htmlContent
+                });
+                
+                clearTimeout(timeoutId);
+                
+                console.log('✅ Email sent successfully!');
+                console.log('   To:', to);
+                console.log('   Subject:', subject);
+                console.log('   Message ID:', info.messageId);
+                return true;
+                
+            } catch (sendError) {
+                clearTimeout(timeoutId);
+                throw sendError;
+            }
             
         } catch (error) {
             console.error(`❌ Email sending failed (Attempt ${attempt}/${retries})`);
             console.error('   To:', to);
-            console.error('   Error:', error.message);
+            
+            // Check if it's a timeout
+            if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+                console.error('   Error: Connection timeout');
+            } else {
+                console.error('   Error:', error.message);
+            }
             
             // If this was the last attempt, return false
             if (attempt === retries) {
                 console.error('   All retry attempts exhausted');
+                console.error('Failed to send email notification to:', to);
                 return false;
             }
             
-            // Wait 2 seconds before retry
-            console.log('   Retrying in 2 seconds...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Exponential backoff: 3s, 6s
+            const waitTime = attempt * 3;
+            console.log(`   Retrying in ${waitTime} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
         }
     }
     
