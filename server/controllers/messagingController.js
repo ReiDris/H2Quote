@@ -157,13 +157,15 @@ const getMessageDetails = async (req, res) => {
     const { messageId } = req.params;
     const userId = req.user.id;
 
+    // ✅ FIXED: Changed user_id to p_user_id to match the database function
     const { data: thread, error } = await supabase
       .rpc('get_message_thread', { 
         msg_id: parseInt(messageId), 
-        user_id: userId 
+        p_user_id: userId  // Changed from user_id to p_user_id
       });
 
     if (error) {
+      console.error('Supabase RPC error:', error);
       throw error;
     }
 
