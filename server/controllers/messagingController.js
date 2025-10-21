@@ -157,13 +157,15 @@ const getMessageDetails = async (req, res) => {
     const { messageId } = req.params;
     const userId = req.user.id;
 
+    // ✅ FIXED: Changed user_id to p_user_id to match the database function
     const { data: thread, error } = await supabase
       .rpc('get_message_thread', { 
         msg_id: parseInt(messageId), 
-        user_id: userId 
+        p_user_id: userId  // Changed from user_id to p_user_id
       });
 
     if (error) {
+      console.error('Supabase RPC error:', error);
       throw error;
     }
 
@@ -265,7 +267,7 @@ const sendMessage = async (req, res) => {
       
       await createNotification(
         recipientId,
-        'New Message',
+        'New Message',  // Using the new allowed type
         `New Message: ${subject}`,
         `You have received a new message from ${req.user.email}. Subject: ${subject}. ${messagePreview}`,
         recipient.email
@@ -511,23 +513,15 @@ const replyToMessage = async (req, res) => {
 
     const original = originalResult.rows[0];
 
-    // ✅ IMPORTANT: Restrict replies for service_request messages
+    // ✅ UPDATED: Allow back-and-forth replies for service_request messages
     if (original.message_type === 'service_request') {
-      // Only allow admin/staff to reply to customer messages
-      if (senderType === 'client') {
+      // Both customer and staff can reply to each other
+      // Just verify the user is part of the conversation
+      if (original.sender_id !== senderId && original.recipient_id !== senderId) {
         await client.query('ROLLBACK');
         return res.status(403).json({
           success: false,
-          message: 'Customers cannot reply to service request messages. Please create a new message instead.'
-        });
-      }
-
-      // Verify staff/admin is replying to a customer message
-      if (original.sender_user_type !== 'client') {
-        await client.query('ROLLBACK');
-        return res.status(403).json({
-          success: false,
-          message: 'Can only reply to customer messages'
+          message: 'You are not part of this conversation'
         });
       }
     }
@@ -598,7 +592,7 @@ Please log in to view the full conversation: ${process.env.FRONTEND_URL || 'http
 
       await createNotification(
         replyRecipient,
-        'Message Reply',
+        'Message Reply',  // Using the new allowed type
         notificationTitle,
         notificationBody,
         recipientEmail

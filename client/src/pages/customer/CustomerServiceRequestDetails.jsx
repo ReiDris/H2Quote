@@ -74,6 +74,7 @@ const CustomerServiceRequestDetails = () => {
 
         const transformedData = {
           id: requestDetails.request_number,
+          requestId: requestDetails.request_id,
           requestedAt: requestDetails.requested_at,
           serviceStatus: requestDetails.service_status,
           paymentStatus: requestDetails.payment_status,
@@ -123,7 +124,12 @@ const CustomerServiceRequestDetails = () => {
   };
 
   const handleMessageTrishkaye = () => {
-    navigate("/customer/messages");
+    navigate("/customer/messages/compose", {
+      state: {
+        requestId: requestData?.requestId || requestId,
+        requestNumber: requestData?.id
+      }
+    });
   };
 
   const handleApproveQuotation = () => {

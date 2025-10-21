@@ -10,7 +10,7 @@ import AboutUsPage from "./pages/AboutUsPage";
 import ServicesPage from "./pages/ServicesPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import GoogleCallback from "./pages/GoogleCallback"; // ADD THIS
+import GoogleCallback from "./pages/GoogleCallback";
 
 // Admin Pages
 import ServiceTrackerPage from "./pages/admin/ServiceTracker";
@@ -31,6 +31,7 @@ import CustomerServiceTracker from "./pages/customer/CustomerServiceTracker";
 import CustomerServiceRequestDetails from "./pages/customer/CustomerServiceRequestDetails";
 import CustomerMessages from "./pages/customer/CustomerMessages";
 import CustomerMessageDetail from "./pages/customer/CustomerMessageDetail";
+import CustomerComposeMessage from "./pages/customer/CustomerComposeMessage"; // NEW IMPORT
 import CustomerAccountSettings from "./pages/customer/CustomerAccountSettings";
 import CustomerAccountVerification from "./pages/customer/CustomerAccountVerification";
 import CompanyOverview from "./pages/customer/CompanyOverview";
@@ -51,7 +52,7 @@ function App() {
               {/* Authentication Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
-              <Route path="/auth/google/callback" element={<GoogleCallback />} /> {/* ADD THIS */}
+              <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
               {/* Protected Admin Routes */}
               <Route
@@ -223,6 +224,15 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['customer']}>
                     <CustomerMessages />
+                  </ProtectedRoute>
+                }
+              />
+              {/* NEW ROUTE: Compose Message Page */}
+              <Route
+                path="/customer/messages/compose"
+                element={
+                  <ProtectedRoute allowedRoles={['customer']}>
+                    <CustomerComposeMessage />
                   </ProtectedRoute>
                 }
               />
