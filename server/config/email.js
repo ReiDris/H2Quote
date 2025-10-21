@@ -6,25 +6,22 @@ if (!process.env.EMAIL_USER) {
     process.exit(1);
 }
 
-// App Password Configuration - Using SSL (Port 465) for better reliability
-const appPasswordConfig = {
-    host: 'smtp.gmail.com',      
-    port: 2525,                   // ✅ Changed to port 2525
-    secure: false,                // ✅ false for port 2525 (uses STARTTLS)
+// SendGrid Configuration
+const sendGridConfig = {
+    host: 'smtp.sendgrid.net',
+    port: 587,
+    secure: false,
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
+        user: 'apikey', // This is literally the string 'apikey'
+        pass: process.env.SENDGRID_API_KEY
     },
-    connectionTimeout: 30000,     // 30 seconds
-    greetingTimeout: 15000,       // 15 seconds
-    socketTimeout: 30000,         // 30 seconds
-    
+    connectionTimeout: 30000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     pool: true,
     maxConnections: 5,
     maxMessages: 10,
     rateLimit: 5,
-    
-    requireTLS: true,             // ✅ Require STARTTLS
     tls: {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2'
@@ -33,7 +30,32 @@ const appPasswordConfig = {
     debug: false
 };
 
-// OAuth2 Configuration (preferred)
+// App Password Configuration - Using Port 2525 with STARTTLS
+const appPasswordConfig = {
+    host: 'smtp.gmail.com',      
+    port: 2525,
+    secure: false,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 10,
+    rateLimit: 5,
+    requireTLS: true,
+    tls: {
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.2'
+    },
+    logger: false,
+    debug: false
+};
+
+// OAuth2 Configuration (preferred for Gmail)
 const oauth2Config = {
     host: 'smtp.gmail.com',
     port: 465,
@@ -59,26 +81,37 @@ const oauth2Config = {
     }
 };
 
-// Determine which config to use
-const useOAuth2 = process.env.GMAIL_CLIENT_ID && 
-                  process.env.GMAIL_CLIENT_SECRET && 
-                  process.env.GMAIL_REFRESH_TOKEN;
+// Determine which config to use (Priority: SendGrid > OAuth2 > App Password)
+let emailConfig;
+let configType;
 
-const emailConfig = useOAuth2 ? oauth2Config : appPasswordConfig;
-
-// Validate configuration
-if (!useOAuth2 && !process.env.EMAIL_PASSWORD) {
-    console.error('Missing EMAIL_PASSWORD for App Password authentication');
-    console.log('Please either:');
-    console.log('1. Set EMAIL_PASSWORD with Gmail App Password, or');
-    console.log('2. Set up OAuth2 with GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN');
+if (process.env.SENDGRID_API_KEY) {
+    emailConfig = sendGridConfig;
+    configType = 'SendGrid';
+} else if (process.env.GMAIL_CLIENT_ID && 
+           process.env.GMAIL_CLIENT_SECRET && 
+           process.env.GMAIL_REFRESH_TOKEN) {
+    emailConfig = oauth2Config;
+    configType = 'Gmail OAuth2';
+} else if (process.env.EMAIL_PASSWORD) {
+    emailConfig = appPasswordConfig;
+    configType = 'Gmail App Password (Port 2525 STARTTLS)';
+} else {
+    console.error('Missing email authentication credentials');
+    console.log('Please set one of the following:');
+    console.log('1. SENDGRID_API_KEY for SendGrid (Recommended)');
+    console.log('2. GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN for OAuth2');
+    console.log('3. EMAIL_PASSWORD for Gmail App Password');
     process.exit(1);
 }
 
 console.log('📧 Email Configuration:');
 console.log('   Email User:', process.env.EMAIL_USER);
-console.log('   Using:', useOAuth2 ? 'OAuth2' : 'App Password (Port 2525 STARTTLS)');
+console.log('   Using:', configType);
 console.log('   Admin Email:', process.env.ADMIN_EMAIL || 'Not set');
+if (configType === 'SendGrid' && process.env.SENDGRID_FROM_EMAIL) {
+    console.log('   SendGrid From Email:', process.env.SENDGRID_FROM_EMAIL);
+}
 
 // Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
@@ -100,22 +133,37 @@ setImmediate(() => {
         if (error) {
             console.log('⚠️  Email verification warning:', error.message);
             console.log('   Email service may still work when actually sending messages.');
-            console.log('   If emails continue to fail, check:');
-            console.log('   1. EMAIL_PASSWORD is a valid Gmail App Password (16 chars, no spaces)');
-            console.log('   2. Your Gmail account allows App Passwords (2FA must be enabled)');
-            console.log('   3. Visit https://accounts.google.com/DisplayUnlockCaptcha\n');
+            console.log(`   Current configuration: ${configType}`);
+            if (configType === 'SendGrid') {
+                console.log('   If emails fail, check:');
+                console.log('   1. SENDGRID_API_KEY is correct');
+                console.log('   2. Sender email is verified in SendGrid');
+                console.log('   3. SENDGRID_FROM_EMAIL is set (optional but recommended)');
+            } else if (configType === 'Gmail App Password (Port 2525 STARTTLS)') {
+                console.log('   If emails fail, check:');
+                console.log('   1. EMAIL_PASSWORD is a valid Gmail App Password (16 chars, no spaces)');
+                console.log('   2. Your Gmail account allows App Passwords (2FA must be enabled)');
+                console.log('   3. Visit https://accounts.google.com/DisplayUnlockCaptcha');
+            }
+            console.log('');
         } else {
             console.log('✅ Email server verified successfully');
-            console.log(`   Ready to send emails via ${useOAuth2 ? 'OAuth2' : 'Gmail App Password'}\n`);
+            console.log(`   Ready to send emails via ${configType}\n`);
         }
     });
 });
 
-// ✅ Improved send email function with retry logic
+// ✅ Improved send email function with retry logic and flexible from address
 const sendEmail = async (to, subject, htmlContent, retries = 2) => {
+    // Determine which email to use based on config type
+    const fromEmail = configType === 'SendGrid' 
+        ? (process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER)
+        : process.env.EMAIL_USER;
+    
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             console.log(`📤 Attempting to send email to: ${to} (Attempt ${attempt}/${retries})`);
+            console.log(`   Using: ${configType} with from address: ${fromEmail}`);
             
             // Create abort controller for timeout
             const controller = new AbortController();
@@ -123,7 +171,7 @@ const sendEmail = async (to, subject, htmlContent, retries = 2) => {
             
             try {
                 const info = await transporter.sendMail({
-                    from: `"TRISHKAYE Enterprises" <${process.env.EMAIL_USER}>`,
+                    from: `"TRISHKAYE Enterprises" <${fromEmail}>`,
                     to,
                     subject,
                     html: htmlContent
@@ -133,6 +181,7 @@ const sendEmail = async (to, subject, htmlContent, retries = 2) => {
                 
                 console.log('✅ Email sent successfully!');
                 console.log('   To:', to);
+                console.log('   From:', fromEmail);
                 console.log('   Subject:', subject);
                 console.log('   Message ID:', info.messageId);
                 return true;
