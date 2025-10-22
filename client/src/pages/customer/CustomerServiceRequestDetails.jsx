@@ -47,17 +47,12 @@ const CustomerServiceRequestDetails = () => {
       setLoading(true);
       const token = localStorage.getItem("h2quote_token");
 
-      console.log("Fetching details for requestId:", requestId);
-
       if (!token) {
-        console.log("No token found");
         navigate("/login");
         return;
       }
 
       const response = await serviceRequestsAPI.getDetails(requestId);
-
-      console.log("Response status:", response.status);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -73,7 +68,6 @@ const CustomerServiceRequestDetails = () => {
       }
 
       const data = await response.json();
-      console.log("Received data:", data);
 
       if (data.success) {
         const { request: requestDetails, items } = data.data;
@@ -103,10 +97,9 @@ const CustomerServiceRequestDetails = () => {
           serviceStartDate: requestDetails.service_start_date || "-",
           estimatedEndDate: requestDetails.estimated_end_date || "-",
           warranty: requestDetails.warranty || "6 months",
-          quotationId: requestDetails.quotation_id || null,
+          statusName: requestDetails.status_name, // Backend status name
         };
 
-        console.log("Setting request data");
         setRequestData(transformedData);
         setError("");
       } else {
@@ -139,21 +132,17 @@ const CustomerServiceRequestDetails = () => {
     });
   };
 
+  // ✅ UPDATED: Approve service request directly (no quotation_id needed)
   const handleApproveQuotation = async () => {
-    if (!requestData?.quotationId) {
-      setApprovalError("No quotation found for this request");
-      return;
-    }
-
     setApprovalLoading(true);
     setApprovalError("");
 
     try {
-      const response = await serviceRequestsAPI.approveQuotation(
-        requestData.quotationId,
-        true, // approved
-        "Quotation approved by customer"
-      );
+      // Instead of calling quotation approval, we update the service request status
+      const response = await serviceRequestsAPI.updateRequest(requestData.requestId, {
+        serviceStatus: "Approved", // Change status to Approved
+        customerApprovalNotes: "Customer approved the service request and pricing"
+      });
 
       const data = await response.json();
 
@@ -167,11 +156,11 @@ const CustomerServiceRequestDetails = () => {
           fetchRequestDetails(); // Refresh the data to show updated status
         }, 1500);
       } else {
-        setApprovalError(data.message || "Failed to approve quotation");
+        setApprovalError(data.message || "Failed to approve service request");
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the quotation");
+      setApprovalError("An error occurred while approving the service request");
     } finally {
       setApprovalLoading(false);
     }
@@ -340,7 +329,7 @@ const CustomerServiceRequestDetails = () => {
 
         <StatusTracker />
 
-        {/* Quotation Approval Alert - Only show when status is "Waiting for Approval" */}
+        {/* Service Request Approval Alert - Only show when status is "Waiting for Approval" */}
         {requestData.serviceStatus === "Waiting for Approval" && (
           <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-lg">
             <div className="flex items-start">
@@ -359,11 +348,11 @@ const CustomerServiceRequestDetails = () => {
               </div>
               <div className="ml-3 flex-1">
                 <h3 className="text-sm font-medium text-blue-800">
-                  Quotation Revised – Please Review
+                  Service Request Ready for Your Approval
                 </h3>
                 <div className="mt-2 text-sm text-blue-700">
                   <p>
-                    The final quotation for your request has been updated. Please review the details before proceeding.
+                    TRISHKAYE has finalized the services and pricing for your request. Please review the details below and approve to proceed with the service.
                   </p>
                 </div>
                 <div className="mt-4 flex gap-3">
@@ -378,7 +367,7 @@ const CustomerServiceRequestDetails = () => {
                     onClick={openApprovalModal}
                     className="inline-flex items-center px-4 py-2 bg-[#004785] text-white text-sm font-medium rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
                   >
-                    Approve Updated Quotation
+                    Approve Service Request
                   </button>
                 </div>
               </div>
@@ -676,7 +665,7 @@ const CustomerServiceRequestDetails = () => {
           <div className="fixed inset-0 bg-black/60 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-3xl p-6 w-full max-w-md mx-4">
               <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
-                {approvalSuccess ? "Success!" : "Approve Quotation"}
+                {approvalSuccess ? "Success!" : "Approve Service Request"}
               </h2>
               
               {approvalSuccess ? (
@@ -697,13 +686,13 @@ const CustomerServiceRequestDetails = () => {
                     </svg>
                   </div>
                   <p className="text-black text-sm">
-                    Quotation approved successfully! The service request will now proceed to the next stage.
+                    Service request approved successfully! TRISHKAYE will proceed with the service.
                   </p>
                 </div>
               ) : (
                 <>
                   <p className="text-black mb-6 text-sm">
-                    Are you sure you want to approve this quotation? By approving, you confirm that you have reviewed the updated quotation details and agree to proceed with the service.
+                    Are you sure you want to approve this service request? By approving, you confirm that you have reviewed the services, pricing, and terms, and agree to proceed with TRISHKAYE performing the service.
                   </p>
                   
                   {approvalError && (
