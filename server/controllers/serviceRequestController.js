@@ -1624,6 +1624,7 @@ const updateRequestStatus = async (req, res) => {
       warrantyStatus,
       serviceStartDate,
       serviceEndDate,
+      paymentDeadline,
       paymentBreakdown,
     } = req.body;
 
@@ -1750,6 +1751,11 @@ const updateRequestStatus = async (req, res) => {
       updateValues.push(serviceEndDate);
     }
 
+    if (paymentDeadline) {
+      updateFields.push(`payment_deadline = $${paramCount++}`);
+      updateValues.push(paymentDeadline);
+    }
+
     if (serviceStatus === "Completed" && !serviceEndDate) {
       updateFields.push(`warranty_start_date = $${paramCount++}`);
       updateValues.push(new Date().toISOString().split("T")[0]);
@@ -1814,6 +1820,7 @@ const updateRequestStatus = async (req, res) => {
           warranty_status: warrantyStatus,
           service_start_date: serviceStartDate,
           service_end_date: serviceEndDate,
+          payment_deadline: paymentDeadline,
         },
         changed_by: req.user.email,
         change_reason: "Service request status update",

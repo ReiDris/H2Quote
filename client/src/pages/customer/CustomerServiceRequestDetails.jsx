@@ -663,7 +663,7 @@ const CustomerServiceRequestDetails = () => {
                 Service End Date:
               </label>
               <span className="text-sm text-gray-800">
-                {requestData.estimatedEndDate}
+                {requestData.serviceEndDate}
               </span>
             </div>
           </div>
