@@ -19,6 +19,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [serviceStartDate, setServiceStartDate] = useState("");
   const [serviceEndDate, setServiceEndDate] = useState("");
   const [selectedDiscount, setSelectedDiscount] = useState("No Discount");
+  const [customDiscountPercent, setCustomDiscountPercent] = useState("");
 
   // State for data loading
   const [requestData, setRequestData] = useState(null);
@@ -87,7 +88,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return requestData.totalCost;
     }
 
-    const discountPercent = parseFloat(selectedDiscount.replace("%", ""));
+    // Use customDiscountPercent if it's a custom discount
+    const discountPercent = selectedDiscount === "Custom" 
+      ? parseFloat(customDiscountPercent) || 0
+      : parseFloat(selectedDiscount.replace("%", ""));
+    
     const discountAmount = (baseTotal * discountPercent) / 100;
     const finalTotal = baseTotal - discountAmount;
 
@@ -220,11 +225,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
         setServiceStartDate(requestDetails.service_start_date || "");
         setServiceEndDate(requestDetails.actual_completion_date || "");
-        setSelectedDiscount(
-          requestDetails.discount_percentage
-            ? `${requestDetails.discount_percentage}%`
-            : "No Discount"
-        );
+        
+        // Initialize discount states
+        if (requestDetails.discount_percentage && requestDetails.discount_percentage > 0) {
+          setCustomDiscountPercent(requestDetails.discount_percentage.toString());
+          setSelectedDiscount("Custom");
+        } else {
+          setCustomDiscountPercent("");
+          setSelectedDiscount("No Discount");
+        }
       } else {
         setError(detailData.message || "Failed to fetch request details");
       }
@@ -385,6 +394,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setServiceStatus("Assigned");
       }
 
+      // Format discount for backend
+      let discountForBackend = "No Discount";
+      if (selectedDiscount === "Custom" && customDiscountPercent) {
+        discountForBackend = `${customDiscountPercent}%`;
+      }
+
       const updatePayload = {
         serviceStatus: finalServiceStatus,
         paymentStatus: paymentStatus,
@@ -392,7 +407,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         assignedStaff: requestData.assignedStaff,
         serviceStartDate: serviceStartDate || null,
         serviceEndDate: serviceEndDate || null,
-        discount: selectedDiscount,
+        discount: discountForBackend,
         services: requestData.services.map((service) => ({
           service_id: service.service_id,
           itemType: service.itemType,
@@ -774,19 +789,31 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <h2 className="text-lg font-medium text-gray-500">
               Availed Discounts
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={customDiscountPercent}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setCustomDiscountPercent(value);
+                  if (value && parseFloat(value) > 0) {
+                    setSelectedDiscount("Custom");
+                  } else {
+                    setSelectedDiscount("No Discount");
+                  }
+                }}
+                placeholder="0"
+                className="w-20 text-center border border-gray-300 rounded-lg px-2 py-2 text-sm"
+              />
+              <span className="text-sm font-medium text-gray-700">%</span>
               <button
-                onClick={() => setSelectedDiscount("5%")}
-                className={`p-3 border text-sm rounded-lg font-semibold cursor-pointer ${
-                  selectedDiscount === "5%"
-                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]"
-                    : "border-gray-300 text-[#0260A0]"
-                }`}
-              >
-                5%
-              </button>
-              <button
-                onClick={() => setSelectedDiscount("No Discount")}
+                onClick={() => {
+                  setSelectedDiscount("No Discount");
+                  setCustomDiscountPercent("");
+                }}
                 className={`p-3 border text-sm rounded-lg font-semibold cursor-pointer ${
                   selectedDiscount === "No Discount"
                     ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]"
@@ -810,7 +837,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   {requestData.totalCost}
                 </p>
                 <p className="text-xs text-green-600 mb-1">
-                  {selectedDiscount} discount applied
+                  {customDiscountPercent}% discount applied
                 </p>
               </>
             )}
