@@ -854,6 +854,14 @@ export const paymentsAPI = {
   },
 };
 
+// Clients API
+export const clientsAPI = {
+  // Get all clients (admin only)
+  getAll: () => {
+    return fetchWithAuth("/clients");
+  },
+};
+
 // ✅ Export DEBUG_MODE so it can be toggled from outside if needed
 export { DEBUG_MODE };
 

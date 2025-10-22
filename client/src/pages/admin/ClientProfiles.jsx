@@ -5,6 +5,7 @@ import {
   LucideArrowRight,
 } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import { clientsAPI } from "../../config/api";
 
 const ClientProfilesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -23,32 +24,15 @@ const ClientProfilesPage = () => {
       setLoading(true);
       setError(null);
       
-      // Get the token from localStorage
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch('http://localhost:5000/api/clients', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await clientsAPI.getAll();
 
-      // Check if response is ok
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-
-      // Check if response is JSON
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Server returned non-JSON response");
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch clients');
       }
       
       const data = await response.json();
       
-      // Handle different response structures
       if (data.success && data.data) {
         setClients(data.data);
       } else if (Array.isArray(data)) {
@@ -63,30 +47,6 @@ const ClientProfilesPage = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getDiscountBadge = (discount) => {
-    if (discount === "-" || !discount) {
-      return (
-        <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500">
-          -
-        </span>
-      );
-    }
-
-    const discountStyles = {
-      "5%": "bg-blue-100 text-blue-800",
-      "10%": "bg-green-100 text-green-800",
-      "15%": "bg-purple-100 text-purple-800",
-    };
-
-    const style = discountStyles[discount] || "bg-gray-100 text-gray-800";
-
-    return (
-      <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${style}`}>
-        {discount}
-      </span>
-    );
   };
 
   const filteredData = clients.filter(
@@ -180,9 +140,6 @@ const ClientProfilesPage = () => {
                   <th className="px-3 py-3 text-center text-xs font-semibold text-black">
                     Years as Customer
                   </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Eligible Discount
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -207,14 +164,11 @@ const ClientProfilesPage = () => {
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
                         {item.years_as_customer}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
-                        {item.eligible_discount ? `${item.eligible_discount}%` : '-'}
-                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-3 py-8 text-center text-gray-500">
+                    <td colSpan="6" className="px-3 py-8 text-center text-gray-500">
                       No clients found
                     </td>
                   </tr>
