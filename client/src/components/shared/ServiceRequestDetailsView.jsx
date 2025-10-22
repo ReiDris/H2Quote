@@ -18,6 +18,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [warrantyStatus, setWarrantyStatus] = useState("Pending");
   const [serviceStartDate, setServiceStartDate] = useState("");
   const [serviceEndDate, setServiceEndDate] = useState("");
+  const [paymentDeadline, setPaymentDeadline] = useState("");
   const [selectedDiscount, setSelectedDiscount] = useState("No Discount");
   const [customDiscountPercent, setCustomDiscountPercent] = useState("");
 
@@ -225,6 +226,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
         setServiceStartDate(requestDetails.service_start_date || "");
         setServiceEndDate(requestDetails.actual_completion_date || "");
+        setPaymentDeadline(requestDetails.payment_deadline || "");
         
         // Initialize discount states
         if (requestDetails.discount_percentage && requestDetails.discount_percentage > 0) {
@@ -387,6 +389,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
   const handleSaveChanges = async () => {
     try {
+      // Validate Service End Date when status is Completed
+      if (serviceStatus === "Completed" && !serviceEndDate) {
+        setStatusRestrictionMessage(
+          "Service End Date is required when marking service as Completed."
+        );
+        setShowStatusRestrictionModal(true);
+        return;
+      }
+
       // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
       let finalServiceStatus = serviceStatus;
       if (requestData.assignedStaff !== "Not assigned" && serviceStatus === "Pending") {
@@ -407,6 +418,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         assignedStaff: requestData.assignedStaff,
         serviceStartDate: serviceStartDate || null,
         serviceEndDate: serviceEndDate || null,
+        paymentDeadline: paymentDeadline || null,
         discount: discountForBackend,
         services: requestData.services.map((service) => ({
           service_id: service.service_id,
@@ -886,13 +898,18 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               {requestData.paymentTerms}
             </span>
           </div>
-          <div>
+          <div className="flex items-center">
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Payment Deadline:
             </label>
-            <span className="text-sm text-gray-800">
-              {requestData.paymentDeadline}
-            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={paymentDeadline}
+                onChange={(e) => setPaymentDeadline(e.target.value)}
+                className="text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 cursor-pointer text-gray-400"
+              />
+            </div>
           </div>
         </div>
 
@@ -1013,13 +1030,23 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               {requestData.requestAcknowledgedDate}
             </span>
           </div>
-          <div>
+          <div className="flex items-center">
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Service End Date:
             </label>
-            <span className="text-sm text-gray-800">
-              {requestData.actualCompletionDate}
-            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={serviceEndDate}
+                onChange={(e) => setServiceEndDate(e.target.value)}
+                disabled={serviceStatus !== "Completed"}
+                className={`text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 ${
+                  serviceStatus === "Completed" 
+                    ? "cursor-pointer text-gray-400" 
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                }`}
+              />
+            </div>
           </div>
         </div>
       </div>

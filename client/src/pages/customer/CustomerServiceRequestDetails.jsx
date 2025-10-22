@@ -242,11 +242,11 @@ const CustomerServiceRequestDetails = () => {
 
     return (
       <div className="my-8">
-        <div className="flex items-start justify-between overflow-x-auto">
+        <div className="flex items-start justify-between overflow-x-auto ">
           {steps.map((step, index) => (
             <div
               key={step.key}
-              className="flex items-center min-w-0 flex-shrink-0"
+              className="flex items-center min-w-0 flex-shrink-0 "
             >
               <div className="flex flex-col items-center">
                 <div
@@ -318,16 +318,20 @@ const CustomerServiceRequestDetails = () => {
 
   return (
     <CustomerLayout>
-      <div className="p-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[#004785] hover:text-[#003366] mb-6 cursor-pointer"
-        >
-          <ArrowLeft size={20} />
-          <span className="font-medium">Back</span>
-        </button>
+      <div>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
+          >
+            <ArrowLeft size={20} />
+            Back
+          </button>
+        </div>
 
-        <StatusTracker />
+        <div className="p-6">
+          <StatusTracker />
+        </div>
 
         {/* Approval Notification Banner */}
         {requestData.serviceStatus === "Waiting for Approval" && (
@@ -368,287 +372,299 @@ const CustomerServiceRequestDetails = () => {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-md">
-          <div className="p-6">
-            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-              Service Details
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Request ID:
-                </label>
-                <span className="text-sm text-gray-800">{requestData.id}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 mr-2">
-                  Service Status:
-                </label>
+        <div className="p-6">
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Service Details
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Request ID:
+              </label>
+              <span className="text-sm text-gray-800">{requestData.id}</span>
+            </div>
+            <div className="flex items-center">
+              <label className="text-sm font-medium text-gray-700 mr-2">
+                Service Status:
+              </label>
+              <div className="mt-1">
                 {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
               </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Requested At:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.requestedAt}
-                </span>
-              </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Warranty:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.warranty}
-                </span>
-              </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Warranty Status:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.warrantyStatus}
-                </span>
-              </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Assigned Staff:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.assignedStaff}
-                </span>
-              </div>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Requested At:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.requestedAt}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Warranty: (In Months)
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.warranty}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Assigned Staff:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.assignedStaff}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Warranty Fulfillment Status:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.warrantyStatus}
+              </span>
             </div>
           </div>
 
-          <div className="p-6">
-            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+          <div className="flex items-center justify-between mb-4">
+            <label className="block text-sm font-medium text-gray-700">
               List of Requested Services:
-            </h2>
+            </label>
+          </div>
 
-            <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Category
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Service
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Remarks
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Qty
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Unit Price
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Total Price
-                    </th>
+          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100 border-b">
+                <tr>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Service Category
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Requested Service
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Remarks
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Quantity
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Unit Price
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Total Price
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {requestData.services.map((service, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.category}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.service}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.remarks}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.quantity}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.unitPrice}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.totalPrice}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {requestData.services.map((service, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {service.category}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {service.service}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {service.remarks}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {service.quantity}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {service.unitPrice}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {service.totalPrice}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-[#0260A0]">
+                {requestData.totalCost}
+              </p>
             </div>
           </div>
+        </div>
 
-          <div className="p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-[#0260A0]">
-                  {requestData.totalCost}
-                </p>
-              </div>
+        <div className="p-6">
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Payment
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Mode of Payment:
+              </label>
+              <span className="text-sm text-gray-800">
+                {formatPaymentMode(requestData.paymentMode)}
+              </span>
             </div>
-          </div>
-
-          <div className="p-6">
-            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-              Payment
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Mode of Payment:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {formatPaymentMode(requestData.paymentMode)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 mr-2">
-                  Payment Status:
-                </label>
+            <div className="flex items-center">
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Payment Status:
+              </label>
+              <div className="mt-1">
                 {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
               </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Payment Terms:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.paymentTerms}
-                </span>
-              </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Payment Deadline:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.paymentDeadline}
-                </span>
-              </div>
             </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-4">
-                Payment Breakdown:
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Payment Terms:
               </label>
+              <span className="text-sm text-gray-800">
+                {requestData.paymentTerms}
+              </span>
             </div>
-
-            <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Payment Phase
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Percentage
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Amount
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Proof of Payment
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Paid On
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Status
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {requestData.paymentHistory.map((payment, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {payment.phase}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {payment.percentage}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {payment.amount}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {payment.proofOfPayment === "-" ? (
-                          <span className="text-gray-400">Not uploaded</span>
-                        ) : (
-                          <button
-                            onClick={() =>
-                              handleViewProof(
-                                payment.payment_id,
-                                payment.proofOfPayment
-                              )
-                            }
-                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
-                          >
-                            <Eye size={16} />
-                            View
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {payment.paidOn}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                        {getStatusBadge(payment.paymentStatus, "paymentStatus")}
-                      </td>
-                      <td className="px-3 py-4 text-xs xl:text-sm text-center">
-                        <button
-                          onClick={() => {
-                            setSelectedPaymentId(payment.payment_id);
-                            setIsUploadModalOpen(true);
-                          }}
-                          className="flex items-center gap-1 px-3 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] mx-auto text-xs cursor-pointer"
-                        >
-                          <Upload size={14} />
-                          {payment.proofOfPayment === "-" ? "Upload" : "Update"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Payment Deadline:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.paymentDeadline}
+              </span>
             </div>
           </div>
 
-          <div className="p-6 mb-10">
-            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-              Duration
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Estimated Duration:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.estimatedDuration}
-                </span>
-              </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Service Start Date:
-                </label>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-4">
+              Payment Breakdown:
+            </label>
+          </div>
+
+          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100 border-b">
+                <tr>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Payment Phase
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Percentage
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Amount
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Proof of Payment
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Paid On
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Payment Status
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {requestData.paymentHistory.map((payment, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.phase}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.percentage}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.amount}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.proofOfPayment === "-" ? (
+                        <span className="text-gray-400">Not uploaded</span>
+                      ) : (
+                        <button
+                          onClick={() =>
+                            handleViewProof(
+                              payment.payment_id,
+                              payment.proofOfPayment
+                            )
+                          }
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
+                        >
+                          <Eye size={16} />
+                          View
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {payment.paidOn}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      <select
+                        value={payment.paymentStatus}
+                        className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer"
+                        disabled
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Overdue">Overdue</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-center">
+                      <button
+                        onClick={() => {
+                          setSelectedPaymentId(payment.payment_id);
+                          setIsUploadModalOpen(true);
+                        }}
+                        className="flex items-center gap-1 px-3 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] mx-auto text-xs cursor-pointer"
+                      >
+                        <Upload size={14} />
+                        {payment.proofOfPayment === "-" ? "Upload" : "Update"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Duration
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Estimated Duration:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.estimatedDuration}
+              </span>
+            </div>
+            <div className="flex items-center">
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Service Start Date:
+              </label>
+              <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-800">
                   {requestData.serviceStartDate}
                 </span>
               </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Request Acknowledged On:
-                </label>
-                <span className="text-sm text-gray-800">-</span>
-              </div>
-              <div>
-                <label className="inline text-sm font-medium text-gray-700 mr-2">
-                  Service End Date:
-                </label>
-                <span className="text-sm text-gray-800">
-                  {requestData.estimatedEndDate}
-                </span>
-              </div>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Request Acknowledged:
+              </label>
+              <span className="text-sm text-gray-800">-</span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Service End Date:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.serviceEndDate}
+              </span>
             </div>
           </div>
         </div>
@@ -656,7 +672,7 @@ const CustomerServiceRequestDetails = () => {
         {/* Approval Confirmation Modal */}
         {showApprovalModal && (
           <div className="fixed inset-0 bg-black/60 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-md mx-4">
+            <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
               <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
                 {approvalSuccess ? "Success!" : "Approve Service Request"}
               </h2>
