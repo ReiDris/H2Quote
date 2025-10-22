@@ -174,7 +174,7 @@ const updateUserAccount = async (req, res) => {
         if (firstName !== undefined || lastName !== undefined || name) auditData.name_updated = true;
         if (email) auditData.email = email;
         if (contactNo !== undefined) auditData.contact_updated = true;
-        if (password && password !== '************') auditData.password_updated = true;
+        // Note: password updates are NOT logged to audit_log for privacy
 
         await supabase.from('audit_log').insert({
           table_name: 'users',
@@ -274,19 +274,7 @@ const changePassword = async (req, res) => {
 
       await client.query(updateQuery, [hashedNewPassword, new Date(), userId]);
 
-      try {
-        await supabase.from('audit_log').insert({
-          table_name: 'users',
-          record_id: userId,
-          action: 'UPDATE',
-          new_values: { password_changed: true },
-          changed_by: user.email,
-          change_reason: 'Password change',
-          ip_address: req.ip || req.connection.remoteAddress,
-        });
-      } catch (auditError) {
-        console.error('Failed to log audit entry:', auditError);
-      }
+      // Password changes are NOT logged to audit_log for privacy
 
       res.json({
         success: true,

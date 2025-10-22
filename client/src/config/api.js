@@ -456,6 +456,23 @@ export const clientsAPI = {
   },
 };
 
+export const activityLogsAPI = {
+  getActivityLogs: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return fetchWithAuth(`/activity-logs?${queryString}`);
+  },
+
+  exportActivityLogs: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return fetchWithAuth(`/activity-logs/export?${queryString}`);
+  },
+
+  getActivityLogStats: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return fetchWithAuth(`/activity-logs/stats?${queryString}`);
+  },
+};
+
 export { DEBUG_MODE };
 
 export default API_URL;

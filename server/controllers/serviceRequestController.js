@@ -340,6 +340,30 @@ const createServiceRequest = async (req, res) => {
       }
     }
 
+     try {
+      await supabase.from('audit_log').insert({
+        table_name: 'service_requests',
+        record_id: requestId,
+        action: 'CREATE',
+        new_values: {
+          request_created: true,
+          request_number: requestNumber,
+          total_cost: totalCost,
+          estimated_duration: estimatedDuration,
+          payment_terms: paymentTerms,
+          services_count: services.length,
+          chemicals_count: chemicals?.length || 0,
+          refrigerants_count: refrigerants?.length || 0
+        },
+        changed_by: req.user.email,
+        change_reason: `Service request #${requestNumber} created by customer`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
+
     await client.query("COMMIT");
 
     // IMPORTANT: Create default payments AFTER commit, using the final total cost
@@ -993,6 +1017,25 @@ const addServicesToRequest = async (req, res) => {
       );
     }
 
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'service_request_items',
+        record_id: requestId,
+        action: 'CREATE',
+        new_values: {
+          services_added: addedServices.length,
+          service_names: addedServices.map(s => s.service_name),
+          additional_cost: additionalCost,
+          new_total_cost: request.estimated_cost + additionalCost
+        },
+        changed_by: req.user.email,
+        change_reason: `Added ${addedServices.length} service(s) to request`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
     await client.query("COMMIT");
 
     res.json({
@@ -1112,6 +1155,26 @@ const createQuotation = async (req, res) => {
       );
     }
 
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'quotations',
+        record_id: quotationId,
+        action: 'CREATE',
+        new_values: {
+          quotation_created: true,
+          request_number: request.request_number,
+          total_amount: totalAmount,
+          items_count: items.length,
+          valid_until: validUntil
+        },
+        changed_by: req.user.email,
+        change_reason: `Quotation created for request #${request.request_number}`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
     await client.query("COMMIT");
 
     // ✅ SEND NOTIFICATION TO CUSTOMER ABOUT QUOTATION
@@ -1218,6 +1281,31 @@ const respondToQuotation = async (req, res) => {
         [statusId, approved ? "NOW()" : null, quotation.request_id]
       );
     }
+
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'quotations',
+        record_id: quotationId,
+        action: 'UPDATE',
+        old_values: {
+          status: quotation.quotation_status
+        },
+        new_values: {
+          status: newQuotationStatus,
+          approved: approved,
+          customer_notes: customerNotes || null,
+          request_number: quotation.request_number
+        },
+        changed_by: req.user.email,
+        change_reason: approved 
+          ? `Customer approved quotation for request #${quotation.request_number}` 
+          : `Customer rejected quotation for request #${quotation.request_number}`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
 
     await client.query("COMMIT");
 
@@ -1830,6 +1918,28 @@ const updateRequestStatus = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'service_requests',
+        record_id: requestId,
+        action: 'UPDATE',
+        old_values: {
+          status: currentStatusName
+        },
+        new_values: {
+          status: backendStatus,
+          assigned_staff: assignedStaffId ? staffName : 'Not assigned',
+          service_start_date: serviceStartDate || null,
+          actual_completion_date: actualCompletionDate || null
+        },
+        changed_by: req.user.email,
+        change_reason: `Status changed from "${currentStatusName}" to "${backendStatus}"`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
     await client.query("COMMIT");
 
     res.json({
@@ -2264,6 +2374,24 @@ const removeChemicalsFromRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
+     try {
+      await supabase.from('audit_log').insert({
+        table_name: 'service_request_chemicals',
+        record_id: requestId,
+        action: 'DELETE',
+        new_values: {
+          chemicals_removed: chemicalItemIds.length,
+          cost_reduction: costReduction,
+          new_total_cost: request.estimated_cost - costReduction
+        },
+        changed_by: req.user.email,
+        change_reason: `Removed ${chemicalItemIds.length} chemical(s) from request`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
     await client.query("COMMIT");
 
     res.json({
@@ -2398,6 +2526,24 @@ const removeRefrigerantsFromRequest = async (req, res) => {
       });
     } catch (auditError) {
       console.error("Failed to log audit entry:", auditError);
+    }
+
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'service_request_refrigerants',
+        record_id: requestId,
+        action: 'DELETE',
+        new_values: {
+          refrigerants_removed: refrigerantItemIds.length,
+          cost_reduction: costReduction,
+          new_total_cost: request.estimated_cost - costReduction
+        },
+        changed_by: req.user.email,
+        change_reason: `Removed ${refrigerantItemIds.length} refrigerant(s) from request`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
     }
 
     await client.query("COMMIT");
@@ -2735,6 +2881,27 @@ const updateServiceRequest = async (req, res) => {
           [payment.paymentStatus, requestId, payment.phase]
         );
       }
+    }
+
+     try {
+      const changesLog = {};
+      if (newStatusId !== currentRequest.status_id) changesLog.status_updated = true;
+      if (paymentStatus) changesLog.payment_status = paymentStatus;
+      if (assignedStaffId) changesLog.staff_assigned = staffName;
+      if (serviceStartDate) changesLog.service_start_date = serviceStartDate;
+      if (serviceEndDate) changesLog.service_end_date = serviceEndDate;
+
+      await supabase.from('audit_log').insert({
+        table_name: 'service_requests',
+        record_id: requestId,
+        action: 'UPDATE',
+        new_values: changesLog,
+        changed_by: req.user.email,
+        change_reason: 'Service request updated by admin/staff',
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
     }
 
     await client.query("COMMIT");

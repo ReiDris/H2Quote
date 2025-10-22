@@ -106,18 +106,18 @@ const getSentMessages = async (req, res) => {
         related_request_id as "requestId",
         recipient_company_name as "recipientCompany"
       FROM user_sent_view
-      WHERE sender_id = $1
+      WHERE sender_id = $1 AND sender_deleted = FALSE
       ORDER BY sent_at DESC
       LIMIT $2 OFFSET $3
     `;
 
     const result = await pool.query(query, [userId, limit, offset]);
 
-    const countResult = await pool.query(`
+    const countQuery = `
       SELECT COUNT(*) FROM messages 
       WHERE sender_id = $1 AND sender_deleted = FALSE
-    `, [userId]);
-    
+    `;
+    const countResult = await pool.query(countQuery, [userId]);
     const totalCount = parseInt(countResult.rows[0].count);
 
     const messages = result.rows.map(msg => ({
@@ -157,46 +157,99 @@ const getMessageDetails = async (req, res) => {
     const { messageId } = req.params;
     const userId = req.user.id;
 
-    // ✅ FIXED: Changed user_id to p_user_id to match the database function
-    const { data: thread, error } = await supabase
-      .rpc('get_message_thread', { 
-        msg_id: parseInt(messageId), 
-        p_user_id: userId  // Changed from user_id to p_user_id
-      });
+    const query = `
+      SELECT 
+        m.message_id,
+        m.sender_id,
+        m.recipient_id,
+        m.subject,
+        m.content,
+        m.message_type,
+        m.is_read,
+        m.is_starred,
+        m.sent_at,
+        m.related_request_id,
+        sender.first_name || ' ' || sender.last_name as sender_name,
+        sender.email as sender_email,
+        recipient.first_name || ' ' || recipient.last_name as recipient_name,
+        recipient.email as recipient_email,
+        sender_company.company_name as sender_company,
+        recipient_company.company_name as recipient_company
+      FROM messages m
+      JOIN users sender ON m.sender_id = sender.user_id
+      JOIN users recipient ON m.recipient_id = recipient.user_id
+      LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
+      LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
+      WHERE m.message_id = $1 
+        AND (m.sender_id = $2 OR m.recipient_id = $2)
+        AND ((m.sender_id = $2 AND NOT m.sender_deleted) OR (m.recipient_id = $2 AND NOT m.recipient_deleted))
+    `;
 
-    if (error) {
-      console.error('Supabase RPC error:', error);
-      throw error;
-    }
+    const result = await pool.query(query, [messageId, userId]);
 
-    if (!thread || thread.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Message not found or access denied'
+        message: 'Message not found'
       });
     }
 
-    await pool.query('SELECT mark_message_read($1, $2)', [messageId, userId]);
+    const message = result.rows[0];
 
-    const originalMessage = thread.find(msg => msg.is_original);
-    const replies = thread.filter(msg => !msg.is_original);
+    if (message.recipient_id === userId && !message.is_read) {
+      await pool.query(
+        'UPDATE messages SET is_read = TRUE, read_at = NOW() WHERE message_id = $1',
+        [messageId]
+      );
+    }
+
+    const repliesQuery = `
+      SELECT 
+        m.message_id,
+        m.content,
+        m.sent_at,
+        m.sender_id,
+        sender.first_name || ' ' || sender.last_name as sender_name,
+        sender.user_type
+      FROM messages m
+      JOIN message_replies mr ON m.message_id = mr.reply_message_id
+      JOIN users sender ON m.sender_id = sender.user_id
+      WHERE mr.original_message_id = $1
+      ORDER BY m.sent_at ASC
+    `;
+
+    const repliesResult = await pool.query(repliesQuery, [messageId]);
 
     res.json({
       success: true,
       data: {
-        message: {
-          id: originalMessage.message_id,
-          sender: originalMessage.sender_name,
-          subject: originalMessage.subject,
-          content: originalMessage.content,
-          sentAt: originalMessage.sent_at,
-          isRead: originalMessage.is_read
+        id: message.message_id,
+        subject: message.subject,
+        content: message.content,
+        sender: {
+          id: message.sender_id,
+          name: message.sender_name,
+          email: message.sender_email,
+          company: message.sender_company
         },
-        replies: replies.map(reply => ({
+        recipient: {
+          id: message.recipient_id,
+          name: message.recipient_name,
+          email: message.recipient_email,
+          company: message.recipient_company
+        },
+        sentAt: message.sent_at,
+        isRead: message.is_read,
+        isStarred: message.is_starred,
+        messageType: message.message_type,
+        relatedRequestId: message.related_request_id,
+        replies: repliesResult.rows.map(reply => ({
           id: reply.message_id,
-          sender: reply.sender_name,
           content: reply.content,
-          sentAt: reply.sent_at
+          sentAt: reply.sent_at,
+          senderId: reply.sender_id,
+          senderName: reply.sender_name,
+          senderType: reply.user_type
         }))
       }
     });
@@ -235,7 +288,7 @@ const sendMessage = async (req, res) => {
 
     // Get recipient details
     const recipientCheck = await client.query(
-      'SELECT user_id, email, first_name, last_name FROM users WHERE user_id = $1',
+      'SELECT user_id, email, first_name, last_name, user_type FROM users WHERE user_id = $1',
       [recipientId]
     );
 
@@ -258,6 +311,31 @@ const sendMessage = async (req, res) => {
       senderId, recipientId, subject.trim(), content.trim(), messageType, relatedRequestId
     ]);
 
+    const messageId = result.rows[0].message_id;
+
+    // ✅ ADD AUDIT LOG for message sent
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'messages',
+        record_id: messageId,
+        action: 'CREATE',
+        new_values: {
+          message_sent: true,
+          recipient_id: recipientId,
+          recipient_name: `${recipient.first_name} ${recipient.last_name}`,
+          recipient_type: recipient.user_type,
+          subject: subject.trim(),
+          message_type: messageType,
+          related_request_id: relatedRequestId
+        },
+        changed_by: req.user.email,
+        change_reason: `Message sent to ${recipient.user_type}: ${recipient.first_name} ${recipient.last_name}`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
     await client.query('COMMIT');
 
     // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT
@@ -267,7 +345,7 @@ const sendMessage = async (req, res) => {
       
       await createNotification(
         recipientId,
-        'New Message',  // Using the new allowed type
+        'New Message',
         `New Message: ${subject}`,
         `You have received a new message from ${req.user.email}. Subject: ${subject}. ${messagePreview}`,
         recipient.email
@@ -282,7 +360,7 @@ const sendMessage = async (req, res) => {
       success: true,
       message: 'Message sent successfully',
       data: {
-        messageId: result.rows[0].message_id,
+        messageId: messageId,
         sentAt: result.rows[0].sent_at
       }
     });
@@ -310,7 +388,6 @@ const createServiceRequestMessage = async (req, res) => {
     const senderId = req.user.id;
     const senderType = req.user.userType;
 
-    // Validate inputs
     if (!subject || !content) {
       return res.status(400).json({
         success: false,
@@ -318,7 +395,6 @@ const createServiceRequestMessage = async (req, res) => {
       });
     }
 
-    // Verify the service request exists and the customer owns it
     const requestQuery = `
       SELECT 
         sr.request_id, 
@@ -344,7 +420,6 @@ const createServiceRequestMessage = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Only allow customer to initiate message
     if (senderType !== 'client') {
       await client.query('ROLLBACK');
       return res.status(403).json({
@@ -353,7 +428,6 @@ const createServiceRequestMessage = async (req, res) => {
       });
     }
 
-    // Verify the customer owns this request
     if (request.requested_by_user_id !== senderId) {
       await client.query('ROLLBACK');
       return res.status(403).json({
@@ -362,14 +436,13 @@ const createServiceRequestMessage = async (req, res) => {
       });
     }
 
-    // Get all admin and staff users to notify
     const recipientsQuery = `
       SELECT user_id, email, first_name, last_name 
       FROM users 
       WHERE user_type IN ('admin', 'staff') AND status = 'Active'
       ORDER BY 
         CASE 
-          WHEN user_id = $1 THEN 0  -- Prioritize assigned staff
+          WHEN user_id = $1 THEN 0
           WHEN user_type = 'admin' THEN 1
           ELSE 2
         END
@@ -385,10 +458,8 @@ const createServiceRequestMessage = async (req, res) => {
       });
     }
 
-    // Send message to the first available recipient (assigned staff or first admin)
     const primaryRecipient = recipientsResult.rows[0];
 
-    // Create the message with service request context
     const insertQuery = `
       INSERT INTO messages (
         sender_id, 
@@ -402,48 +473,62 @@ const createServiceRequestMessage = async (req, res) => {
       RETURNING message_id, sent_at
     `;
 
-    const fullSubject = `[Request #${request.request_number}] ${subject}`;
-    const fullContent = `Regarding Service Request: ${request.request_number}\n\n${content}`;
-
-    const messageResult = await client.query(insertQuery, [
+    const result = await client.query(insertQuery, [
       senderId,
       primaryRecipient.user_id,
-      fullSubject,
-      fullContent,
+      `[SR #${request.request_number}] ${subject}`,
+      content.trim(),
       requestId
     ]);
 
-    const messageId = messageResult.rows[0].message_id;
+    const messageId = result.rows[0].message_id;
+
+    // ✅ ADD AUDIT LOG for service request message
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'messages',
+        record_id: messageId,
+        action: 'CREATE',
+        new_values: {
+          message_sent: true,
+          service_request_message: true,
+          request_number: request.request_number,
+          request_id: requestId,
+          recipient_staff: `${primaryRecipient.first_name} ${primaryRecipient.last_name}`,
+          subject: subject.trim()
+        },
+        changed_by: req.user.email,
+        change_reason: `Customer messaged staff about service request #${request.request_number}`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
 
     await client.query('COMMIT');
 
-    // ✅ SEND EMAIL NOTIFICATIONS TO ALL ADMIN/STAFF
+    // Notify all admin/staff
     try {
       for (const recipient of recipientsResult.rows) {
-        const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
-        const messagePreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
-        
         await createNotification(
           recipient.user_id,
-          'Service Request Message',
-          `Message about Request #${request.request_number}`,
-          `${request.customer_name} sent a message about service request #${request.request_number}. Subject: ${subject}. ${messagePreview}`,
+          'Service Request',
+          `New Message on SR #${request.request_number}`,
+          `Customer ${request.customer_name} sent a message about service request #${request.request_number}. Subject: ${subject}`,
           recipient.email
         );
       }
-      
-      console.log(`✅ Service request message notifications sent to ${recipientsResult.rows.length} staff members`);
+      console.log(`Service request message notifications sent to ${recipientsResult.rows.length} staff members`);
     } catch (notifError) {
-      console.error('❌ Failed to send message notifications:', notifError);
+      console.error('Failed to send notifications:', notifError);
     }
 
     res.status(201).json({
       success: true,
-      message: 'Message sent successfully to TRISHKAYE team',
+      message: 'Message sent to staff successfully',
       data: {
         messageId: messageId,
-        sentAt: messageResult.rows[0].sent_at,
-        recipientCount: recipientsResult.rows.length,
+        sentAt: result.rows[0].sent_at,
         requestNumber: request.request_number
       }
     });
@@ -453,8 +538,7 @@ const createServiceRequestMessage = async (req, res) => {
     console.error('Create service request message error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to send message',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Failed to send message'
     });
   } finally {
     client.release();
@@ -470,9 +554,8 @@ const replyToMessage = async (req, res) => {
     const { messageId } = req.params;
     const { content } = req.body;
     const senderId = req.user.id;
-    const senderType = req.user.userType;
 
-    if (!content || content.trim().length === 0) {
+    if (!content || !content.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Reply content is required'
@@ -481,120 +564,125 @@ const replyToMessage = async (req, res) => {
 
     const originalQuery = `
       SELECT 
-        m.sender_id, 
-        m.recipient_id, 
-        m.subject, 
-        m.related_request_id, 
+        m.message_id,
+        m.subject,
+        m.sender_id,
+        m.recipient_id,
+        m.related_request_id,
         m.message_type,
-        sender.user_type as sender_user_type,
-        sender.email as sender_email,
         sender.first_name as sender_first_name,
         sender.last_name as sender_last_name,
-        recipient.user_type as recipient_user_type,
-        recipient.email as recipient_email,
+        sender.email as sender_email,
         recipient.first_name as recipient_first_name,
         recipient.last_name as recipient_last_name,
-        sr.request_number
+        recipient.email as recipient_email
       FROM messages m
       JOIN users sender ON m.sender_id = sender.user_id
       JOIN users recipient ON m.recipient_id = recipient.user_id
-      LEFT JOIN service_requests sr ON m.related_request_id = sr.request_id
-      WHERE m.message_id = $1 AND (m.sender_id = $2 OR m.recipient_id = $2)
+      WHERE m.message_id = $1
     `;
-    
-    const originalResult = await client.query(originalQuery, [messageId, senderId]);
-    
+
+    const originalResult = await client.query(originalQuery, [messageId]);
+
     if (originalResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
-        message: 'Original message not found or access denied'
+        message: 'Original message not found'
       });
     }
 
     const original = originalResult.rows[0];
 
-    // ✅ UPDATED: Allow back-and-forth replies for service_request messages
-    if (original.message_type === 'service_request') {
-      // Both customer and staff can reply to each other
-      // Just verify the user is part of the conversation
-      if (original.sender_id !== senderId && original.recipient_id !== senderId) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({
-          success: false,
-          message: 'You are not part of this conversation'
-        });
-      }
+    if (original.sender_id !== senderId && original.recipient_id !== senderId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        success: false,
+        message: 'You can only reply to messages you are part of'
+      });
     }
 
-    const replyRecipient = original.sender_id === senderId ? original.recipient_id : original.sender_id;
-    const replySubject = original.subject.startsWith('Re: ') ? original.subject : `Re: ${original.subject}`;
+    const recipientId = original.sender_id === senderId 
+      ? original.recipient_id 
+      : original.sender_id;
 
-    // Determine recipient details (who will receive this reply)
-    let recipientEmail, recipientFirstName, recipientLastName;
-    if (replyRecipient === original.sender_id) {
-      recipientEmail = original.sender_email;
-      recipientFirstName = original.sender_first_name;
-      recipientLastName = original.sender_last_name;
-    } else {
-      recipientEmail = original.recipient_email;
-      recipientFirstName = original.recipient_first_name;
-      recipientLastName = original.recipient_last_name;
-    }
+    const recipientFirstName = original.sender_id === senderId 
+      ? original.recipient_first_name 
+      : original.sender_first_name;
+    
+    const recipientLastName = original.sender_id === senderId 
+      ? original.recipient_last_name 
+      : original.sender_last_name;
 
-    const replyQuery = `
-      INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
+    const recipientEmail = original.sender_id === senderId 
+      ? original.recipient_email 
+      : original.sender_email;
+
+    const replySubject = original.subject.startsWith('Re: ') 
+      ? original.subject 
+      : `Re: ${original.subject}`;
+
+    const insertReplyQuery = `
+      INSERT INTO messages (
+        sender_id,
+        recipient_id,
+        subject,
+        content,
+        message_type,
+        related_request_id
+      )
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING message_id, sent_at
     `;
 
-    const replyResult = await client.query(replyQuery, [
-      senderId, replyRecipient, replySubject, content.trim(), 
-      original.message_type, original.related_request_id
+    const replyResult = await client.query(insertReplyQuery, [
+      senderId,
+      recipientId,
+      replySubject,
+      content.trim(),
+      original.message_type,
+      original.related_request_id
     ]);
 
     const replyId = replyResult.rows[0].message_id;
 
-    await client.query(`
-      INSERT INTO message_replies (original_message_id, reply_message_id)
-      VALUES ($1, $2)
-    `, [messageId, replyId]);
+    await client.query(
+      `INSERT INTO message_replies (original_message_id, reply_message_id) VALUES ($1, $2)`,
+      [messageId, replyId]
+    );
+
+    // ✅ ADD AUDIT LOG for message reply
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'messages',
+        record_id: replyId,
+        action: 'CREATE',
+        new_values: {
+          message_reply: true,
+          original_message_id: messageId,
+          recipient_id: recipientId,
+          recipient_name: `${recipientFirstName} ${recipientLastName}`,
+          subject: replySubject
+        },
+        changed_by: req.user.email,
+        change_reason: `Replied to message: ${original.subject}`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
 
     await client.query('COMMIT');
 
-    // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT (Customer or Staff)
     try {
       const recipientName = `${recipientFirstName} ${recipientLastName}`.trim();
-      const replyPreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
-      const senderName = req.user.email; // You can also use req.user first/last name if available
+      const contentPreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
       
-      // Different notification based on recipient type and message type
-      let notificationTitle, notificationBody;
-      
-      if (original.message_type === 'service_request') {
-        // For service request messages - customer receiving reply
-        notificationTitle = `Response to Your Service Request Message`;
-        notificationBody = `TRISHKAYE team replied to your message about Service Request #${original.request_number}.
-
-Subject: ${replySubject}
-
-${replyPreview}
-
-Please log in to view and respond: ${process.env.FRONTEND_URL || 'https://h2-quote.vercel.app'}/customer/messages`;
-      } else {
-        // For general messages
-        notificationTitle = `New Reply: ${replySubject}`;
-        notificationBody = `${senderName} replied to your message.
-
-${replyPreview}
-
-Please log in to view the full conversation: ${process.env.FRONTEND_URL || 'https://h2-quote.vercel.app'}/messages`;
-      }
-
       await createNotification(
-        replyRecipient,
-        'Message Reply',  // Using the new allowed type
-        notificationTitle,
-        notificationBody,
+        recipientId,
+        'New Message',
+        `Reply to: ${original.subject}`,
+        `You have received a reply from ${req.user.email}. ${contentPreview}`,
         recipientEmail
       );
       
@@ -686,7 +774,11 @@ const markAsRead = async (req, res) => {
 };
 
 const deleteMessages = async (req, res) => {
+  const client = await pool.connect();
+  
   try {
+    await client.query('BEGIN');
+    
     const { messageIds } = req.body;
     const userId = req.user.id;
 
@@ -697,6 +789,23 @@ const deleteMessages = async (req, res) => {
       });
     }
 
+    // Get message details before deletion for audit log
+    const messageQuery = `
+      SELECT 
+        m.message_id,
+        m.subject,
+        m.sender_id,
+        m.recipient_id,
+        CONCAT(sender.first_name, ' ', sender.last_name) as sender_name,
+        CONCAT(recipient.first_name, ' ', recipient.last_name) as recipient_name
+      FROM messages m
+      JOIN users sender ON m.sender_id = sender.user_id
+      JOIN users recipient ON m.recipient_id = recipient.user_id
+      WHERE m.message_id = ANY($1) AND (m.sender_id = $2 OR m.recipient_id = $2)
+    `;
+    
+    const messagesResult = await client.query(messageQuery, [messageIds, userId]);
+
     const query = `
       UPDATE messages 
       SET sender_deleted = CASE WHEN sender_id = $2 THEN TRUE ELSE sender_deleted END,
@@ -705,7 +814,32 @@ const deleteMessages = async (req, res) => {
         AND (sender_id = $2 OR recipient_id = $2)
     `;
 
-    const result = await pool.query(query, [messageIds, userId]);
+    const result = await client.query(query, [messageIds, userId]);
+
+    // ✅ ADD AUDIT LOG for message deletion
+    try {
+      for (const message of messagesResult.rows) {
+        const isSender = message.sender_id === userId;
+        await supabase.from('audit_log').insert({
+          table_name: 'messages',
+          record_id: message.message_id,
+          action: 'DELETE',
+          new_values: {
+            message_deleted: true,
+            deleted_by_role: isSender ? 'sender' : 'recipient',
+            subject: message.subject,
+            other_party: isSender ? message.recipient_name : message.sender_name
+          },
+          changed_by: req.user.email,
+          change_reason: `Message deleted by ${isSender ? 'sender' : 'recipient'}`,
+          ip_address: req.ip || req.connection.remoteAddress,
+        });
+      }
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
+    await client.query('COMMIT');
 
     res.json({
       success: true,
@@ -713,11 +847,14 @@ const deleteMessages = async (req, res) => {
     });
 
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Delete messages error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete messages'
     });
+  } finally {
+    client.release();
   }
 };
 
