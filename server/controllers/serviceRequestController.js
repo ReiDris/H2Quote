@@ -1993,7 +1993,6 @@ const addChemicalsToRequest = async (req, res) => {
   }
 };
 
-// Similarly for refrigerants
 const addRefrigerantsToRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2143,7 +2142,6 @@ const addRefrigerantsToRequest = async (req, res) => {
   }
 };
 
-// Remove chemicals from service request
 const removeChemicalsFromRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2281,7 +2279,6 @@ const removeChemicalsFromRequest = async (req, res) => {
   }
 };
 
-// Remove refrigerants from service request
 const removeRefrigerantsFromRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2945,7 +2942,6 @@ const setServiceWarranty = async (req, res) => {
   }
 };
 
-// Add this function to update individual service item warranty
 const updateIndividualServiceWarranty = async (req, res) => {
   const client = await pool.connect();
 
