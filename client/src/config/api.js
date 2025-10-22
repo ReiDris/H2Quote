@@ -608,8 +608,15 @@ export const serviceRequestsAPI = {
       }),
     });
   },
-};
 
+  // ✅ ADDED: Approve service request (customer only)
+  approveServiceRequest: (requestId, notes = null) => {
+    return fetchWithAuth(`/service-requests/${requestId}/approve`, {
+      method: "PUT",
+      body: JSON.stringify({ customerNotes: notes }),
+    });
+  },
+};
 // Auth API
 export const authAPI = {
   login: (credentials) => {

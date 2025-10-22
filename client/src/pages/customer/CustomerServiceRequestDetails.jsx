@@ -47,17 +47,12 @@ const CustomerServiceRequestDetails = () => {
       setLoading(true);
       const token = localStorage.getItem("h2quote_token");
 
-      console.log("Fetching details for requestId:", requestId);
-
       if (!token) {
-        console.log("No token found");
         navigate("/login");
         return;
       }
 
       const response = await serviceRequestsAPI.getDetails(requestId);
-
-      console.log("Response status:", response.status);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -73,7 +68,6 @@ const CustomerServiceRequestDetails = () => {
       }
 
       const data = await response.json();
-      console.log("Received data:", data);
 
       if (data.success) {
         const { request: requestDetails, items } = data.data;
@@ -103,10 +97,9 @@ const CustomerServiceRequestDetails = () => {
           serviceStartDate: requestDetails.service_start_date || "-",
           estimatedEndDate: requestDetails.estimated_end_date || "-",
           warranty: requestDetails.warranty || "6 months",
-          quotationId: requestDetails.quotation_id || null,
+          statusName: requestDetails.status_name, // Backend status name
         };
 
-        console.log("Setting request data");
         setRequestData(transformedData);
         setError("");
       } else {
@@ -134,25 +127,21 @@ const CustomerServiceRequestDetails = () => {
     navigate("/customer/messages/compose", {
       state: {
         requestId: requestData?.requestId || requestId,
-        requestNumber: requestData?.id
-      }
+        requestNumber: requestData?.id,
+      },
     });
   };
 
+  // ✅ UPDATED: Approve service request directly (no quotation_id needed)
   const handleApproveQuotation = async () => {
-    if (!requestData?.quotationId) {
-      setApprovalError("No quotation found for this request");
-      return;
-    }
-
     setApprovalLoading(true);
     setApprovalError("");
 
     try {
-      const response = await serviceRequestsAPI.approveQuotation(
-        requestData.quotationId,
-        true, // approved
-        "Quotation approved by customer"
+      // ✅ CORRECT: Call the customer approval endpoint
+      const response = await serviceRequestsAPI.approveServiceRequest(
+        requestData.requestId,
+        "Customer approved the service request and pricing"
       );
 
       const data = await response.json();
@@ -160,18 +149,18 @@ const CustomerServiceRequestDetails = () => {
       if (response.ok && data.success) {
         setApprovalSuccess(true);
         setApprovalError("");
-        
+
         // Wait a moment to show success message, then refresh
         setTimeout(() => {
           setShowApprovalModal(false);
           fetchRequestDetails(); // Refresh the data to show updated status
         }, 1500);
       } else {
-        setApprovalError(data.message || "Failed to approve quotation");
+        setApprovalError(data.message || "Failed to approve service request");
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the quotation");
+      setApprovalError("An error occurred while approving the service request");
     } finally {
       setApprovalLoading(false);
     }
@@ -267,26 +256,26 @@ const CustomerServiceRequestDetails = () => {
                       : "text-gray-400 border-2 border-gray-400"
                   }`}
                 >
-                  {`0${index + 1}`}
+                  {String(index + 1).padStart(2, "0")}
                 </div>
-                <div
-                  className={`mt-2 text-center text-xs md:text-sm ${
+                <span
+                  className={`mt-2 text-sm text-center w-23 h-10 ${
                     index <= currentStep
                       ? "text-[#0260A0] font-semibold"
                       : "text-gray-400"
                   }`}
                 >
-                  <p className="whitespace-pre-line max-w-[80px] md:max-w-none">
-                    {step.label}
-                  </p>
-                </div>
+                  {step.label}
+                </span>
               </div>
               {index < steps.length - 1 && (
-                <div
-                  className={`w-12 md:w-24 h-1 mx-1 md:mx-2 rounded ${
-                    index < currentStep ? "bg-[#0260A0]" : "bg-gray-300"
-                  }`}
-                />
+                <div className="flex items-center -mt-10">
+                  <div
+                    className={`w-2 lg:w-10 xl:w-25 2xl:w-34 h-0.5 flex-shrink-0 ${
+                      index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
+                    }`}
+                  />
+                </div>
               )}
             </div>
           ))}
@@ -340,46 +329,39 @@ const CustomerServiceRequestDetails = () => {
 
         <StatusTracker />
 
-        {/* Quotation Approval Alert - Only show when status is "Waiting for Approval" */}
+        {/* Approval Notification Banner */}
         {requestData.serviceStatus === "Waiting for Approval" && (
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-lg">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg
-                  className="h-5 w-5 text-blue-500"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3 flex-1">
-                <h3 className="text-sm font-medium text-blue-800">
-                  Quotation Revised – Please Review
-                </h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <p>
-                    The final quotation for your request has been updated. Please review the details before proceeding.
-                  </p>
+          <div className="mx-6 mb-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-1">
+                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">!</span>
+                  </div>
                 </div>
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={handleMessageTrishkaye}
-                    className="inline-flex items-center gap-2 px-4 py-2 border border-[#004785] text-[#004785] text-sm font-medium rounded-lg hover:bg-[#004785] hover:text-white transition-colors cursor-pointer"
-                  >
-                    <MessageCircle size={16} />
-                    Message TRISHKAYE
-                  </button>
-                  <button
-                    onClick={openApprovalModal}
-                    className="inline-flex items-center px-4 py-2 bg-[#004785] text-white text-sm font-medium rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
-                  >
-                    Approve Updated Quotation
-                  </button>
+                <div className="flex-1">
+                  <h3 className="text-[#004785] font-semibold text-base mb-2">
+                    Quotation Revised – Please Review
+                  </h3>
+                  <p className="text-gray-700 text-sm mb-4">
+                    The final quotation for your request has been updated.
+                    Please review the details before proceeding.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button
+                      onClick={handleMessageTrishkaye}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-[#004785] text-[#004785] rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-sm font-medium"
+                    >
+                      <MessageCircle size={18} />
+                      Message TRISHKAYE
+                    </button>
+                    <button
+                      onClick={openApprovalModal}
+                      className="px-4 py-3 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer text-sm font-medium"
+                    >
+                      Approve Updated Quotation
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -676,9 +658,9 @@ const CustomerServiceRequestDetails = () => {
           <div className="fixed inset-0 bg-black/60 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-3xl p-6 w-full max-w-md mx-4">
               <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
-                {approvalSuccess ? "Success!" : "Approve Quotation"}
+                {approvalSuccess ? "Success!" : "Approve Service Request"}
               </h2>
-              
+
               {approvalSuccess ? (
                 <div className="text-center py-4">
                   <div className="flex justify-center mb-4">
@@ -697,15 +679,19 @@ const CustomerServiceRequestDetails = () => {
                     </svg>
                   </div>
                   <p className="text-black text-sm">
-                    Quotation approved successfully! The service request will now proceed to the next stage.
+                    Service request approved successfully! TRISHKAYE will
+                    proceed with the service.
                   </p>
                 </div>
               ) : (
                 <>
                   <p className="text-black mb-6 text-sm">
-                    Are you sure you want to approve this quotation? By approving, you confirm that you have reviewed the updated quotation details and agree to proceed with the service.
+                    Are you sure you want to approve this service request? By
+                    approving, you confirm that you have reviewed the services,
+                    pricing, and terms, and agree to proceed with TRISHKAYE
+                    performing the service.
                   </p>
-                  
+
                   {approvalError && (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <p className="text-red-700 text-sm">{approvalError}</p>
