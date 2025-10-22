@@ -159,7 +159,7 @@ const CustomerComposeMessage = () => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Type your message here...&#10;&#10;Press Ctrl+Enter to send"
+              placeholder="Type your message here..."
               rows={12}
               disabled={sending}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -171,11 +171,11 @@ const CustomerComposeMessage = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-3 mb-20">
           <button
             onClick={handleBack}
             disabled={sending}
-            className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             Cancel
           </button>
