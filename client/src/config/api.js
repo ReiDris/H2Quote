@@ -597,6 +597,17 @@ export const serviceRequestsAPI = {
       body: JSON.stringify(data),
     });
   },
+
+  // Approve or reject quotation (customer only)
+  approveQuotation: (quotationId, approved, customerNotes = "") => {
+    return fetchWithAuth(`/service-requests/quotations/${quotationId}/respond`, {
+      method: "PUT",
+      body: JSON.stringify({
+        approved,
+        customerNotes,
+      }),
+    });
+  },
 };
 
 // Auth API

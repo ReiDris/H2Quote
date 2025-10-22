@@ -149,26 +149,10 @@ const CustomerServiceRequestDetails = () => {
     setApprovalError("");
 
     try {
-      const token = localStorage.getItem("h2quote_token");
-      
-      if (!token) {
-        navigate("/login");
-        return;
-      }
-
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:3000/api'}/service-requests/quotations/${requestData.quotationId}/respond`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            approved: true,
-            customerNotes: "Quotation approved by customer"
-          })
-        }
+      const response = await serviceRequestsAPI.approveQuotation(
+        requestData.quotationId,
+        true, // approved
+        "Quotation approved by customer"
       );
 
       const data = await response.json();
