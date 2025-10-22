@@ -40,14 +40,6 @@ const getAllClients = async (req, res) => {
       const createdDate = new Date(company.created_at);
       const currentDate = new Date();
       const yearsAsCustomer = Math.floor((currentDate - createdDate) / (1000 * 60 * 60 * 24 * 365));
-      
-      // Calculate eligible discount based on years as customer
-      let eligibleDiscount = null;
-      if (yearsAsCustomer >= 4) {
-        eligibleDiscount = 10;
-      } else if (yearsAsCustomer >= 2) {
-        eligibleDiscount = 5;
-      }
 
       return {
         client_id: `#CLIENT${company.company_id.toString().padStart(2, '0')}`,
@@ -55,8 +47,7 @@ const getAllClients = async (req, res) => {
         company: company.company_name,
         email: primaryContact.email || company.email,
         contact_number: primaryContact.phone || company.phone || '-',
-        years_as_customer: yearsAsCustomer,
-        eligible_discount: eligibleDiscount
+        years_as_customer: yearsAsCustomer
       };
     });
 

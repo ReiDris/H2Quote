@@ -180,9 +180,6 @@ const ClientProfilesPage = () => {
                   <th className="px-3 py-3 text-center text-xs font-semibold text-black">
                     Years as Customer
                   </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Eligible Discount
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -207,14 +204,11 @@ const ClientProfilesPage = () => {
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
                         {item.years_as_customer}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 text-center">
-                        {item.eligible_discount ? `${item.eligible_discount}%` : '-'}
-                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-3 py-8 text-center text-gray-500">
+                    <td colSpan="6" className="px-3 py-8 text-center text-gray-500">
                       No clients found
                     </td>
                   </tr>
