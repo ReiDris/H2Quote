@@ -29,31 +29,31 @@ const ServiceTracker = () => {
   const fetchServiceRequests = async (page = 1, search = "") => {
     try {
       setLoading(true);
-      
+
       const queryParams = {
         page: page.toString(),
         limit: itemsPerPage.toString(),
-        ...(search && { search })
+        ...(search && { search }),
       };
 
       const response = await serviceRequestsAPI.getAll(queryParams);
 
       if (!response.ok) {
-        throw new Error('Failed to fetch service requests');
+        throw new Error("Failed to fetch service requests");
       }
 
       const data = await response.json();
 
       if (data.success) {
-        console.log('Fetched service requests:', data.data.requests);
+        console.log("Fetched service requests:", data.data.requests);
         setServiceRequests(data.data.requests);
         setTotalCount(data.data.pagination.totalCount);
       } else {
-        setError(data.message || 'Failed to fetch service requests');
+        setError(data.message || "Failed to fetch service requests");
       }
     } catch (error) {
-      console.error('Error fetching service requests:', error);
-      setError('Failed to fetch service requests');
+      console.error("Error fetching service requests:", error);
+      setError("Failed to fetch service requests");
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,12 @@ const ServiceTracker = () => {
   }, [searchTerm]);
 
   const handleMoreActions = (requestNumber) => {
-    const basePath = userRole === "admin" ? "/admin" : userRole === "staff" ? "/staff" : "/admin";
+    const basePath =
+      userRole === "admin"
+        ? "/admin"
+        : userRole === "staff"
+        ? "/staff"
+        : "/admin";
     // Remove # from request number if present
     const cleanRequestNumber = requestNumber.replace("#", "");
     navigate(`${basePath}/service-request/${cleanRequestNumber}`);
@@ -126,13 +131,13 @@ const ServiceTracker = () => {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
     });
   };
 
@@ -142,26 +147,37 @@ const ServiceTracker = () => {
     const chemicalsCount = item.chemicals_count || 0;
     const refrigerantsCount = item.refrigerants_count || 0;
     const totalItems = servicesCount + chemicalsCount + refrigerantsCount;
-    
+
     // Debug logging
     console.log(`Request ${item.request_number}:`, {
       services: servicesCount,
       chemicals: chemicalsCount,
       refrigerants: refrigerantsCount,
       total: totalItems,
-      summary: item.items_summary
+      summary: item.items_summary,
     });
-    
+
     if (totalItems === 0) {
       return "No items found";
     }
 
     const itemCounts = [];
-    if (servicesCount > 0) itemCounts.push(`${servicesCount} Service${servicesCount > 1 ? 's' : ''}`);
-    if (chemicalsCount > 0) itemCounts.push(`${chemicalsCount} Chemical${chemicalsCount > 1 ? 's' : ''}`);
-    if (refrigerantsCount > 0) itemCounts.push(`${refrigerantsCount} Refrigerant${refrigerantsCount > 1 ? 's' : ''}`);
+    if (servicesCount > 0)
+      itemCounts.push(
+        `${servicesCount} Service${servicesCount > 1 ? "s" : ""}`
+      );
+    if (chemicalsCount > 0)
+      itemCounts.push(
+        `${chemicalsCount} Chemical${chemicalsCount > 1 ? "s" : ""}`
+      );
+    if (refrigerantsCount > 0)
+      itemCounts.push(
+        `${refrigerantsCount} Refrigerant${refrigerantsCount > 1 ? "s" : ""}`
+      );
 
-    return `${totalItems} Item${totalItems > 1 ? 's' : ''}: ${itemCounts.join(', ')}`;
+    return `${totalItems} Item${totalItems > 1 ? "s" : ""}: ${itemCounts.join(
+      ", "
+    )}`;
   };
 
   // Calculate total pages
@@ -268,7 +284,14 @@ const ServiceTracker = () => {
                         {formatItemsSummary(item)}
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                        ₱{parseFloat(item.estimated_cost || 0).toLocaleString()}
+                        ₱
+                        {parseFloat(item.estimated_cost || 0).toLocaleString(
+                          "en-US",
+                          {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }
+                        )}
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
                         {item.assigned_staff_name || "-"}
@@ -295,8 +318,13 @@ const ServiceTracker = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="11" className="px-6 py-8 text-center text-gray-500">
-                      {searchTerm ? 'No service requests found matching your search.' : 'No service requests found.'}
+                    <td
+                      colSpan="11"
+                      className="px-6 py-8 text-center text-gray-500"
+                    >
+                      {searchTerm
+                        ? "No service requests found matching your search."
+                        : "No service requests found."}
                     </td>
                   </tr>
                 )}
