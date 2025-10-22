@@ -127,53 +127,44 @@ const CustomerServiceRequestDetails = () => {
     navigate("/customer/messages/compose", {
       state: {
         requestId: requestData?.requestId || requestId,
-        requestNumber: requestData?.id
-      }
+        requestNumber: requestData?.id,
+      },
     });
   };
 
   // ✅ UPDATED: Approve service request directly (no quotation_id needed)
   const handleApproveQuotation = async () => {
-  setApprovalLoading(true);
-  setApprovalError("");
+    setApprovalLoading(true);
+    setApprovalError("");
 
-  try {
-    // ✅ CORRECT: Call the customer approval endpoint
-    const response = await serviceRequestsAPI.approveServiceRequest(
-      requestData.requestId,
-      "Customer approved the service request and pricing"
-    );
+    try {
+      // ✅ CORRECT: Call the customer approval endpoint
+      const response = await serviceRequestsAPI.approveServiceRequest(
+        requestData.requestId,
+        "Customer approved the service request and pricing"
+      );
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (response.ok && data.success) {
-      setApprovalSuccess(true);
-      setApprovalError("");
-      
-      // Wait a moment to show success message, then refresh
-      setTimeout(() => {
-        setShowApprovalModal(false);
-        fetchRequestDetails(); // Refresh the data to show updated status
-      }, 1500);
-    } else {
-      setApprovalError(data.message || "Failed to approve service request");
+      if (response.ok && data.success) {
+        setApprovalSuccess(true);
+        setApprovalError("");
+
+        // Wait a moment to show success message, then refresh
+        setTimeout(() => {
+          setShowApprovalModal(false);
+          fetchRequestDetails(); // Refresh the data to show updated status
+        }, 1500);
+      } else {
+        setApprovalError(data.message || "Failed to approve service request");
+      }
+    } catch (error) {
+      console.error("Approval error:", error);
+      setApprovalError("An error occurred while approving the service request");
+    } finally {
+      setApprovalLoading(false);
     }
-  } catch (error) {
-    console.error("Approval error:", error);
-    setApprovalError("An error occurred while approving the service request");
-  } finally {
-    setApprovalLoading(false);
-  }
-};
-
-
-
-
-
-
-
-
-
+  };
 
   const openApprovalModal = () => {
     setShowApprovalModal(true);
@@ -265,26 +256,26 @@ const CustomerServiceRequestDetails = () => {
                       : "text-gray-400 border-2 border-gray-400"
                   }`}
                 >
-                  {`0${index + 1}`}
+                  {String(index + 1).padStart(2, "0")}
                 </div>
-                <div
-                  className={`mt-2 text-center text-xs md:text-sm ${
+                <span
+                  className={`mt-2 text-sm text-center w-23 h-10 ${
                     index <= currentStep
                       ? "text-[#0260A0] font-semibold"
                       : "text-gray-400"
                   }`}
                 >
-                  <p className="whitespace-pre-line max-w-[80px] md:max-w-none">
-                    {step.label}
-                  </p>
-                </div>
+                  {step.label}
+                </span>
               </div>
               {index < steps.length - 1 && (
-                <div
-                  className={`w-12 md:w-24 h-1 mx-1 md:mx-2 rounded ${
-                    index < currentStep ? "bg-[#0260A0]" : "bg-gray-300"
-                  }`}
-                />
+                <div className="flex items-center -mt-10">
+                  <div
+                    className={`w-2 lg:w-10 xl:w-25 2xl:w-34 h-0.5 flex-shrink-0 ${
+                      index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
+                    }`}
+                  />
+                </div>
               )}
             </div>
           ))}
@@ -669,7 +660,7 @@ const CustomerServiceRequestDetails = () => {
               <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
                 {approvalSuccess ? "Success!" : "Approve Service Request"}
               </h2>
-              
+
               {approvalSuccess ? (
                 <div className="text-center py-4">
                   <div className="flex justify-center mb-4">
@@ -688,15 +679,19 @@ const CustomerServiceRequestDetails = () => {
                     </svg>
                   </div>
                   <p className="text-black text-sm">
-                    Service request approved successfully! TRISHKAYE will proceed with the service.
+                    Service request approved successfully! TRISHKAYE will
+                    proceed with the service.
                   </p>
                 </div>
               ) : (
                 <>
                   <p className="text-black mb-6 text-sm">
-                    Are you sure you want to approve this service request? By approving, you confirm that you have reviewed the services, pricing, and terms, and agree to proceed with TRISHKAYE performing the service.
+                    Are you sure you want to approve this service request? By
+                    approving, you confirm that you have reviewed the services,
+                    pricing, and terms, and agree to proceed with TRISHKAYE
+                    performing the service.
                   </p>
-                  
+
                   {approvalError && (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <p className="text-red-700 text-sm">{approvalError}</p>
