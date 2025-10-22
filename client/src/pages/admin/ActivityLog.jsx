@@ -5,7 +5,7 @@ import {
   Download,
 } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
-import { activityLogsAPI } from "../../services/api";
+import { activityLogsAPI } from "../../config/api";
 
 const ActivityLogPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
