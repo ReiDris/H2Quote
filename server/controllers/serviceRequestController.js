@@ -492,6 +492,7 @@ const getRequestDetails = async (req, res) => {
       queryParams.push(userId);
     }
 
+    // ✅ UPDATED: Added quotation fields and LEFT JOIN
     const requestQuery = `
   SELECT 
     sr.*, 
@@ -500,6 +501,9 @@ const getRequestDetails = async (req, res) => {
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
     TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
+    q.quotation_id,
+    q.quotation_number,
+    q.status as quotation_status,
     CASE 
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -530,6 +534,7 @@ const getRequestDetails = async (req, res) => {
   JOIN users u ON sr.requested_by_user_id = u.user_id
   JOIN companies c ON sr.company_id = c.company_id
   LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+  LEFT JOIN quotations q ON sr.request_id = q.request_id
   WHERE ${whereClause}
 `;
 
@@ -701,6 +706,7 @@ const getRequestDetails = async (req, res) => {
       ];
     }
 
+    // ✅ UPDATED: Return quotation data instead of null
     res.json({
       success: true,
       data: {
@@ -712,10 +718,17 @@ const getRequestDetails = async (req, res) => {
             maximumFractionDigits: 2,
           })}`,
           paymentHistory: paymentHistory,
+          quotation_id: request.quotation_id || null,
+          quotation_number: request.quotation_number || null,
+          quotation_status: request.quotation_status || null,
         },
         items: allItems,
         statusHistory: [],
-        quotation: null,
+        quotation: request.quotation_id ? {
+          quotation_id: request.quotation_id,
+          quotation_number: request.quotation_number,
+          status: request.quotation_status
+        } : null,
       },
     });
   } catch (error) {
@@ -1980,7 +1993,6 @@ const addChemicalsToRequest = async (req, res) => {
   }
 };
 
-// Similarly for refrigerants
 const addRefrigerantsToRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2130,7 +2142,6 @@ const addRefrigerantsToRequest = async (req, res) => {
   }
 };
 
-// Remove chemicals from service request
 const removeChemicalsFromRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2268,7 +2279,6 @@ const removeChemicalsFromRequest = async (req, res) => {
   }
 };
 
-// Remove refrigerants from service request
 const removeRefrigerantsFromRequest = async (req, res) => {
   const client = await pool.connect();
 
@@ -2932,7 +2942,6 @@ const setServiceWarranty = async (req, res) => {
   }
 };
 
-// Add this function to update individual service item warranty
 const updateIndividualServiceWarranty = async (req, res) => {
   const client = await pool.connect();
 

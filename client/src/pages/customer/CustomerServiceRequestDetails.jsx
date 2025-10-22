@@ -13,6 +13,12 @@ const CustomerServiceRequestDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // State for approval modal
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalSuccess, setApprovalSuccess] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+
   const formatPaymentMode = (mode) => {
     const modeMap = {
       bank_transfer: "Bank Transfer",
@@ -97,6 +103,7 @@ const CustomerServiceRequestDetails = () => {
           serviceStartDate: requestDetails.service_start_date || "-",
           estimatedEndDate: requestDetails.estimated_end_date || "-",
           warranty: requestDetails.warranty || "6 months",
+          quotationId: requestDetails.quotation_id || null,
         };
 
         console.log("Setting request data");
@@ -132,9 +139,48 @@ const CustomerServiceRequestDetails = () => {
     });
   };
 
-  const handleApproveQuotation = () => {
-    // TODO: Implement approval logic
-    console.log("Approve quotation clicked");
+  const handleApproveQuotation = async () => {
+    if (!requestData?.quotationId) {
+      setApprovalError("No quotation found for this request");
+      return;
+    }
+
+    setApprovalLoading(true);
+    setApprovalError("");
+
+    try {
+      const response = await serviceRequestsAPI.approveQuotation(
+        requestData.quotationId,
+        true, // approved
+        "Quotation approved by customer"
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setApprovalSuccess(true);
+        setApprovalError("");
+        
+        // Wait a moment to show success message, then refresh
+        setTimeout(() => {
+          setShowApprovalModal(false);
+          fetchRequestDetails(); // Refresh the data to show updated status
+        }, 1500);
+      } else {
+        setApprovalError(data.message || "Failed to approve quotation");
+      }
+    } catch (error) {
+      console.error("Approval error:", error);
+      setApprovalError("An error occurred while approving the quotation");
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
+  const openApprovalModal = () => {
+    setShowApprovalModal(true);
+    setApprovalSuccess(false);
+    setApprovalError("");
   };
 
   const getStatusBadge = (status, type) => {
@@ -221,26 +267,26 @@ const CustomerServiceRequestDetails = () => {
                       : "text-gray-400 border-2 border-gray-400"
                   }`}
                 >
-                  {String(index + 1).padStart(2, "0")}
+                  {`0${index + 1}`}
                 </div>
-                <span
-                  className={`mt-2 text-sm text-center w-23 h-10 ${
+                <div
+                  className={`mt-2 text-center text-xs md:text-sm ${
                     index <= currentStep
                       ? "text-[#0260A0] font-semibold"
                       : "text-gray-400"
                   }`}
                 >
-                  {step.label}
-                </span>
+                  <p className="whitespace-pre-line max-w-[80px] md:max-w-none">
+                    {step.label}
+                  </p>
+                </div>
               </div>
               {index < steps.length - 1 && (
-                <div className="flex items-center -mt-10">
-                  <div
-                    className={`w-2 lg:w-10 xl:w-25 2xl:w-34 h-0.5 flex-shrink-0 ${
-                      index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
-                    }`}
-                  />
-                </div>
+                <div
+                  className={`w-12 md:w-24 h-1 mx-1 md:mx-2 rounded ${
+                    index < currentStep ? "bg-[#0260A0]" : "bg-gray-300"
+                  }`}
+                />
               )}
             </div>
           ))}
@@ -252,11 +298,8 @@ const CustomerServiceRequestDetails = () => {
   if (loading) {
     return (
       <CustomerLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading request details...</p>
-          </div>
+        <div className="flex justify-center items-center h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#004785]"></div>
         </div>
       </CustomerLayout>
     );
@@ -266,15 +309,9 @@ const CustomerServiceRequestDetails = () => {
     return (
       <CustomerLayout>
         <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             {error}
           </div>
-          <button
-            onClick={() => navigate("/customer/service-tracker")}
-            className="mt-4 text-blue-600 hover:text-blue-800"
-          >
-            Back to Service Tracker
-          </button>
         </div>
       </CustomerLayout>
     );
@@ -283,14 +320,8 @@ const CustomerServiceRequestDetails = () => {
   if (!requestData) {
     return (
       <CustomerLayout>
-        <div className="text-center py-12">
-          <p className="text-gray-500">Request not found</p>
-          <button
-            onClick={() => navigate("/customer/service-tracker")}
-            className="mt-4 text-blue-600 hover:text-blue-800"
-          >
-            Back to Service Tracker
-          </button>
+        <div className="p-6">
+          <div className="text-center text-gray-500">No data available</div>
         </div>
       </CustomerLayout>
     );
@@ -298,367 +329,437 @@ const CustomerServiceRequestDetails = () => {
 
   return (
     <CustomerLayout>
-      <div className="pt-5">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/customer/service-tracker")}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
-          >
-            <ArrowLeft size={20} />
-            Back
-          </button>
-        </div>
+      <div className="p-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-[#004785] hover:text-[#003366] mb-6 cursor-pointer"
+        >
+          <ArrowLeft size={20} />
+          <span className="font-medium">Back</span>
+        </button>
 
-        <div className="p-6">
-          <StatusTracker />
-        </div>
+        <StatusTracker />
 
-        {/* Approval Notification Banner */}
+        {/* Quotation Approval Alert - Only show when status is "Waiting for Approval" */}
         {requestData.serviceStatus === "Waiting for Approval" && (
-          <div className="mx-6 mb-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-1">
-                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">!</span>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-[#004785] font-semibold text-base mb-2">
-                    Quotation Revised – Please Review
-                  </h3>
-                  <p className="text-gray-700 text-sm mb-4">
-                    The final quotation for your request has been updated.
-                    Please review the details before proceeding.
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-blue-500"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-blue-800">
+                  Quotation Revised – Please Review
+                </h3>
+                <div className="mt-2 text-sm text-blue-700">
+                  <p>
+                    The final quotation for your request has been updated. Please review the details before proceeding.
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <button
-                      onClick={handleMessageTrishkaye}
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-[#004785] text-[#004785] rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-sm font-medium"
-                    >
-                      <MessageCircle size={18} />
-                      Message TRISHKAYE
-                    </button>
-                    <button
-                      onClick={handleApproveQuotation}
-                      className="px-4 py-3 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer text-sm font-medium"
-                    >
-                      Approve Updated Quotation
-                    </button>
-                  </div>
+                </div>
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={handleMessageTrishkaye}
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-[#004785] text-[#004785] text-sm font-medium rounded-lg hover:bg-[#004785] hover:text-white transition-colors cursor-pointer"
+                  >
+                    <MessageCircle size={16} />
+                    Message TRISHKAYE
+                  </button>
+                  <button
+                    onClick={openApprovalModal}
+                    className="inline-flex items-center px-4 py-2 bg-[#004785] text-white text-sm font-medium rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
+                  >
+                    Approve Updated Quotation
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        <div className="p-6">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Service Details
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Request ID:
-              </label>
-              <span className="text-sm text-gray-800">{requestData.id}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Service Status:
-              </label>
-              {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Requested At:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.requestedAt}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Warranty:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.warranty}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Warranty Status:
-              </label>
-              {getStatusBadge(requestData.warrantyStatus, "warrantyStatus")}
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Assigned Staff:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.assignedStaff}
-              </span>
+        <div className="bg-white rounded-lg shadow-md">
+          <div className="p-6">
+            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+              Service Details
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Request ID:
+                </label>
+                <span className="text-sm text-gray-800">{requestData.id}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 mr-2">
+                  Service Status:
+                </label>
+                {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Requested At:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.requestedAt}
+                </span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Warranty:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.warranty}
+                </span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Warranty Status:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.warrantyStatus}
+                </span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Assigned Staff:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.assignedStaff}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-4">
+          <div className="p-6">
+            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
               List of Requested Services:
-            </label>
-          </div>
+            </h2>
 
-          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Service Category
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Service
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Remarks
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Quantity
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Unit Price
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Total Price
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {requestData.services.map((service, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.category}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.service}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.remarks}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.quantity}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.unitPrice}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.totalPrice}
-                    </td>
+            <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Category
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Service
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Remarks
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Qty
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Unit Price
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Total Price
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-[#0260A0]">
-                {requestData.totalCost}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Payment
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Mode of Payment:
-              </label>
-              <span className="text-sm text-gray-800">
-                {formatPaymentMode(requestData.paymentMode)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Payment Status:
-              </label>
-              {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Payment Terms:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.paymentTerms}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Payment Deadline:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.paymentDeadline}
-              </span>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {requestData.services.map((service, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {service.category}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {service.service}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {service.remarks}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {service.quantity}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {service.unitPrice}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {service.totalPrice}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-4">
-              Payment Breakdown:
-            </label>
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-[#0260A0]">
+                  {requestData.totalCost}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Payment Phase
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Percentage
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Amount
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Proof of Payment
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Paid On
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Status
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {requestData.paymentHistory.map((payment, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.phase}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.percentage}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.amount}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.proofOfPayment === "-" ? (
-                        <span className="text-gray-400">Not uploaded</span>
-                      ) : (
+          <div className="p-6">
+            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+              Payment
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Mode of Payment:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {formatPaymentMode(requestData.paymentMode)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 mr-2">
+                  Payment Status:
+                </label>
+                {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Payment Terms:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.paymentTerms}
+                </span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Payment Deadline:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.paymentDeadline}
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-4">
+                Payment Breakdown:
+              </label>
+            </div>
+
+            <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Payment Phase
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Percentage
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Amount
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Proof of Payment
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Paid On
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Status
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {requestData.paymentHistory.map((payment, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {payment.phase}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {payment.percentage}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {payment.amount}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {payment.proofOfPayment === "-" ? (
+                          <span className="text-gray-400">Not uploaded</span>
+                        ) : (
+                          <button
+                            onClick={() =>
+                              handleViewProof(
+                                payment.payment_id,
+                                payment.proofOfPayment
+                              )
+                            }
+                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
+                          >
+                            <Eye size={16} />
+                            View
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {payment.paidOn}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                        {getStatusBadge(payment.paymentStatus, "paymentStatus")}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-center">
                         <button
-                          onClick={() =>
-                            handleViewProof(
-                              payment.payment_id,
-                              payment.proofOfPayment
-                            )
-                          }
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 mx-auto cursor-pointer"
+                          onClick={() => {
+                            setSelectedPaymentId(payment.payment_id);
+                            setIsUploadModalOpen(true);
+                          }}
+                          className="flex items-center gap-1 px-3 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] mx-auto text-xs cursor-pointer"
                         >
-                          <Eye size={16} />
-                          View
+                          <Upload size={14} />
+                          {payment.proofOfPayment === "-" ? "Upload" : "Update"}
                         </button>
-                      )}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.paidOn}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {getStatusBadge(payment.paymentStatus, "paymentStatus")}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-center">
-                      <button
-                        onClick={() => {
-                          setSelectedPaymentId(payment.payment_id);
-                          setIsUploadModalOpen(true);
-                        }}
-                        className="flex items-center gap-1 px-3 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] mx-auto text-xs cursor-pointer"
-                      >
-                        <Upload size={14} />
-                        {payment.proofOfPayment === "-" ? "Upload" : "Update"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="p-6 mb-10">
+            <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
+              Duration
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Estimated Duration:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.estimatedDuration}
+                </span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Service Start Date:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.serviceStartDate}
+                </span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Request Acknowledged On:
+                </label>
+                <span className="text-sm text-gray-800">-</span>
+              </div>
+              <div>
+                <label className="inline text-sm font-medium text-gray-700 mr-2">
+                  Service End Date:
+                </label>
+                <span className="text-sm text-gray-800">
+                  {requestData.estimatedEndDate}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="p-6 mb-10">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Duration
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Estimated Duration:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.estimatedDuration}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Service Start Date:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.serviceStartDate}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Request Acknowledged On:
-              </label>
-              <span className="text-sm text-gray-800">-</span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Service End Date:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.estimatedEndDate}
-              </span>
+        {/* Approval Confirmation Modal */}
+        {showApprovalModal && (
+          <div className="fixed inset-0 bg-black/60 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md mx-4">
+              <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
+                {approvalSuccess ? "Success!" : "Approve Quotation"}
+              </h2>
+              
+              {approvalSuccess ? (
+                <div className="text-center py-4">
+                  <div className="flex justify-center mb-4">
+                    <svg
+                      className="h-16 w-16 text-green-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-black text-sm">
+                    Quotation approved successfully! The service request will now proceed to the next stage.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-black mb-6 text-sm">
+                    Are you sure you want to approve this quotation? By approving, you confirm that you have reviewed the updated quotation details and agree to proceed with the service.
+                  </p>
+                  
+                  {approvalError && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-red-700 text-sm">{approvalError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowApprovalModal(false)}
+                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      disabled={approvalLoading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleApproveQuotation}
+                      className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={approvalLoading}
+                    >
+                      {approvalLoading ? "Approving..." : "Approve"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Payment Proof Modals */}
+        <PaymentProofUploadModal
+          isOpen={isUploadModalOpen}
+          onClose={() => {
+            setIsUploadModalOpen(false);
+            setSelectedPaymentId(null);
+          }}
+          paymentId={selectedPaymentId}
+          currentProof={
+            requestData?.paymentHistory.find(
+              (p) => p.payment_id === selectedPaymentId
+            )?.proofOfPayment || "-"
+          }
+          onSuccess={handleUploadSuccess}
+        />
+
+        <PaymentProofViewer
+          isOpen={isViewerOpen}
+          onClose={() => {
+            setIsViewerOpen(false);
+            setViewingPaymentId(null);
+          }}
+          paymentId={viewingPaymentId}
+          fileName={viewingFileName}
+        />
       </div>
-
-      {/* Payment Proof Modals */}
-      <PaymentProofUploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => {
-          setIsUploadModalOpen(false);
-          setSelectedPaymentId(null);
-        }}
-        paymentId={selectedPaymentId}
-        currentProof={
-          requestData?.paymentHistory.find(
-            (p) => p.payment_id === selectedPaymentId
-          )?.proofOfPayment || "-"
-        }
-        onSuccess={handleUploadSuccess}
-      />
-
-      <PaymentProofViewer
-        isOpen={isViewerOpen}
-        onClose={() => {
-          setIsViewerOpen(false);
-          setViewingPaymentId(null);
-        }}
-        paymentId={viewingPaymentId}
-        fileName={viewingFileName}
-      />
     </CustomerLayout>
   );
 };
