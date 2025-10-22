@@ -134,37 +134,46 @@ const CustomerServiceRequestDetails = () => {
 
   // ✅ UPDATED: Approve service request directly (no quotation_id needed)
   const handleApproveQuotation = async () => {
-    setApprovalLoading(true);
-    setApprovalError("");
+  setApprovalLoading(true);
+  setApprovalError("");
 
-    try {
-      // Instead of calling quotation approval, we update the service request status
-      const response = await serviceRequestsAPI.updateRequest(requestData.requestId, {
-        serviceStatus: "Approved", // Change status to Approved
-        customerApprovalNotes: "Customer approved the service request and pricing"
-      });
+  try {
+    // ✅ CORRECT: Call the customer approval endpoint
+    const response = await serviceRequestsAPI.approveServiceRequest(
+      requestData.requestId,
+      "Customer approved the service request and pricing"
+    );
 
-      const data = await response.json();
+    const data = await response.json();
 
-      if (response.ok && data.success) {
-        setApprovalSuccess(true);
-        setApprovalError("");
-        
-        // Wait a moment to show success message, then refresh
-        setTimeout(() => {
-          setShowApprovalModal(false);
-          fetchRequestDetails(); // Refresh the data to show updated status
-        }, 1500);
-      } else {
-        setApprovalError(data.message || "Failed to approve service request");
-      }
-    } catch (error) {
-      console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the service request");
-    } finally {
-      setApprovalLoading(false);
+    if (response.ok && data.success) {
+      setApprovalSuccess(true);
+      setApprovalError("");
+      
+      // Wait a moment to show success message, then refresh
+      setTimeout(() => {
+        setShowApprovalModal(false);
+        fetchRequestDetails(); // Refresh the data to show updated status
+      }, 1500);
+    } else {
+      setApprovalError(data.message || "Failed to approve service request");
     }
-  };
+  } catch (error) {
+    console.error("Approval error:", error);
+    setApprovalError("An error occurred while approving the service request");
+  } finally {
+    setApprovalLoading(false);
+  }
+};
+
+
+
+
+
+
+
+
+
 
   const openApprovalModal = () => {
     setShowApprovalModal(true);
