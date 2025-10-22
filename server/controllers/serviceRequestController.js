@@ -3015,7 +3015,145 @@ const updateIndividualServiceWarranty = async (req, res) => {
   }
 };
 
+const approveServiceRequest = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { requestId } = req.params;
+    const { customerNotes } = req.body;
+    const customerId = req.user.id;
+
+    const requestQuery = `
+      SELECT sr.*, rs.status_name,
+             CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+             u.email as customer_email
+      FROM service_requests sr
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      WHERE sr.request_id = $1 AND sr.requested_by_user_id = $2
+    `;
+    const requestResult = await client.query(requestQuery, [requestId, customerId]);
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found or you don't have permission to approve it",
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (request.status_name !== "Quote Sent") {
+      return res.status(400).json({
+        success: false,
+        message: `Service request cannot be approved. Current status: ${request.status_name}`,
+      });
+    }
+
+    const statusResult = await client.query(
+      "SELECT status_id FROM request_statuses WHERE status_name = $1",
+      ["Quote Approved"]
+    );
+    
+    if (statusResult.rows.length === 0) {
+      throw new Error("Quote Approved status not found in database");
+    }
+
+    const approvedStatusId = statusResult.rows[0].status_id;
+
+    await client.query(
+      `
+      UPDATE service_requests 
+      SET status_id = $1, 
+          client_approved_date = NOW(),
+          updated_at = NOW()
+      WHERE request_id = $2
+    `,
+      [approvedStatusId, requestId]
+    );
+
+    await client.query(
+      `
+      INSERT INTO request_status_history 
+      (request_id, from_status_id, to_status_id, changed_by, change_reason, changed_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+    `,
+      [
+        requestId,
+        request.status_id,
+        approvedStatusId,
+        customerId,
+        customerNotes || "Customer approved the service request",
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    try {
+      const message = `You have approved the service request #${request.request_number}. TRISHKAYE will begin work shortly. Thank you for your confirmation!`;
+
+      await createServiceRequestNotification(
+        customerId,
+        request.request_number,
+        requestId,
+        "Quote Approved",
+        message
+      );
+
+      console.log(`Approval confirmation sent to ${request.customer_email}`);
+    } catch (notifError) {
+      console.error("Failed to send approval confirmation:", notifError);
+    }
+
+    try {
+      const staffQuery = `
+        SELECT user_id, email FROM users 
+        WHERE user_type IN ('admin', 'staff') AND status = 'Active'
+      `;
+      const staffResult = await pool.query(staffQuery);
+
+      for (const staff of staffResult.rows) {
+        await createNotification(
+          staff.user_id,
+          "Service Request Approved",
+          `Approved - ${request.request_number}`,
+          `Customer ${request.customer_name} has approved service request #${request.request_number}. ${
+            customerNotes ? `Note: ${customerNotes}` : "You can now proceed with the service."
+          }`,
+          staff.email
+        );
+      }
+
+      console.log(`Admin/staff notifications sent about approval`);
+    } catch (notifError) {
+      console.error("Failed to notify staff:", notifError);
+    }
+
+    res.json({
+      success: true,
+      message: "Service request approved successfully",
+      data: {
+        requestId: requestId,
+        status: "Quote Approved",
+        approvedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Approve service request error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to approve service request",
+    });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
+  approveServiceRequest,
   createServiceRequest,
   getCustomerRequests,
   getRequestDetails,
