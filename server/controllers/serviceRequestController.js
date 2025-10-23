@@ -2870,6 +2870,73 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
+    // ✅ FIXED: Recalculate payment breakdown amounts when discount changes
+    if (discount !== undefined) {
+      // Get the current subtotal (before discount)
+      const subtotalQuery = `
+        SELECT 
+          COALESCE(
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = $1) +
+            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = $1) +
+            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = $1),
+            0
+          ) as subtotal,
+          sr.payment_terms,
+          sr.downpayment_percentage
+        FROM service_requests sr
+        WHERE sr.request_id = $1
+      `;
+      
+      const subtotalResult = await client.query(subtotalQuery, [requestId]);
+      const { subtotal, payment_terms, downpayment_percentage } = subtotalResult.rows[0];
+      
+      // Calculate total after discount
+      const discountAmount = (subtotal * discountPercentage) / 100;
+      const totalAfterDiscount = subtotal - discountAmount;
+      
+      // Get existing payment records to update
+      const paymentsQuery = `
+        SELECT payment_id, payment_phase 
+        FROM payments 
+        WHERE request_id = $1 
+        ORDER BY payment_phase
+      `;
+      const paymentsResult = await client.query(paymentsQuery, [requestId]);
+      
+      if (paymentsResult.rows.length > 0) {
+        // Recalculate amounts based on payment structure
+        if (payment_terms === "Full" || paymentsResult.rows.length === 1) {
+          // Full Payment: update single payment to full discounted amount
+          await client.query(
+            `UPDATE payments 
+             SET amount = $1, updated_at = NOW() 
+             WHERE request_id = $2 AND payment_phase = 'Full Payment'`,
+            [totalAfterDiscount, requestId]
+          );
+        } else {
+          // Down Payment structure: recalculate both payments
+          const downpaymentPercent = downpayment_percentage || 50;
+          const downpaymentAmount = Math.round((totalAfterDiscount * downpaymentPercent) / 100);
+          const remainingAmount = totalAfterDiscount - downpaymentAmount;
+          
+          await client.query(
+            `UPDATE payments 
+             SET amount = $1, updated_at = NOW() 
+             WHERE request_id = $2 AND payment_phase = 'Down Payment'`,
+            [downpaymentAmount, requestId]
+          );
+          
+          await client.query(
+            `UPDATE payments 
+             SET amount = $1, updated_at = NOW() 
+             WHERE request_id = $2 AND payment_phase = 'Completion Balance'`,
+            [remainingAmount, requestId]
+          );
+        }
+      }
+    }
+
+    // Update payment statuses if provided
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
         await client.query(
@@ -2885,11 +2952,10 @@ const updateServiceRequest = async (req, res) => {
 
      try {
       const changesLog = {};
-      if (newStatusId !== currentRequest.status_id) changesLog.status_updated = true;
+      if (statusId !== currentRequest.status_id) changesLog.status_updated = true;
       if (paymentStatus) changesLog.payment_status = paymentStatus;
       if (assignedStaffId) changesLog.staff_assigned = staffName;
       if (serviceStartDate) changesLog.service_start_date = serviceStartDate;
-      if (serviceEndDate) changesLog.service_end_date = serviceEndDate;
 
       await supabase.from('audit_log').insert({
         table_name: 'service_requests',
