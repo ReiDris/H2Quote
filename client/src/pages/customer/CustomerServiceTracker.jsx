@@ -98,10 +98,7 @@ const CustomerServiceTracker = () => {
           warrantyStatus: item.warranty_status || "N/A",
           totalCost: formatCurrency(item.estimated_cost),
           requestId: item.request_id, // Keep original ID for navigation
-          // Store raw data for potential tooltip or detailed view
-          servicesCount: item.services_count || 0,
-          chemicalsCount: item.chemicals_count || 0,
-          refrigerantsCount: item.refrigerants_count || 0,
+          // Store raw data for search functionality
           itemsSummary: item.items_summary
         }));
 
@@ -277,24 +274,10 @@ const CustomerServiceTracker = () => {
                       {item.requestedAt}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      <div className="flex flex-wrap gap-1">
-                        {item.serviceCategory.split(", ").map((cat, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium"
-                          >
-                            {cat}
-                          </span>
-                        ))}
-                      </div>
+                      {item.serviceCategory}
                     </td>
-                    <td 
-                      className="px-3 py-4 text-xs xl:text-sm text-gray-800 max-w-xs"
-                      title={item.itemsSummary} // Show full details on hover
-                    >
-                      <div className="line-clamp-2">
-                        {item.requestedService}
-                      </div>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                      {item.requestedService}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
                       {item.assignedStaff || "-"}
