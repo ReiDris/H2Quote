@@ -1,67 +1,134 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LucideArrowLeft,
   LucideArrowRight,
   Download,
 } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
+import { activityLogsAPI } from "../../config/api";
 
 const ActivityLogPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [pagination, setPagination] = useState({
+    totalPages: 1,
+    totalRecords: 0,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    searchTerm: "",
+  });
 
-  // Mock data for activity log
-  const mockData = [
-    {
-      userId: "#USER01",
-      name: "Trish Kaye",
-      role: "Administrator",
-      date: "Jan 6, 2022",
-      time: "10:00 AM",
-      action: "Sent billing notification for overdue payment...",
-    },
-    {
-      userId: "#USER04",
-      name: "John Doe",
-      role: "Staff",
-      date: "Jan 6, 2022",
-      time: "10:00 AM",
-      action: "Marked \"Pipeline Disinfection\" request as Co...",
-    },
-    {
-      userId: "#USER03",
-      name: "Juan Dela Cruz",
-      role: "Staff",
-      date: "Jan 6, 2022",
-      time: "10:00 AM",
-      action: "Approved pricing for Water Tank Cleaning",
-    },
-    {
-      userId: "#USER04",
-      name: "Trish Kaye",
-      role: "Admin",
-      date: "Jan 6, 2022",
-      time: "10:00 AM",
-      action: "Assigned Staff Joe Pritz to handle \"RTC Chem...",
-    },
-  ];
+  // Fetch activity logs from API
+  const fetchActivityLogs = async (page = 1) => {
+    setLoading(true);
+    try {
+      const params = {
+        page: page,
+        limit: 10,
+        ...(filters.startDate && { startDate: filters.startDate }),
+        ...(filters.endDate && { endDate: filters.endDate }),
+        ...(filters.searchTerm && { searchTerm: filters.searchTerm }),
+      };
 
-  const handleExport = () => {
-    // Handle export logic here
-    console.log("Exporting activity log...");
+      const response = await activityLogsAPI.getActivityLogs(params);
+      const data = await response.json();
+
+      if (data.success) {
+        setActivityLogs(data.data);
+        setPagination(data.pagination);
+      }
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      // Optionally show error message to user
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const totalPages = Math.ceil(mockData.length / 10);
-  const startIndex = (currentPage - 1) * 10;
-  const endIndex = startIndex + 10;
-  const paginatedData = mockData.slice(startIndex, endIndex);
+  // Fetch logs on component mount and when page or filters change
+  useEffect(() => {
+    fetchActivityLogs(currentPage);
+  }, [currentPage]);
+
+  // Handle export to CSV
+  const handleExport = async () => {
+    try {
+      const params = {
+        ...(filters.startDate && { startDate: filters.startDate }),
+        ...(filters.endDate && { endDate: filters.endDate }),
+        ...(filters.searchTerm && { searchTerm: filters.searchTerm }),
+      };
+
+      const response = await activityLogsAPI.exportActivityLogs(params);
+      const blob = await response.blob();
+
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `activity_logs_${new Date().toISOString().split("T")[0]}.csv`
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      console.log("Activity log exported successfully");
+    } catch (error) {
+      console.error("Error exporting activity logs:", error);
+      // Optionally show error message to user
+    }
+  };
+
+  // Handle filter changes
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Apply filters
+  const applyFilters = () => {
+    setCurrentPage(1);
+    fetchActivityLogs(1);
+  };
+
+  // Reset filters
+  const resetFilters = () => {
+    setFilters({
+      startDate: "",
+      endDate: "",
+      searchTerm: "",
+    });
+    setCurrentPage(1);
+    // Fetch without filters
+    setTimeout(() => {
+      fetchActivityLogs(1);
+    }, 100);
+  };
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+  };
 
   return (
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785]">Activity Log</h1>
-          <button 
+          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785]">
+            Activity Log
+          </h1>
+          <button
             onClick={handleExport}
             className="flex items-center gap-2 px-15 py-3 border border-gray-300 rounded-md hover:border-gray-400 duration-200 cursor-pointer text-[#0083E2]"
           >
@@ -70,67 +137,134 @@ const ActivityLogPage = () => {
           </button>
         </div>
 
+        {/* Filters Section */}
+        <div className="bg-white rounded-md shadow-sm border border-gray-200 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                name="startDate"
+                value={filters.startDate}
+                onChange={handleFilterChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#004785]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                name="endDate"
+                value={filters.endDate}
+                onChange={handleFilterChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#004785]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Search
+              </label>
+              <input
+                type="text"
+                name="searchTerm"
+                value={filters.searchTerm}
+                onChange={handleFilterChange}
+                placeholder="Search user or action..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#004785]"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <button
+                onClick={applyFilters}
+                className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-md hover:bg-[#003366] transition-colors duration-200"
+              >
+                Apply
+              </button>
+              <button
+                onClick={resetFilters}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors duration-200"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Table Section */}
         <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    User ID
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Name
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Role
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Date
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Time
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedData.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
-                      {item.userId}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.name}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.role}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.date}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
-                      {item.time}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
-                      {item.action}
-                    </td>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-gray-500">Loading activity logs...</div>
+              </div>
+            ) : activityLogs.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-gray-500">No activity logs found</div>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                      User ID
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                      Name
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                      Role
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                      Date
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                      Time
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {activityLogs.map((item, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                        {item.userId}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.name}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.role}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.date}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                        {item.time}
+                      </td>
+                      <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                        {item.action}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Pagination */}
           <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
             {/* Previous Button */}
             <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!pagination.hasPrevPage || loading}
               className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
-                currentPage === 1
+                !pagination.hasPrevPage || loading
                   ? "text-gray-400 cursor-not-allowed border-gray-400"
                   : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
               }`}
@@ -141,14 +275,14 @@ const ActivityLogPage = () => {
 
             {/* Page Numbers - Centered */}
             <div className="flex items-center space-x-3">
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
                 let pageNum;
-                if (totalPages <= 5) {
+                if (pagination.totalPages <= 5) {
                   pageNum = i + 1;
                 } else if (currentPage <= 3) {
                   pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
+                } else if (currentPage >= pagination.totalPages - 2) {
+                  pageNum = pagination.totalPages - 4 + i;
                 } else {
                   pageNum = currentPage - 2 + i;
                 }
@@ -156,12 +290,13 @@ const ActivityLogPage = () => {
                 return (
                   <button
                     key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
+                    onClick={() => handlePageChange(pageNum)}
+                    disabled={loading}
                     className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
                       currentPage === pageNum
                         ? "bg-gray-200 text-gray-600"
                         : "text-gray-600 hover:bg-gray-100"
-                    }`}
+                    } ${loading ? "cursor-not-allowed opacity-50" : ""}`}
                   >
                     {pageNum}
                   </button>
@@ -169,14 +304,15 @@ const ActivityLogPage = () => {
               })}
 
               {/* Ellipsis if needed */}
-              {totalPages > 5 && currentPage < totalPages - 2 && (
+              {pagination.totalPages > 5 && currentPage < pagination.totalPages - 2 && (
                 <>
                   <span className="px-2 py-2 text-base text-gray-400">...</span>
                   <button
-                    onClick={() => setCurrentPage(totalPages)}
+                    onClick={() => handlePageChange(pagination.totalPages)}
+                    disabled={loading}
                     className="px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
                   >
-                    {totalPages}
+                    {pagination.totalPages}
                   </button>
                 </>
               )}
@@ -184,12 +320,10 @@ const ActivityLogPage = () => {
 
             {/* Next Button */}
             <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-              }
-              disabled={currentPage === totalPages}
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!pagination.hasNextPage || loading}
               className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
-                currentPage === totalPages
+                !pagination.hasNextPage || loading
                   ? "text-gray-400 cursor-not-allowed border-gray-400"
                   : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
               }`}
@@ -199,6 +333,13 @@ const ActivityLogPage = () => {
             </button>
           </div>
         </div>
+
+        {/* Pagination Info */}
+        {!loading && activityLogs.length > 0 && (
+          <div className="text-sm text-gray-600 text-center">
+            Showing page {currentPage} of {pagination.totalPages} ({pagination.totalRecords} total records)
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
