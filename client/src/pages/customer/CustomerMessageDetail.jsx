@@ -51,7 +51,6 @@ const CustomerMessageDetail = () => {
         const data = await response.json();
 
         if (data.success) {
-          // Refresh message details to show new reply
           await fetchMessageDetails();
           setReplyMessage("");
         } else {
@@ -125,7 +124,6 @@ const CustomerMessageDetail = () => {
   return (
     <CustomerLayout>
       <div className="space-y-6">
-        {/* Back Button */}
         <div>
           <button
             onClick={handleBack}
@@ -136,19 +134,15 @@ const CustomerMessageDetail = () => {
           </button>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             {error}
           </div>
         )}
 
-        {/* Message Content */}
         {messageData && (
           <>
-            {/* Original Message */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              {/* Sender Info */}
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
                   <span className="text-sm font-medium text-gray-700">
@@ -165,14 +159,12 @@ const CustomerMessageDetail = () => {
                 </div>
               </div>
 
-              {/* Subject */}
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">
                   {messageData.message.subject}
                 </h2>
               </div>
 
-              {/* Message Text */}
               <div className="mb-6">
                 <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
                   {messageData.message.content}
@@ -180,7 +172,6 @@ const CustomerMessageDetail = () => {
               </div>
             </div>
 
-            {/* Replies */}
             {messageData.replies && messageData.replies.length > 0 && (
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900">Replies</h3>
@@ -205,7 +196,6 @@ const CustomerMessageDetail = () => {
               </div>
             )}
 
-            {/* Reply Section */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Reply</h3>
               <div className="relative">

@@ -83,4 +83,29 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticateToken };
+// ✅ NEW: Authorization middleware to check user roles
+const authorizeRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const userRole = req.user.userType;
+    
+    if (!allowedRoles.includes(userRole)) {
+      console.log(`❌ Access denied for user ${req.user.email} with role ${userRole}. Required: ${allowedRoles.join(', ')}`);
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to access this resource'
+      });
+    }
+
+    console.log(`✅ Authorization successful for user ${req.user.email} with role ${userRole}`);
+    next();
+  };
+};
+
+module.exports = { authenticateToken, authorizeRoles };

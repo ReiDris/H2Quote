@@ -81,6 +81,7 @@ const getActivityLogs = async (req, res) => {
     const totalRecords = parseInt(countResult.rows[0].total);
 
     // Get paginated logs with user details
+    // JOIN with users table based on changed_by email, not record_id
     const logsQuery = `
       SELECT 
         al.log_id,
@@ -98,7 +99,7 @@ const getActivityLogs = async (req, res) => {
         CONCAT(u.first_name, ' ', u.last_name) as user_name,
         u.user_type as role
       FROM audit_log al
-      LEFT JOIN users u ON al.record_id = u.user_id AND al.table_name = 'users'
+      LEFT JOIN users u ON al.changed_by = u.email
       ${whereClause}
       ORDER BY al.created_at DESC
       LIMIT $${paramCount} OFFSET $${paramCount + 1}
@@ -122,20 +123,23 @@ const getActivityLogs = async (req, res) => {
         hour12: true,
       });
 
-      // Determine user ID display
-      let userIdDisplay = `#USER${String(log.record_id).padStart(2, "0")}`;
-      if (log.table_name !== "users") {
-        userIdDisplay = `#REC${String(log.record_id).padStart(2, "0")}`;
+      // Determine user ID display based on who made the change
+      let userIdDisplay = "SYSTEM";
+      if (log.user_id) {
+        userIdDisplay = `#USER${String(log.user_id).padStart(2, "0")}`;
       }
 
       // Get user name and role
       let name = log.user_name || "System";
       let role = log.role ? log.role.charAt(0).toUpperCase() + log.role.slice(1) : "System";
 
-      // If changed_by exists, try to extract name from email
+      // If changed_by exists but no user found, extract name from email
       if (log.changed_by && !log.user_name) {
         const emailName = log.changed_by.split("@")[0];
-        name = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+        name = emailName.replace(/[._-]/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
       }
 
       return {
@@ -250,7 +254,7 @@ const exportActivityLogs = async (req, res) => {
         CONCAT(u.first_name, ' ', u.last_name) as user_name,
         u.user_type as role
       FROM audit_log al
-      LEFT JOIN users u ON al.record_id = u.user_id AND al.table_name = 'users'
+      LEFT JOIN users u ON al.changed_by = u.email
       ${whereClause}
       ORDER BY al.created_at DESC
     `;
@@ -278,9 +282,9 @@ const exportActivityLogs = async (req, res) => {
         hour12: true,
       });
 
-      let userIdDisplay = `#USER${String(log.record_id).padStart(2, "0")}`;
-      if (log.table_name !== "users") {
-        userIdDisplay = `#REC${String(log.record_id).padStart(2, "0")}`;
+      let userIdDisplay = "SYSTEM";
+      if (log.user_id) {
+        userIdDisplay = `#USER${String(log.user_id).padStart(2, "0")}`;
       }
 
       let name = log.user_name || "System";
@@ -288,7 +292,10 @@ const exportActivityLogs = async (req, res) => {
 
       if (log.changed_by && !log.user_name) {
         const emailName = log.changed_by.split("@")[0];
-        name = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+        name = emailName.replace(/[._-]/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
       }
 
       return {
@@ -372,7 +379,9 @@ const getActivityLogStats = async (req, res) => {
         COUNT(CASE WHEN action = 'UPDATE' THEN 1 END) as total_updates,
         COUNT(CASE WHEN action = 'DELETE' THEN 1 END) as total_deletes,
         COUNT(CASE WHEN table_name = 'users' THEN 1 END) as user_activities,
-        COUNT(CASE WHEN table_name = 'service_requests' THEN 1 END) as service_request_activities
+        COUNT(CASE WHEN table_name = 'service_requests' THEN 1 END) as service_request_activities,
+        COUNT(CASE WHEN table_name = 'messages' THEN 1 END) as message_activities,
+        COUNT(CASE WHEN table_name = 'quotations' THEN 1 END) as quotation_activities
       FROM audit_log
       ${whereClause}
     `;

@@ -20,59 +20,100 @@ const CustomerServiceTracker = () => {
 
   const itemsPerPage = 10;
 
+  // Helper function to parse service category from counts
+  const parseServiceCategory = (servicesCount, chemicalsCount, refrigerantsCount) => {
+    const categories = [];
+    
+    if (servicesCount > 0) categories.push("Services");
+    if (chemicalsCount > 0) categories.push("Chemicals");
+    if (refrigerantsCount > 0) categories.push("Refrigerants");
+    
+    return categories.length > 0 ? categories.join(", ") : "-";
+  };
+
+  // Helper function to parse requested service details from items_summary
+  const parseRequestedService = (itemsSummary) => {
+    if (!itemsSummary) return "-";
+    
+    // The items_summary comes as: "2x Service Name (Service), 1x Chemical Name (Chemical)"
+    // We'll split it and clean it up for display
+    const items = itemsSummary.split(", ");
+    
+    if (items.length === 0) return "-";
+    
+    // For better readability, we'll format each item
+    const formattedItems = items.map(item => {
+      // Remove the type suffix in parentheses for cleaner display
+      return item.replace(/\s*\((Service|Chemical|Refrigerant)\)/, '');
+    });
+    
+    // If there are too many items, show first few and add count
+    if (formattedItems.length > 3) {
+      return `${formattedItems.slice(0, 3).join(", ")} +${formattedItems.length - 3} more`;
+    }
+    
+    return formattedItems.join(", ");
+  };
+
   // Fetch customer requests from API
   const fetchCustomerRequests = async () => {
-  try {
-    setLoading(true);
-    const token = localStorage.getItem('h2quote_token');
-    
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
-    const response = await serviceRequestsAPI.getMyRequests();
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('h2quote_token');
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('h2quote_token');
+      
+      if (!token) {
         navigate('/login');
         return;
       }
-      throw new Error('Failed to fetch service requests');
+
+      const response = await serviceRequestsAPI.getMyRequests();
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('h2quote_token');
+          navigate('/login');
+          return;
+        }
+        throw new Error('Failed to fetch service requests');
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('Fetched customer requests:', data.data);
+        
+        // Transform backend data to match your existing UI structure
+        const transformedData = (data.data || []).map(item => ({
+          id: item.request_number,
+          requestedAt: formatDate(item.created_at),
+          serviceCategory: parseServiceCategory(
+            item.services_count || 0, 
+            item.chemicals_count || 0, 
+            item.refrigerants_count || 0
+          ),
+          requestedService: parseRequestedService(item.items_summary),
+          assignedStaff: item.assigned_staff_name || "-",
+          serviceStatus: item.service_status || "Pending",
+          paymentStatus: item.payment_status || "Pending",
+          warrantyStatus: item.warranty_status || "N/A",
+          totalCost: formatCurrency(item.estimated_cost),
+          requestId: item.request_id, // Keep original ID for navigation
+          // Store raw data for search functionality
+          itemsSummary: item.items_summary
+        }));
+
+        setMockData(transformedData);
+      } else {
+        setError(data.message || 'Failed to fetch service requests');
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      setError('Failed to fetch service requests');
+      setMockData([]);
+    } finally {
+      setLoading(false);
     }
-
-    const data = await response.json();
-
-    if (data.success) {
-      console.log('Fetched customer requests:', data.data);
-      
-      // Transform backend data to match your existing UI structure
-      const transformedData = (data.data || []).map(item => ({
-        id: item.request_number,
-        requestedAt: formatDate(item.created_at),
-        serviceCategory: "-", // Can be enhanced based on items
-        requestedService: "-", // Can be enhanced based on items
-        assignedStaff: item.assigned_staff_name || "-",
-        serviceStatus: item.service_status || "Pending",
-        paymentStatus: item.payment_status || "Pending",
-        warrantyStatus: item.warranty_status || "N/A",
-        totalCost: formatCurrency(item.estimated_cost),
-        requestId: item.request_id // Keep original ID for navigation
-      }));
-
-      setMockData(transformedData);
-    } else {
-      setError(data.message || 'Failed to fetch service requests');
-    }
-  } catch (error) {
-    console.error('Error fetching requests:', error);
-    setError('Failed to fetch service requests');
-    setMockData([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     fetchCustomerRequests();
@@ -143,7 +184,8 @@ const CustomerServiceTracker = () => {
     (item) =>
       item.requestedService.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.assignedStaff.toLowerCase().includes(searchTerm.toLowerCase())
+      item.assignedStaff.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalPages = Math.ceil(filteredData.length / 10);

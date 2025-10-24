@@ -103,6 +103,39 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     })}`;
   };
 
+  const recalculatePaymentBreakdown = () => {
+    if (!requestData || paymentBreakdown.length === 0) return;
+
+    const baseTotal = parseFloat(requestData.totalCost.replace(/[₱,]/g, ""));
+    
+    // Calculate discounted total
+    let discountPercent = 0;
+    if (selectedDiscount !== "No Discount" && selectedDiscount) {
+      discountPercent = selectedDiscount === "Custom" 
+        ? parseFloat(customDiscountPercent) || 0
+        : parseFloat(selectedDiscount.replace("%", ""));
+    }
+    
+    const discountAmount = (baseTotal * discountPercent) / 100;
+    const discountedTotal = baseTotal - discountAmount;
+
+    // Recalculate payment breakdown amounts based on percentages
+    const updatedBreakdown = paymentBreakdown.map(payment => {
+      const percentage = parseFloat(payment.percentage.replace("%", ""));
+      const newAmount = Math.round((discountedTotal * percentage) / 100);
+      
+      return {
+        ...payment,
+        amount: `₱${newAmount.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
+      };
+    });
+
+    setPaymentBreakdown(updatedBreakdown);
+  };
+
   const handleViewProof = (paymentId, fileName) => {
     setViewingPaymentId(paymentId);
     setViewingFileName(fileName);
@@ -255,6 +288,14 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       }
     }
   }, [requestNumber, canAssignStaff]);
+
+  // Recalculate payment breakdown when discount changes
+  useEffect(() => {
+    if (requestData && paymentBreakdown.length > 0) {
+      recalculatePaymentBreakdown();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDiscount, customDiscountPercent]);
 
   const handleItemsUpdated = () => {
     fetchRequestDetails();

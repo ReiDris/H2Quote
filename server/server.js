@@ -31,6 +31,7 @@ const paymentRoutes = require('./routes/payment');
 const notificationRoutes = require('./routes/notifications');
 const clientRoutes = require('./routes/clients');
 const userRoutes = require('./routes/users');
+const activityLogRoutes = require('./routes/activityLog'); // ✅ ADDED
 
 // Register routes
 app.use('/api/auth', authRoutes);
@@ -44,6 +45,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/activity-logs', activityLogRoutes); // ✅ ADDED
 
 // Error handler
 app.use((error, req, res, next) => {

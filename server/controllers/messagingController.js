@@ -10,43 +10,99 @@ const supabase = createClient(
 const getInboxMessages = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userType = req.user.userType;
     const { type = 'all', page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    let whereClause = 'recipient_id = $1 AND recipient_deleted = FALSE';
-    let queryParams = [userId];
+    // For admin/staff: Show ALL original messages (not replies) from the system
+    // For customers: Show only messages they are involved in
+    let whereClause;
+    let queryParams;
+
+    if (userType === 'admin' || userType === 'staff') {
+      // Admin/Staff see all ORIGINAL messages (not replies) in the system
+      whereClause = `
+        NOT EXISTS (
+          SELECT 1 FROM message_replies mr 
+          WHERE mr.reply_message_id = m.message_id
+        )
+      `;
+      queryParams = [];
+    } else {
+      // Customers see messages where they are EITHER sender OR recipient
+      whereClause = `
+        (m.recipient_id = $1 OR m.sender_id = $1)
+        AND (
+          (m.recipient_id = $1 AND m.recipient_deleted = FALSE) OR 
+          (m.sender_id = $1 AND m.sender_deleted = FALSE)
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM message_replies mr 
+          WHERE mr.reply_message_id = m.message_id
+        )
+      `;
+      queryParams = [userId];
+    }
     
     if (type !== 'all') {
-      whereClause += ' AND message_type = $2';
+      const paramIndex = queryParams.length + 1;
+      whereClause += ` AND m.message_type = $${paramIndex}`;
       queryParams.push(type);
     }
 
     const query = `
+      WITH message_stats AS (
+        SELECT 
+          m.message_id,
+          COUNT(mr.reply_id) as reply_count,
+          CASE WHEN COUNT(mr.reply_id) > 0 THEN true ELSE false END as has_replies
+        FROM messages m
+        LEFT JOIN message_replies mr ON m.message_id = mr.original_message_id
+        GROUP BY m.message_id
+      )
       SELECT 
-        message_id as id,
-        sender_name as sender,
-        subject,
-        SUBSTRING(content, 1, 100) || CASE WHEN LENGTH(content) > 100 THEN '...' ELSE '' END as preview,
-        TO_CHAR(sent_at, 'Mon DD') as date,
-        sent_at,
-        is_read,
-        is_starred,
-        message_type,
-        related_request_id as "requestId",
-        sender_company_name as "senderCompany",
-        reply_count,
-        has_replies
-      FROM user_inbox_view
+        m.message_id as id,
+        ${userType === 'admin' || userType === 'staff' 
+          ? `sender.first_name || ' ' || sender.last_name` 
+          : `CASE 
+              WHEN m.sender_id = $1 THEN recipient.first_name || ' ' || recipient.last_name
+              ELSE sender.first_name || ' ' || sender.last_name
+            END`
+        } as sender,
+        m.subject,
+        SUBSTRING(m.content, 1, 100) || CASE WHEN LENGTH(m.content) > 100 THEN '...' ELSE '' END as preview,
+        TO_CHAR(m.sent_at, 'Mon DD') as date,
+        m.sent_at,
+        m.is_read,
+        m.is_starred,
+        m.message_type,
+        m.related_request_id as "requestId",
+        ${userType === 'admin' || userType === 'staff'
+          ? `sender_company.company_name`
+          : `CASE 
+              WHEN m.sender_id = $1 THEN recipient_company.company_name
+              ELSE sender_company.company_name
+            END`
+        } as "senderCompany",
+        COALESCE(ms.reply_count, 0) as reply_count,
+        COALESCE(ms.has_replies, false) as has_replies
+      FROM messages m
+      JOIN users sender ON m.sender_id = sender.user_id
+      JOIN users recipient ON m.recipient_id = recipient.user_id
+      LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
+      LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
+      LEFT JOIN message_stats ms ON m.message_id = ms.message_id
       WHERE ${whereClause}
-      ORDER BY sent_at DESC
+      ORDER BY m.sent_at DESC
       LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
     `;
 
     queryParams.push(limit, offset);
     const result = await pool.query(query, queryParams);
 
+    // Count query
     const countQuery = `
-      SELECT COUNT(*) FROM messages 
+      SELECT COUNT(*) FROM messages m
       WHERE ${whereClause}
     `;
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
@@ -156,6 +212,13 @@ const getMessageDetails = async (req, res) => {
   try {
     const { messageId } = req.params;
     const userId = req.user.id;
+    const userType = req.user.userType;
+
+    // Admin/Staff can view any message, customers only their own
+    let accessCheck = '(m.sender_id = $2 OR m.recipient_id = $2)';
+    if (userType === 'admin' || userType === 'staff') {
+      accessCheck = '1=1'; // Allow all access
+    }
 
     const query = `
       SELECT 
@@ -181,11 +244,12 @@ const getMessageDetails = async (req, res) => {
       LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
       LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
       WHERE m.message_id = $1 
-        AND (m.sender_id = $2 OR m.recipient_id = $2)
-        AND ((m.sender_id = $2 AND NOT m.sender_deleted) OR (m.recipient_id = $2 AND NOT m.recipient_deleted))
+        AND ${accessCheck}
+        AND ((m.sender_id = $2 AND NOT m.sender_deleted) OR (m.recipient_id = $2 AND NOT m.recipient_deleted) OR $3)
     `;
 
-    const result = await pool.query(query, [messageId, userId]);
+    const isAdminOrStaff = userType === 'admin' || userType === 'staff';
+    const result = await pool.query(query, [messageId, userId, isAdminOrStaff]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -196,6 +260,7 @@ const getMessageDetails = async (req, res) => {
 
     const message = result.rows[0];
 
+    // Mark as read if recipient is viewing
     if (message.recipient_id === userId && !message.is_read) {
       await pool.query(
         'UPDATE messages SET is_read = TRUE, read_at = NOW() WHERE message_id = $1',
@@ -203,6 +268,7 @@ const getMessageDetails = async (req, res) => {
       );
     }
 
+    // Get replies
     const repliesQuery = `
       SELECT 
         m.message_id,
@@ -220,35 +286,30 @@ const getMessageDetails = async (req, res) => {
 
     const repliesResult = await pool.query(repliesQuery, [messageId]);
 
+    // Format response to match frontend expectations
     res.json({
       success: true,
       data: {
-        id: message.message_id,
-        subject: message.subject,
-        content: message.content,
-        sender: {
-          id: message.sender_id,
-          name: message.sender_name,
-          email: message.sender_email,
-          company: message.sender_company
+        message: {
+          id: message.message_id,
+          subject: message.subject,
+          content: message.content,
+          sender: message.sender_name,
+          senderEmail: message.sender_email,
+          recipient: message.recipient_name,
+          recipientEmail: message.recipient_email,
+          sentAt: message.sent_at,
+          isRead: message.is_read,
+          isStarred: message.is_starred,
+          messageType: message.message_type,
+          relatedRequestId: message.related_request_id
         },
-        recipient: {
-          id: message.recipient_id,
-          name: message.recipient_name,
-          email: message.recipient_email,
-          company: message.recipient_company
-        },
-        sentAt: message.sent_at,
-        isRead: message.is_read,
-        isStarred: message.is_starred,
-        messageType: message.message_type,
-        relatedRequestId: message.related_request_id,
         replies: repliesResult.rows.map(reply => ({
           id: reply.message_id,
           content: reply.content,
           sentAt: reply.sent_at,
+          sender: reply.sender_name,
           senderId: reply.sender_id,
-          senderName: reply.sender_name,
           senderType: reply.user_type
         }))
       }
@@ -282,54 +343,94 @@ const sendMessage = async (req, res) => {
     if (!recipientId || !subject || !content) {
       return res.status(400).json({
         success: false,
-        message: 'Recipient, subject, and content are required'
+        message: 'Recipient, subject and content are required'
       });
     }
 
-    // Get recipient details
-    const recipientCheck = await client.query(
-      'SELECT user_id, email, first_name, last_name, user_type FROM users WHERE user_id = $1',
-      [recipientId]
-    );
+    // Check if there's already a message for this service request
+    if (relatedRequestId && messageType === 'service_request') {
+      const existingMessageQuery = `
+        SELECT message_id 
+        FROM messages 
+        WHERE related_request_id = $1 
+          AND message_type = 'service_request'
+          AND NOT EXISTS (
+            SELECT 1 FROM message_replies mr 
+            WHERE mr.reply_message_id = message_id
+          )
+        LIMIT 1
+      `;
+      
+      const existingMessage = await client.query(existingMessageQuery, [relatedRequestId]);
+      
+      if (existingMessage.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'A message already exists for this service request. Please use the reply function instead.'
+        });
+      }
+    }
 
-    if (recipientCheck.rows.length === 0) {
-      return res.status(400).json({
+    const recipientQuery = `
+      SELECT first_name, last_name, email 
+      FROM users 
+      WHERE user_id = $1
+    `;
+    const recipientResult = await client.query(recipientQuery, [recipientId]);
+    
+    if (recipientResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
         success: false,
         message: 'Recipient not found'
       });
     }
 
-    const recipient = recipientCheck.rows[0];
+    const recipient = recipientResult.rows[0];
+    const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
+    const recipientEmail = recipient.email;
 
     const insertQuery = `
-      INSERT INTO messages (sender_id, recipient_id, subject, content, message_type, related_request_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO messages (
+        sender_id, 
+        recipient_id, 
+        subject, 
+        content, 
+        message_type,
+        related_request_id,
+        sent_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING message_id, sent_at
     `;
 
     const result = await client.query(insertQuery, [
-      senderId, recipientId, subject.trim(), content.trim(), messageType, relatedRequestId
+      senderId,
+      recipientId,
+      subject,
+      content.trim(),
+      messageType,
+      relatedRequestId
     ]);
 
     const messageId = result.rows[0].message_id;
+    const sentAt = result.rows[0].sent_at;
 
-    // ✅ ADD AUDIT LOG for message sent
     try {
       await supabase.from('audit_log').insert({
         table_name: 'messages',
         record_id: messageId,
         action: 'CREATE',
         new_values: {
-          message_sent: true,
           recipient_id: recipientId,
-          recipient_name: `${recipient.first_name} ${recipient.last_name}`,
-          recipient_type: recipient.user_type,
-          subject: subject.trim(),
+          recipient_name: recipientName,
+          subject: subject,
           message_type: messageType,
           related_request_id: relatedRequestId
         },
         changed_by: req.user.email,
-        change_reason: `Message sent to ${recipient.user_type}: ${recipient.first_name} ${recipient.last_name}`,
+        change_reason: `New message sent to ${recipientName}`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
@@ -338,22 +439,20 @@ const sendMessage = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // ✅ SEND EMAIL NOTIFICATION TO RECIPIENT
     try {
-      const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
-      const messagePreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      const contentPreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
       
       await createNotification(
         recipientId,
         'New Message',
-        `New Message: ${subject}`,
-        `You have received a new message from ${req.user.email}. Subject: ${subject}. ${messagePreview}`,
-        recipient.email
+        subject,
+        `You have received a new message from ${req.user.email}. ${contentPreview}`,
+        recipientEmail
       );
       
-      console.log(`Message notification sent to ${recipient.email}`);
+      console.log(`✅ Message notification sent to ${recipientEmail} (${recipientName})`);
     } catch (notifError) {
-      console.error('Failed to send message notification:', notifError);
+      console.error('❌ Failed to send message notification:', notifError);
     }
 
     res.status(201).json({
@@ -361,7 +460,9 @@ const sendMessage = async (req, res) => {
       message: 'Message sent successfully',
       data: {
         messageId: messageId,
-        sentAt: result.rows[0].sent_at
+        sentAt: sentAt,
+        recipientEmail: recipientEmail,
+        recipientName: recipientName
       }
     });
 
@@ -383,82 +484,68 @@ const createServiceRequestMessage = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { requestId } = req.params;
-    const { subject, content } = req.body;
-    const senderId = req.user.id;
-    const senderType = req.user.userType;
+    const requestId = req.params.requestId;
+    
+    const {
+      subject,
+      content
+    } = req.body;
 
-    if (!subject || !content) {
+    const senderId = req.user.id;
+
+    if (!requestId || !subject || !content) {
       return res.status(400).json({
         success: false,
-        message: 'Subject and content are required'
+        message: 'Request ID, subject and content are required'
       });
     }
 
-    const requestQuery = `
-      SELECT 
-        sr.request_id, 
-        sr.request_number, 
-        sr.requested_by_user_id,
-        sr.assigned_to_staff_id,
-        u.email as customer_email,
-        CONCAT(u.first_name, ' ', u.last_name) as customer_name
-      FROM service_requests sr
-      JOIN users u ON sr.requested_by_user_id = u.user_id
-      WHERE sr.request_id = $1
+    // Check if message already exists for this service request
+    const existingMessageQuery = `
+      SELECT message_id 
+      FROM messages 
+      WHERE related_request_id = $1 
+        AND message_type = 'service_request'
+        AND NOT EXISTS (
+          SELECT 1 FROM message_replies mr 
+          WHERE mr.reply_message_id = message_id
+        )
+      LIMIT 1
     `;
     
-    const requestResult = await client.query(requestQuery, [requestId]);
+    const existingMessage = await client.query(existingMessageQuery, [requestId]);
     
-    if (requestResult.rows.length === 0) {
+    if (existingMessage.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'A message thread already exists for this service request. Please check your Messages tab.'
+      });
+    }
+
+    // Get admin/staff users to send message to
+    const recipientQuery = `
+      SELECT user_id, first_name, last_name, email 
+      FROM users 
+      WHERE user_type IN ('admin', 'staff') 
+        AND status = 'Active'
+      ORDER BY user_type 
+      LIMIT 1
+    `;
+    const recipientResult = await client.query(recipientQuery);
+    
+    if (recipientResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
-        message: 'Service request not found'
+        message: 'No available admin/staff to receive message'
       });
     }
 
-    const request = requestResult.rows[0];
-
-    if (senderType !== 'client') {
-      await client.query('ROLLBACK');
-      return res.status(403).json({
-        success: false,
-        message: 'Only customers can initiate service request messages'
-      });
-    }
-
-    if (request.requested_by_user_id !== senderId) {
-      await client.query('ROLLBACK');
-      return res.status(403).json({
-        success: false,
-        message: 'You can only message about your own service requests'
-      });
-    }
-
-    const recipientsQuery = `
-      SELECT user_id, email, first_name, last_name 
-      FROM users 
-      WHERE user_type IN ('admin', 'staff') AND status = 'Active'
-      ORDER BY 
-        CASE 
-          WHEN user_id = $1 THEN 0
-          WHEN user_type = 'admin' THEN 1
-          ELSE 2
-        END
-    `;
-    
-    const recipientsResult = await client.query(recipientsQuery, [request.assigned_to_staff_id]);
-    
-    if (recipientsResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: 'No staff available to receive message'
-      });
-    }
-
-    const primaryRecipient = recipientsResult.rows[0];
+    const recipient = recipientResult.rows[0];
+    const recipientId = recipient.user_id;
+    const recipientName = `${recipient.first_name} ${recipient.last_name}`.trim();
+    const recipientEmail = recipient.email;
 
     const insertQuery = `
       INSERT INTO messages (
@@ -466,39 +553,39 @@ const createServiceRequestMessage = async (req, res) => {
         recipient_id, 
         subject, 
         content, 
-        message_type, 
-        related_request_id
+        message_type,
+        related_request_id,
+        sent_at
       )
-      VALUES ($1, $2, $3, $4, 'service_request', $5)
+      VALUES ($1, $2, $3, $4, 'service_request', $5, NOW())
       RETURNING message_id, sent_at
     `;
 
     const result = await client.query(insertQuery, [
       senderId,
-      primaryRecipient.user_id,
-      `[SR #${request.request_number}] ${subject}`,
+      recipientId,
+      subject,
       content.trim(),
       requestId
     ]);
 
     const messageId = result.rows[0].message_id;
+    const sentAt = result.rows[0].sent_at;
 
-    // ✅ ADD AUDIT LOG for service request message
     try {
       await supabase.from('audit_log').insert({
         table_name: 'messages',
         record_id: messageId,
         action: 'CREATE',
         new_values: {
-          message_sent: true,
-          service_request_message: true,
-          request_number: request.request_number,
-          request_id: requestId,
-          recipient_staff: `${primaryRecipient.first_name} ${primaryRecipient.last_name}`,
-          subject: subject.trim()
+          recipient_id: recipientId,
+          recipient_name: recipientName,
+          subject: subject,
+          message_type: 'service_request',
+          related_request_id: requestId
         },
         changed_by: req.user.email,
-        change_reason: `Customer messaged staff about service request #${request.request_number}`,
+        change_reason: `New service request message for request #${requestId}`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
@@ -507,29 +594,28 @@ const createServiceRequestMessage = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Notify all admin/staff
     try {
-      for (const recipient of recipientsResult.rows) {
-        await createNotification(
-          recipient.user_id,
-          'Service Request',
-          `New Message on SR #${request.request_number}`,
-          `Customer ${request.customer_name} sent a message about service request #${request.request_number}. Subject: ${subject}`,
-          recipient.email
-        );
-      }
-      console.log(`Service request message notifications sent to ${recipientsResult.rows.length} staff members`);
+      const contentPreview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      
+      await createNotification(
+        recipientId,
+        'New Service Request Message',
+        subject,
+        `New message regarding service request #${requestId}. ${contentPreview}`,
+        recipientEmail
+      );
+      
+      console.log(`✅ Service request message notification sent to ${recipientEmail}`);
     } catch (notifError) {
-      console.error('Failed to send notifications:', notifError);
+      console.error('❌ Failed to send notification:', notifError);
     }
 
     res.status(201).json({
       success: true,
-      message: 'Message sent to staff successfully',
+      message: 'Message sent successfully',
       data: {
         messageId: messageId,
-        sentAt: result.rows[0].sent_at,
-        requestNumber: request.request_number
+        sentAt: sentAt
       }
     });
 
@@ -562,19 +648,12 @@ const replyToMessage = async (req, res) => {
       });
     }
 
+    // Get the original message details
     const originalQuery = `
       SELECT 
-        m.message_id,
-        m.subject,
-        m.sender_id,
-        m.recipient_id,
-        m.related_request_id,
-        m.message_type,
-        sender.first_name as sender_first_name,
-        sender.last_name as sender_last_name,
-        sender.email as sender_email,
-        recipient.first_name as recipient_first_name,
-        recipient.last_name as recipient_last_name,
+        m.*,
+        sender.first_name || ' ' || sender.last_name as sender_name,
+        recipient.first_name || ' ' || recipient.last_name as recipient_name,
         recipient.email as recipient_email
       FROM messages m
       JOIN users sender ON m.sender_id = sender.user_id
@@ -594,34 +673,41 @@ const replyToMessage = async (req, res) => {
 
     const original = originalResult.rows[0];
 
-    if (original.sender_id !== senderId && original.recipient_id !== senderId) {
-      await client.query('ROLLBACK');
-      return res.status(403).json({
-        success: false,
-        message: 'You can only reply to messages you are part of'
-      });
+    // Determine recipient of reply (opposite of who sent the original or last reply)
+    let recipientId;
+    let recipientFirstName;
+    let recipientLastName;
+    let recipientEmail;
+
+    // Check who should receive this reply
+    // If the current user is the original sender, reply goes to original recipient
+    // If the current user is the original recipient, reply goes to original sender
+    if (senderId === original.sender_id) {
+      recipientId = original.recipient_id;
+      const recipientQuery = await client.query(
+        'SELECT first_name, last_name, email FROM users WHERE user_id = $1',
+        [recipientId]
+      );
+      recipientFirstName = recipientQuery.rows[0].first_name;
+      recipientLastName = recipientQuery.rows[0].last_name;
+      recipientEmail = recipientQuery.rows[0].email;
+    } else {
+      recipientId = original.sender_id;
+      const recipientQuery = await client.query(
+        'SELECT first_name, last_name, email FROM users WHERE user_id = $1',
+        [recipientId]
+      );
+      recipientFirstName = recipientQuery.rows[0].first_name;
+      recipientLastName = recipientQuery.rows[0].last_name;
+      recipientEmail = recipientQuery.rows[0].email;
     }
 
-    const recipientId = original.sender_id === senderId 
-      ? original.recipient_id 
-      : original.sender_id;
-
-    const recipientFirstName = original.sender_id === senderId 
-      ? original.recipient_first_name 
-      : original.sender_first_name;
-    
-    const recipientLastName = original.sender_id === senderId 
-      ? original.recipient_last_name 
-      : original.sender_last_name;
-
-    const recipientEmail = original.sender_id === senderId 
-      ? original.recipient_email 
-      : original.sender_email;
-
+    // Create the reply subject
     const replySubject = original.subject.startsWith('Re: ') 
       ? original.subject 
       : `Re: ${original.subject}`;
 
+    // Insert reply as a new message
     const insertReplyQuery = `
       INSERT INTO messages (
         sender_id,
@@ -629,9 +715,10 @@ const replyToMessage = async (req, res) => {
         subject,
         content,
         message_type,
-        related_request_id
+        related_request_id,
+        sent_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING message_id, sent_at
     `;
 
@@ -646,12 +733,12 @@ const replyToMessage = async (req, res) => {
 
     const replyId = replyResult.rows[0].message_id;
 
+    // Link reply to original message
     await client.query(
       `INSERT INTO message_replies (original_message_id, reply_message_id) VALUES ($1, $2)`,
       [messageId, replyId]
     );
 
-    // ✅ ADD AUDIT LOG for message reply
     try {
       await supabase.from('audit_log').insert({
         table_name: 'messages',
@@ -789,7 +876,6 @@ const deleteMessages = async (req, res) => {
       });
     }
 
-    // Get message details before deletion for audit log
     const messageQuery = `
       SELECT 
         m.message_id,
@@ -816,7 +902,6 @@ const deleteMessages = async (req, res) => {
 
     const result = await client.query(query, [messageIds, userId]);
 
-    // ✅ ADD AUDIT LOG for message deletion
     try {
       for (const message of messagesResult.rows) {
         const isSender = message.sender_id === userId;

@@ -15,7 +15,6 @@ const createDefaultPayments = async (requestId) => {
   try {
     await client.query("BEGIN");
 
-    // FIXED: Calculate actual total from all item tables
     const totalQuery = `
       SELECT 
         sr.downpayment_percentage, 
@@ -32,14 +31,11 @@ const createDefaultPayments = async (requestId) => {
     `;
     const result = await client.query(totalQuery, [requestId]);
     const { subtotal, downpayment_percentage, payment_terms, discount_percentage } = result.rows[0];
-    
-    // Calculate total after discount
+
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
-    // Check if it's Full Payment
     if (payment_terms === "Full" || !downpayment_percentage) {
-      // Create single payment for full amount
       await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status)
@@ -48,7 +44,6 @@ const createDefaultPayments = async (requestId) => {
         [requestId, estimated_cost]
       );
     } else {
-      // Create two payments for down payment scenario
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
         (estimated_cost * downpaymentPercent) / 100
@@ -78,7 +73,6 @@ const recreatePayments = async (requestId) => {
   try {
     await client.query("BEGIN");
 
-    // Check if any payments have been made
     const paymentCheck = await client.query(
       `SELECT COUNT(*) as paid_count FROM payments 
        WHERE request_id = $1 AND status = 'Paid'`,
@@ -91,13 +85,11 @@ const recreatePayments = async (requestId) => {
       );
     }
 
-    // Delete all pending payments
     await client.query(
       "DELETE FROM payments WHERE request_id = $1 AND status = 'Pending'",
       [requestId]
     );
 
-    // FIXED: Calculate actual total from all item tables (same as createDefaultPayments)
     const totalQuery = `
       SELECT 
         sr.downpayment_percentage, 
@@ -114,12 +106,10 @@ const recreatePayments = async (requestId) => {
     `;
     const result = await client.query(totalQuery, [requestId]);
     const { subtotal, downpayment_percentage, payment_terms, discount_percentage } = result.rows[0];
-    
-    // Calculate total after discount
+
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
-    // Check if it's Full Payment
     if (payment_terms === "Full" || !downpayment_percentage) {
       await client.query(
         `
@@ -366,7 +356,6 @@ const createServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // IMPORTANT: Create default payments AFTER commit, using the final total cost
     try {
       await createDefaultPayments(requestId);
       console.log("Default payments created successfully");
@@ -374,7 +363,6 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to create default payments:", paymentError);
     }
 
-    // ✅ SEND NOTIFICATION TO CUSTOMER
     try {
       await createServiceRequestNotification(
         customerId,
@@ -388,7 +376,6 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to send customer notification:", notifError);
     }
 
-    // ✅ SEND NOTIFICATIONS TO ADMIN AND STAFF
     try {
       const staffQuery = `
         SELECT user_id, email, first_name, last_name 
@@ -451,7 +438,6 @@ const getCustomerRequests = async (req, res) => {
         sr.request_id, 
         sr.request_number, 
         rs.status_name as status, 
-        sr.estimated_cost, 
         sr.request_date as created_at,
         sr.target_completion_date, 
         sr.estimated_duration_days,
@@ -459,27 +445,112 @@ const getCustomerRequests = async (req, res) => {
         sr.payment_mode, 
         sr.payment_terms, 
         sr.downpayment_percentage,
+        sr.discount_percentage,
+        
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          0
+        ) as subtotal,
+
+        COALESCE(
+          COALESCE(
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+            0
+          ) * COALESCE(sr.discount_percentage, 0) / 100,
+          0
+        ) as discount_amount,
+
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          0
+        ) - COALESCE(
+          COALESCE(
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+            0
+          ) * COALESCE(sr.discount_percentage, 0) / 100,
+          0
+        ) as estimated_cost,
+        
         -- Add service status for frontend
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
           WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
           WHEN rs.status_name = 'Completed' THEN 'Completed'
           ELSE rs.status_name
         END as service_status,
+        
         -- Add payment status calculation
         CASE 
           WHEN sr.payment_status IS NULL THEN 'Pending'
           ELSE sr.payment_status
         END as payment_status,
+        
         -- Add warranty status
         CASE 
           WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
           WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
           ELSE 'N/A'
-        END as warranty_status
+        END as warranty_status,
+        
+        -- Add item counts for debugging
+        (
+          SELECT COUNT(*)::int 
+          FROM service_request_items sri 
+          WHERE sri.request_id = sr.request_id
+        ) as services_count,
+        (
+          SELECT COUNT(*)::int 
+          FROM service_request_chemicals src 
+          WHERE src.request_id = sr.request_id
+        ) as chemicals_count,
+        (
+          SELECT COUNT(*)::int 
+          FROM service_request_refrigerants srr 
+          WHERE srr.request_id = sr.request_id
+        ) as refrigerants_count,
+        
+        -- Add item summary for display
+        (
+          SELECT STRING_AGG(
+            CASE 
+              WHEN item_type = 'service' THEN CONCAT(qty, 'x ', name, ' (Service)')
+              WHEN item_type = 'chemical' THEN CONCAT(qty, 'x ', name, ' (Chemical)')
+              WHEN item_type = 'refrigerant' THEN CONCAT(qty, 'x ', name, ' (Refrigerant)')
+            END, ', '
+          )
+          FROM (
+            SELECT 'service' as item_type, sri.quantity as qty, s.service_name as name
+            FROM service_request_items sri
+            JOIN services s ON sri.service_id = s.service_id
+            WHERE sri.request_id = sr.request_id
+            
+            UNION ALL
+            
+            SELECT 'chemical' as item_type, src.quantity as qty, c.chemical_name as name
+            FROM service_request_chemicals src
+            JOIN chemicals c ON src.chemical_id = c.chemical_id
+            WHERE src.request_id = sr.request_id
+            
+            UNION ALL
+            
+            SELECT 'refrigerant' as item_type, srr.quantity as qty, r.refrigerant_name as name
+            FROM service_request_refrigerants srr
+            JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+            WHERE srr.request_id = sr.request_id
+          ) items_summary
+        ) as items_summary
+        
       FROM service_requests sr
       JOIN request_statuses rs ON sr.status_id = rs.status_id
       LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
@@ -516,7 +587,6 @@ const getRequestDetails = async (req, res) => {
       queryParams.push(userId);
     }
 
-    // ✅ UPDATED: Added quotation fields and LEFT JOIN
     const requestQuery = `
   SELECT 
     sr.*, 
@@ -648,7 +718,6 @@ const getRequestDetails = async (req, res) => {
         pool.query(refrigerantsQuery, [requestId]),
       ]);
 
-    // Calculate subtotal from all items
     const subtotal = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -657,12 +726,10 @@ const getRequestDetails = async (req, res) => {
       return sum + parseFloat(item.line_total || 0);
     }, 0);
 
-    // Calculate discount
     const discountPercentage = request.discount_percentage || 0;
     const discountAmount = (subtotal * discountPercentage) / 100;
     const totalCostAfterDiscount = subtotal - discountAmount;
 
-    // Format items for display
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -699,7 +766,6 @@ const getRequestDetails = async (req, res) => {
 
     let paymentHistory = paymentResult.rows;
 
-    // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
@@ -730,14 +796,13 @@ const getRequestDetails = async (req, res) => {
       ];
     }
 
-    // ✅ UPDATED: Return quotation data instead of null
     res.json({
       success: true,
       data: {
         request: {
           ...request,
           id: request.request_number,
-          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
+          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-PH", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}`,
@@ -1177,7 +1242,6 @@ const createQuotation = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ✅ SEND NOTIFICATION TO CUSTOMER ABOUT QUOTATION
     try {
       await createServiceRequestNotification(
         request.requested_by_user_id,
@@ -1309,7 +1373,6 @@ const respondToQuotation = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ✅ SEND NOTIFICATION TO CUSTOMER ABOUT THEIR RESPONSE
     try {
       const message = approved
         ? `You have approved the quotation for service request #${quotation.request_number}. We will begin work shortly. Thank you for your confirmation!`
@@ -1333,7 +1396,6 @@ const respondToQuotation = async (req, res) => {
       );
     }
 
-    // ✅ NOTIFY ADMIN/STAFF ABOUT CUSTOMER'S DECISION
     try {
       const staffQuery = `
         SELECT user_id, email FROM users 
@@ -1761,13 +1823,13 @@ const updateRequestStatus = async (req, res) => {
     };
 
     const statusOrder = [
-      "New", // 0 - Pending
-      "Under Review", // 1 - Assigned
-      "Quote Prepared", // 2 - Processing
-      "Quote Sent", // 3 - Waiting for Approval
-      "Quote Approved", // 4 - Approved
-      "In Progress", // 5 - Ongoing
-      "Completed", // 6 - Completed
+      "New", 
+      "Under Review", 
+      "Quote Prepared", 
+      "Quote Sent", 
+      "Quote Approved", 
+      "In Progress", 
+      "Completed", 
     ];
 
     let newStatusId = currentRequest.status_id;
@@ -2060,7 +2122,6 @@ const addChemicalsToRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Recreate payments with new total (outside transaction)
     try {
       await recreatePayments(requestId);
     } catch (paymentError) {
@@ -2071,7 +2132,6 @@ const addChemicalsToRequest = async (req, res) => {
       });
     }
 
-    // Log in audit_log
     try {
       await supabase.from("audit_log").insert({
         table_name: "service_request_chemicals",
@@ -2268,7 +2328,7 @@ const removeChemicalsFromRequest = async (req, res) => {
     await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { chemicalItemIds } = req.body; // Array of item_ids to remove
+    const { chemicalItemIds } = req.body; 
     const adminId = req.user.id;
 
     if (!Array.isArray(chemicalItemIds) || chemicalItemIds.length === 0) {
@@ -2278,7 +2338,6 @@ const removeChemicalsFromRequest = async (req, res) => {
       });
     }
 
-    // Verify request exists and get current status
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -2307,7 +2366,6 @@ const removeChemicalsFromRequest = async (req, res) => {
       });
     }
 
-    // Get the chemicals to be removed and calculate cost reduction
     const getChemicalsQuery = `
       SELECT item_id, chemical_id, quantity, line_total
       FROM service_request_chemicals
@@ -2870,6 +2928,73 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
+    // ✅ FIXED: Recalculate payment breakdown amounts when discount changes
+    if (discount !== undefined) {
+      // Get the current subtotal (before discount)
+      const subtotalQuery = `
+        SELECT 
+          COALESCE(
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = $1) +
+            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = $1) +
+            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = $1),
+            0
+          ) as subtotal,
+          sr.payment_terms,
+          sr.downpayment_percentage
+        FROM service_requests sr
+        WHERE sr.request_id = $1
+      `;
+      
+      const subtotalResult = await client.query(subtotalQuery, [requestId]);
+      const { subtotal, payment_terms, downpayment_percentage } = subtotalResult.rows[0];
+      
+      // Calculate total after discount
+      const discountAmount = (subtotal * discountPercentage) / 100;
+      const totalAfterDiscount = subtotal - discountAmount;
+      
+      // Get existing payment records to update
+      const paymentsQuery = `
+        SELECT payment_id, payment_phase 
+        FROM payments 
+        WHERE request_id = $1 
+        ORDER BY payment_phase
+      `;
+      const paymentsResult = await client.query(paymentsQuery, [requestId]);
+      
+      if (paymentsResult.rows.length > 0) {
+        // Recalculate amounts based on payment structure
+        if (payment_terms === "Full" || paymentsResult.rows.length === 1) {
+          // Full Payment: update single payment to full discounted amount
+          await client.query(
+            `UPDATE payments 
+             SET amount = $1, updated_at = NOW() 
+             WHERE request_id = $2 AND payment_phase = 'Full Payment'`,
+            [totalAfterDiscount, requestId]
+          );
+        } else {
+          // Down Payment structure: recalculate both payments
+          const downpaymentPercent = downpayment_percentage || 50;
+          const downpaymentAmount = Math.round((totalAfterDiscount * downpaymentPercent) / 100);
+          const remainingAmount = totalAfterDiscount - downpaymentAmount;
+          
+          await client.query(
+            `UPDATE payments 
+             SET amount = $1, updated_at = NOW() 
+             WHERE request_id = $2 AND payment_phase = 'Down Payment'`,
+            [downpaymentAmount, requestId]
+          );
+          
+          await client.query(
+            `UPDATE payments 
+             SET amount = $1, updated_at = NOW() 
+             WHERE request_id = $2 AND payment_phase = 'Completion Balance'`,
+            [remainingAmount, requestId]
+          );
+        }
+      }
+    }
+
+    // Update payment statuses if provided
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
         await client.query(
@@ -2885,11 +3010,10 @@ const updateServiceRequest = async (req, res) => {
 
      try {
       const changesLog = {};
-      if (newStatusId !== currentRequest.status_id) changesLog.status_updated = true;
+      if (statusId !== currentRequest.status_id) changesLog.status_updated = true;
       if (paymentStatus) changesLog.payment_status = paymentStatus;
       if (assignedStaffId) changesLog.staff_assigned = staffName;
       if (serviceStartDate) changesLog.service_start_date = serviceStartDate;
-      if (serviceEndDate) changesLog.service_end_date = serviceEndDate;
 
       await supabase.from('audit_log').insert({
         table_name: 'service_requests',
