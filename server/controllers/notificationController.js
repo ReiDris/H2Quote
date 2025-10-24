@@ -391,7 +391,7 @@ module.exports = {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  clearReadNotifications,
+  clearReadNotifications, 
   createNotification,
   createBulkNotifications,
   createServiceRequestNotification
