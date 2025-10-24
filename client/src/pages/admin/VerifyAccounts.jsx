@@ -95,9 +95,9 @@ const VerifyAccountsPage = () => {
   };
 
   const handleRejectClick = (user) => {
-  setUserToReject(user);
-  setShowRejectModal(true);
-};
+    setUserToReject(user);
+    setShowRejectModal(true);
+  };
 
   const handleApprove = async () => {
     if (!selectedUser || !selectedRole) return;
@@ -537,10 +537,10 @@ const VerifyAccountsPage = () => {
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#004785]"></div>
                 </div>
               ) : (
-                <iframe
+                <img
                   src={documentUrl}
-                  className="w-full h-full min-h-[500px] border-0 rounded-lg"
-                  title="Verification Document"
+                  alt="Verification Document"
+                  className="max-w-full max-h-[600px] w-auto h-auto object-contain rounded-lg shadow-lg"
                 />
               )}
             </div>
