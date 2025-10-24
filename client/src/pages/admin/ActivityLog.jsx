@@ -122,9 +122,9 @@ const ActivityLogPage = () => {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl lg:text-3xl xl:text-4xl font-semibold text-[#004785]">
             Activity Log
           </h1>
@@ -138,7 +138,7 @@ const ActivityLogPage = () => {
         </div>
 
         {/* Filters Section */}
-        <div className="bg-white rounded-md shadow-sm border border-gray-200 p-4">
+        <div className="flex-shrink-0 bg-white rounded-md shadow-sm border border-gray-200 p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -195,8 +195,8 @@ const ActivityLogPage = () => {
         </div>
 
         {/* Table Section */}
-        <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+          <div className="overflow-x-auto flex-1 overflow-y-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-gray-500">Loading activity logs...</div>
@@ -232,7 +232,7 @@ const ActivityLogPage = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {activityLogs.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                      <td className="px-3 py-5 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
                         {item.userId}
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
@@ -258,7 +258,7 @@ const ActivityLogPage = () => {
           </div>
 
           {/* Pagination */}
-          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
+         <div className="flex-shrink-0 bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
             {/* Previous Button */}
             <button
               onClick={() => handlePageChange(currentPage - 1)}

@@ -114,10 +114,10 @@ const Messages = () => {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-semibold text-gray-800 mb-2">
-            Viewing Message from Client
+            Messages
           </h1>
           <p className="text-gray-600 text-sm">
-            Double check the message inquiry before proceeding
+            Manage client communications and inquiries
           </p>
         </div>
 

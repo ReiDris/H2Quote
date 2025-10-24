@@ -14,7 +14,7 @@ const AdminLayout = ({ children }) => {
       {/* Main Content Area - account for both header and sidebar */}
       <div className="pt-20 ml-16 lg:ml-20 xl:ml-50 2xl:ml-60">
         {/* Page Content */}
-        <main className="p-6">
+        <main className="p-5">
           {children}
         </main>
       </div>
