@@ -9,7 +9,6 @@ router.use(authenticateToken);
 router.get('/', notificationController.getUserNotifications);
 router.put('/:notificationId/read', notificationController.markAsRead);
 router.put('/read-all', notificationController.markAllAsRead);
-router.delete('/:notificationId', notificationController.deleteNotification);
-router.delete('/clear-read', notificationController.clearReadNotifications);  // NEW ROUTE
-
+router.delete('/clear-read', notificationController.clearReadNotifications); 
+router.delete('/:notificationId', notificationController.deleteNotification);   
 module.exports = router;
