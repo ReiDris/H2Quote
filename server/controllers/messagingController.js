@@ -29,10 +29,13 @@ const getInboxMessages = async (req, res) => {
       `;
       queryParams = [];
     } else {
-      // Customers only see messages where they are recipient and haven't deleted
+      // Customers see messages where they are EITHER sender OR recipient
       whereClause = `
-        m.recipient_id = $1 
-        AND m.recipient_deleted = FALSE 
+        (m.recipient_id = $1 OR m.sender_id = $1)
+        AND (
+          (m.recipient_id = $1 AND m.recipient_deleted = FALSE) OR 
+          (m.sender_id = $1 AND m.sender_deleted = FALSE)
+        )
         AND NOT EXISTS (
           SELECT 1 FROM message_replies mr 
           WHERE mr.reply_message_id = m.message_id
@@ -59,7 +62,13 @@ const getInboxMessages = async (req, res) => {
       )
       SELECT 
         m.message_id as id,
-        sender.first_name || ' ' || sender.last_name as sender,
+        ${userType === 'admin' || userType === 'staff' 
+          ? `sender.first_name || ' ' || sender.last_name` 
+          : `CASE 
+              WHEN m.sender_id = $1 THEN recipient.first_name || ' ' || recipient.last_name
+              ELSE sender.first_name || ' ' || sender.last_name
+            END`
+        } as sender,
         m.subject,
         SUBSTRING(m.content, 1, 100) || CASE WHEN LENGTH(m.content) > 100 THEN '...' ELSE '' END as preview,
         TO_CHAR(m.sent_at, 'Mon DD') as date,
@@ -68,12 +77,20 @@ const getInboxMessages = async (req, res) => {
         m.is_starred,
         m.message_type,
         m.related_request_id as "requestId",
-        sender_company.company_name as "senderCompany",
+        ${userType === 'admin' || userType === 'staff'
+          ? `sender_company.company_name`
+          : `CASE 
+              WHEN m.sender_id = $1 THEN recipient_company.company_name
+              ELSE sender_company.company_name
+            END`
+        } as "senderCompany",
         COALESCE(ms.reply_count, 0) as reply_count,
         COALESCE(ms.has_replies, false) as has_replies
       FROM messages m
       JOIN users sender ON m.sender_id = sender.user_id
+      JOIN users recipient ON m.recipient_id = recipient.user_id
       LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
+      LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
       LEFT JOIN message_stats ms ON m.message_id = ms.message_id
       WHERE ${whereClause}
       ORDER BY m.sent_at DESC
