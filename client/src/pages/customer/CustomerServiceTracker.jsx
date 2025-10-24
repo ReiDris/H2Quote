@@ -85,7 +85,7 @@ const CustomerServiceTracker = () => {
         // Transform backend data to match your existing UI structure
         const transformedData = (data.data || []).map(item => ({
           id: item.request_number,
-          requestedAt: item.created_at, // Backend formats the date
+          requestedAt: formatDate(item.created_at),
           serviceCategory: parseServiceCategory(
             item.services_count || 0, 
             item.chemicals_count || 0, 
@@ -174,7 +174,7 @@ const CustomerServiceTracker = () => {
     const style = statusStyles[type][status] || "bg-gray-100 text-gray-800";
 
     return (
-      <span className={`px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${style}`}>
+      <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${style}`}>
         {status}
       </span>
     );
@@ -228,38 +228,38 @@ const CustomerServiceTracker = () => {
 
         {/* Table Section */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full table-fixed">
+          <div className="overflow-x-auto flex-1 overflow-y-hidden">
+            <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-28">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Request ID
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-40">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Requested At
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-28">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Service Category
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-48">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Requested Service
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-32">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Assigned Staff
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-28">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Service Status
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-28">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Payment Status
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-28">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Warranty Status
                   </th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-black w-24">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Total Cost
                   </th>
-                  <th className="px-2 py-3 text-center text-xs font-semibold text-black w-20">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     View Details
                   </th>
                 </tr>
@@ -267,40 +267,40 @@ const CustomerServiceTracker = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedData.map((item, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-2 py-4 text-xs font-medium text-gray-800 w-28 truncate">
+                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
                       {item.id}
                     </td>
-                    <td className="px-2 py-4 text-xs text-gray-800 w-40 truncate">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
                       {item.requestedAt}
                     </td>
-                    <td className="px-2 py-4 text-xs text-gray-800 w-28 truncate">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
                       {item.serviceCategory}
                     </td>
-                    <td className="px-2 py-4 text-xs text-gray-800 w-48 truncate" title={item.requestedService}>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
                       {item.requestedService}
                     </td>
-                    <td className="px-2 py-4 text-xs text-gray-800 w-32 truncate">
+                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
                       {item.assignedStaff || "-"}
                     </td>
-                    <td className="px-2 py-4 w-28">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       {getStatusBadge(item.serviceStatus, "serviceStatus")}
                     </td>
-                    <td className="px-2 py-4 w-28">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       {getStatusBadge(item.paymentStatus, "paymentStatus")}
                     </td>
-                    <td className="px-2 py-4 w-28">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       {getStatusBadge(item.warrantyStatus, "warrantyStatus")}
                     </td>
-                    <td className="px-2 py-4 text-xs font-medium text-gray-800 w-24 truncate">
+                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
                       {item.totalCost}
                     </td>
-                    <td className="px-2 py-4 text-center w-20">
+                    <td className="px-3 py-4 whitespace-nowrap text-center">
                       <button
                         onClick={() => handleMoreActions(item)}
-                        className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors inline-block"
+                        className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
                         title="View Details"
                       >
-                        <CgMaximizeAlt size={18} />
+                        <CgMaximizeAlt size={20} />
                       </button>
                     </td>
                   </tr>
