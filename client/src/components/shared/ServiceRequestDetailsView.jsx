@@ -51,6 +51,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   // State for staff list
   const [staffList, setStaffList] = useState([]);
 
+  // Track initial staff assignment to detect changes
+  const [initialStaffAssignment, setInitialStaffAssignment] = useState("Not assigned");
+
   // State for success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -257,6 +260,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setRequestData(transformedData);
         setPaymentBreakdown(requestDetails.paymentHistory || []);
 
+        // Track initial staff assignment
+        setInitialStaffAssignment(requestDetails.assigned_staff_name || "Not assigned");
+
         setServiceStatus(requestDetails.service_status || "Pending");
         setPaymentStatus(requestDetails.payment_status || "Pending");
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
@@ -442,11 +448,17 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
+      // Auto-set service status to "Assigned" only if staff was JUST assigned (changed from "Not assigned")
       let finalServiceStatus = serviceStatus;
-      if (requestData.assignedStaff !== "Not assigned" && serviceStatus === "Pending") {
+      if (
+        initialStaffAssignment === "Not assigned" && 
+        requestData.assignedStaff !== "Not assigned" && 
+        serviceStatus === "Pending"
+      ) {
         finalServiceStatus = "Assigned";
         setServiceStatus("Assigned");
+        // Update initial assignment tracker
+        setInitialStaffAssignment(requestData.assignedStaff);
       }
 
       // Format discount for backend
