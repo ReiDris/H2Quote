@@ -4,7 +4,7 @@ import { ArrowLeft, Eye, Upload, MessageCircle } from "lucide-react";
 import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
-import { serviceRequestsAPI } from "../../config/api";
+import { serviceRequestsAPI, messagingAPI } from "../../config/api";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -18,6 +18,11 @@ const CustomerServiceRequestDetails = () => {
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalSuccess, setApprovalSuccess] = useState(false);
   const [approvalError, setApprovalError] = useState("");
+
+  // State for message existence check
+  const [hasExistingMessage, setHasExistingMessage] = useState(false);
+  const [existingMessageId, setExistingMessageId] = useState(null);
+  const [checkingMessage, setCheckingMessage] = useState(false);
 
   const formatPaymentMode = (mode) => {
     const modeMap = {
@@ -39,8 +44,46 @@ const CustomerServiceRequestDetails = () => {
   useEffect(() => {
     if (requestId) {
       fetchRequestDetails();
+      checkExistingMessage();
     }
   }, [requestId]);
+
+  const checkExistingMessage = async () => {
+    try {
+      setCheckingMessage(true);
+      const token = localStorage.getItem("h2quote_token");
+
+      if (!token) {
+        return;
+      }
+
+      // Get user's inbox to check if there's already a message for this request
+      const response = await messagingAPI.getInbox({ page: 1, limit: 100 });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success && data.data.messages) {
+          // Check if any message is related to this service request
+          const existingMsg = data.data.messages.find(
+            msg => msg.requestId && msg.requestId.toString() === requestId.toString()
+          );
+          
+          if (existingMsg) {
+            setHasExistingMessage(true);
+            setExistingMessageId(existingMsg.id);
+          } else {
+            setHasExistingMessage(false);
+            setExistingMessageId(null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking existing message:", error);
+    } finally {
+      setCheckingMessage(false);
+    }
+  };
 
   const fetchRequestDetails = async () => {
     try {
@@ -124,12 +167,19 @@ const CustomerServiceRequestDetails = () => {
   };
 
   const handleMessageTrishkaye = () => {
-    navigate("/customer/messages/compose", {
-      state: {
-        requestId: requestData?.requestId || requestId,
-        requestNumber: requestData?.id,
-      },
-    });
+    // Check if message already exists
+    if (hasExistingMessage && existingMessageId) {
+      // Navigate to existing message thread instead of creating new one
+      navigate(`/customer/messages/${existingMessageId}`);
+    } else {
+      // Allow creating new message
+      navigate("/customer/messages/compose", {
+        state: {
+          requestId: requestData?.requestId || requestId,
+          requestNumber: requestData?.id,
+        },
+      });
+    }
   };
 
   // ✅ UPDATED: Approve service request directly (no quotation_id needed)
@@ -210,75 +260,70 @@ const CustomerServiceRequestDetails = () => {
     const steps = [
       { label: "Pending", key: "pending" },
       { label: "Assigned for Processing", key: "processing" },
-      { label: "Waiting for Approval", key: "waiting_approval" },
+      { label: "Waiting for Approval", key: "waiting" },
       { label: "Approved", key: "approved" },
-      { label: "Service Ongoing", key: "ongoing" },
+      { label: "Ongoing", key: "ongoing" },
       { label: "Completed", key: "completed" },
     ];
 
-    const getCurrentStep = () => {
-      if (!requestData) return 0;
+    const getStepStatus = (stepKey) => {
+      const statusMap = {
+        Pending: ["pending"],
+        Assigned: ["pending", "processing"],
+        "Waiting for Approval": ["pending", "processing", "waiting"],
+        Approved: ["pending", "processing", "waiting", "approved"],
+        Ongoing: ["pending", "processing", "waiting", "approved", "ongoing"],
+        Completed: [
+          "pending",
+          "processing",
+          "waiting",
+          "approved",
+          "ongoing",
+          "completed",
+        ],
+      };
 
-      switch (requestData.serviceStatus) {
-        case "Pending":
-          return 0;
-        case "Assigned":
-        case "Processing":
-          return 1;
-        case "Waiting for Approval":
-          return 2;
-        case "Approved":
-          return 3;
-        case "Ongoing":
-          return 4;
-        case "Completed":
-          return 5;
-        default:
-          return 0;
-      }
+      const currentSteps = statusMap[requestData.serviceStatus] || ["pending"];
+      return currentSteps.includes(stepKey);
     };
 
-    const currentStep = getCurrentStep();
-
     return (
-      <div className="my-8">
-        <div className="flex items-start justify-between overflow-x-auto ">
-          {steps.map((step, index) => (
-            <div
-              key={step.key}
-              className="flex items-center min-w-0 flex-shrink-0 "
-            >
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold ${
-                    index <= currentStep
-                      ? "text-[#0260A0] border-2 border-[#0260A0]"
-                      : "text-gray-400 border-2 border-gray-400"
-                  }`}
-                >
-                  {String(index + 1).padStart(2, "0")}
-                </div>
-                <span
-                  className={`mt-2 text-sm text-center w-23 h-10 ${
-                    index <= currentStep
-                      ? "text-[#0260A0] font-semibold"
-                      : "text-gray-400"
-                  }`}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {index < steps.length - 1 && (
-                <div className="flex items-center -mt-10">
+      <div className="relative">
+        <div className="flex justify-between items-center">
+          {steps.map((step, index) => {
+            const isActive = getStepStatus(step.key);
+            const isLast = index === steps.length - 1;
+
+            return (
+              <div key={step.key} className="flex items-center flex-1">
+                <div className="flex flex-col items-center flex-1">
                   <div
-                    className={`w-2 lg:w-10 xl:w-25 2xl:w-34 h-0.5 flex-shrink-0 ${
-                      index < currentStep ? "bg-[#0260A0]" : "bg-gray-200"
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                      isActive
+                        ? "bg-[#004785] text-white"
+                        : "bg-gray-300 text-gray-600"
+                    }`}
+                  >
+                    {isActive ? "✓" : index + 1}
+                  </div>
+                  <p
+                    className={`mt-2 text-xs text-center max-w-[100px] ${
+                      isActive ? "text-[#004785] font-semibold" : "text-gray-600"
+                    }`}
+                  >
+                    {step.label}
+                  </p>
+                </div>
+                {!isLast && (
+                  <div
+                    className={`h-1 flex-1 mx-2 transition-colors ${
+                      isActive ? "bg-[#004785]" : "bg-gray-300"
                     }`}
                   />
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -287,8 +332,11 @@ const CustomerServiceRequestDetails = () => {
   if (loading) {
     return (
       <CustomerLayout>
-        <div className="flex justify-center items-center h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#004785]"></div>
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#004785] mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading service request details...</p>
+          </div>
         </div>
       </CustomerLayout>
     );
@@ -298,6 +346,13 @@ const CustomerServiceRequestDetails = () => {
     return (
       <CustomerLayout>
         <div className="p-6">
+          <button
+            onClick={() => navigate("/customer/service-tracker")}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4 cursor-pointer"
+          >
+            <ArrowLeft size={20} />
+            Back to Service Tracker
+          </button>
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             {error}
           </div>
@@ -306,143 +361,103 @@ const CustomerServiceRequestDetails = () => {
     );
   }
 
-  if (!requestData) {
-    return (
-      <CustomerLayout>
-        <div className="p-6">
-          <div className="text-center text-gray-500">No data available</div>
-        </div>
-      </CustomerLayout>
-    );
-  }
-
   return (
     <CustomerLayout>
-      <div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
-          >
-            <ArrowLeft size={20} />
-            Back
-          </button>
+      <div className="space-y-6 relative">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6 bg-white rounded-lg">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/customer/service-tracker")}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-800 cursor-pointer"
+            >
+              <ArrowLeft size={20} />
+              Back
+            </button>
+            <div>
+              <h1 className="text-2xl font-semibold text-[#004785]">
+                Service Request #{requestData.id}
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                {new Date(requestData.requestedAt).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            {requestData.serviceStatus === "Waiting for Approval" && (
+              <button
+                onClick={openApprovalModal}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer"
+              >
+                Approve Service Request
+              </button>
+            )}
+            <button
+              onClick={handleMessageTrishkaye}
+              disabled={checkingMessage}
+              className="flex items-center gap-2 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <MessageCircle size={18} />
+              {checkingMessage ? (
+                "Checking..."
+              ) : hasExistingMessage ? (
+                "View Message Thread"
+              ) : (
+                "Message TRISHKAYE"
+              )}
+            </button>
+          </div>
         </div>
 
-        <div className="p-6">
+        <div className="bg-white rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Request Status
+          </h2>
           <StatusTracker />
         </div>
 
-        {/* Approval Notification Banner */}
-        {requestData.serviceStatus === "Waiting for Approval" && (
-          <div className="mx-6 mb-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-1">
-                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">!</span>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-[#004785] font-semibold text-base mb-2">
-                    Quotation Revised – Please Review
-                  </h3>
-                  <p className="text-gray-700 text-sm mb-4">
-                    The final quotation for your request has been updated.
-                    Please review the details before proceeding.
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <button
-                      onClick={handleMessageTrishkaye}
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-[#004785] text-[#004785] rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-sm font-medium"
-                    >
-                      <MessageCircle size={18} />
-                      Message TRISHKAYE
-                    </button>
-                    <button
-                      onClick={openApprovalModal}
-                      className="px-4 py-3 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer text-sm font-medium"
-                    >
-                      Approve Updated Quotation
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="p-6">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Service Details
+        <div className="bg-white rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Current Status
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Request ID:
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-gray-700 mb-2">
+                Service Status
               </label>
-              <span className="text-sm text-gray-800">{requestData.id}</span>
+              {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
             </div>
-            <div className="flex items-center">
-              <label className="text-sm font-medium text-gray-700 mr-2">
-                Service Status:
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-gray-700 mb-2">
+                Payment Status
               </label>
-              <div className="mt-1">
-                {getStatusBadge(requestData.serviceStatus, "serviceStatus")}
-              </div>
+              {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
             </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Requested At:
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-gray-700 mb-2">
+                Warranty Status
               </label>
-              <span className="text-sm text-gray-800">
-                {requestData.requestedAt}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Warranty: (In Months)
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.warranty}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Assigned Staff:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.assignedStaff}
-              </span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Warranty Fulfillment Status:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.warrantyStatus}
-              </span>
+              {getStatusBadge(requestData.warrantyStatus, "warrantyStatus")}
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center justify-between mb-4">
-            <label className="block text-sm font-medium text-gray-700">
-              List of Requested Services:
-            </label>
-          </div>
-
-          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
+        <div className="bg-white rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Services Requested
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
                     Service Category
                   </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Requested Service
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
-                    Remarks
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Service
                   </th>
                   <th className="px-3 py-3 text-center text-xs font-semibold text-black">
                     Quantity
@@ -453,67 +468,65 @@ const CustomerServiceRequestDetails = () => {
                   <th className="px-3 py-3 text-center text-xs font-semibold text-black">
                     Total Price
                   </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Remarks
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {requestData.services.map((service, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                    <td className="px-3 py-4 text-sm text-gray-800">
                       {service.category}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                    <td className="px-3 py-4 text-sm text-gray-800">
                       {service.service}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.remarks}
-                    </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                    <td className="px-3 py-4 text-sm text-gray-800 text-center">
                       {service.quantity}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.unitPrice}
+                    <td className="px-3 py-4 text-sm text-gray-800 text-center">
+                      ₱{parseFloat(service.unitPrice).toFixed(2)}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {service.totalPrice}
+                    <td className="px-3 py-4 text-sm text-gray-800 text-center">
+                      ₱{parseFloat(service.totalPrice).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-4 text-sm text-gray-800">
+                      {service.remarks}
                     </td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="bg-gray-50">
+                  <td
+                    colSpan="4"
+                    className="px-3 py-4 text-sm font-semibold text-right text-black"
+                  >
+                    Total Cost:
+                  </td>
+                  <td className="px-3 py-4 text-sm font-semibold text-center text-black">
+                    ₱{parseFloat(requestData.totalCost).toFixed(2)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
 
-        <div className="p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-[#0260A0]">
-                {requestData.totalCost}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <h2 className="text-xl font-semibold mb-6 pb-3 text-[#004785] border-b-2 border-gray-300">
-            Payment
+        <div className="bg-white rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4 pb-3 text-[#004785] border-b-2 border-gray-300">
+            Payment Details
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Mode of Payment:
+                Payment Mode:
               </label>
               <span className="text-sm text-gray-800">
                 {formatPaymentMode(requestData.paymentMode)}
               </span>
-            </div>
-            <div className="flex items-center">
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Payment Status:
-              </label>
-              <div className="mt-1">
-                {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
-              </div>
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
@@ -533,15 +546,12 @@ const CustomerServiceRequestDetails = () => {
             </div>
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-4">
-              Payment Breakdown:
-            </label>
-          </div>
-
-          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
+          <h3 className="text-lg font-semibold mb-4 text-[#004785]">
+            Payment History
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
                   <th className="px-3 py-3 text-center text-xs font-semibold text-black">
                     Payment Phase
