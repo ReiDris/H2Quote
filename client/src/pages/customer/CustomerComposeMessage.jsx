@@ -37,9 +37,15 @@ const CustomerComposeMessage = () => {
       setSending(true);
       setError("");
 
+      // Format subject with request identifier
+      const formattedSubject = `[Request #${requestNumber}] ${subject.trim()}`;
+      
+      // Format content with request context
+      const formattedContent = `Regarding Service Request: ${requestNumber}\n\n${message.trim()}`;
+
       const response = await messagingAPI.createServiceRequestMessage(requestId, {
-        subject: subject.trim(),
-        content: message.trim()
+        subject: formattedSubject,
+        content: formattedContent
       });
 
       const data = await response.json();
