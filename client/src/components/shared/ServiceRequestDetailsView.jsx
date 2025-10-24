@@ -59,6 +59,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [showStatusRestrictionModal, setShowStatusRestrictionModal] = useState(false);
   const [statusRestrictionMessage, setStatusRestrictionMessage] = useState("");
 
+  // Check if discount should be disabled based on service status
+  const isDiscountDisabled = ["Ongoing", "Completed", "Cancelled"].includes(serviceStatus);
+
   const handleServiceStatusChange = (newStatus) => {
     // Check if trying to set to "Ongoing" without being "Approved"
     if (newStatus === "Ongoing" && serviceStatus !== "Approved") {
@@ -859,7 +862,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   }
                 }}
                 placeholder="0"
-                className="w-20 text-center border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                disabled={isDiscountDisabled}
+                className={`w-20 text-center border border-gray-300 rounded-lg px-2 py-2 text-sm ${
+                  isDiscountDisabled ? "bg-gray-100 cursor-not-allowed" : ""
+                }`}
               />
               <span className="text-sm font-medium text-gray-700">%</span>
               <button
@@ -867,10 +873,13 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   setSelectedDiscount("No Discount");
                   setCustomDiscountPercent("");
                 }}
-                className={`p-3 border text-sm rounded-lg font-semibold cursor-pointer ${
-                  selectedDiscount === "No Discount"
-                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0]"
-                    : "border-gray-300 text-[#0260A0]"
+                disabled={isDiscountDisabled}
+                className={`p-3 border text-sm rounded-lg font-semibold ${
+                  isDiscountDisabled 
+                    ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : selectedDiscount === "No Discount"
+                    ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0] cursor-pointer"
+                    : "border-gray-300 text-[#0260A0] cursor-pointer"
                 }`}
               >
                 No Discount
