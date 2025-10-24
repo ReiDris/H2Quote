@@ -164,6 +164,7 @@ const AccountSettings = () => {
           ...prev,
           password: '************'
         }));
+        setShowPassword(false);
 
         // Clear success message after 5 seconds
         setTimeout(() => setSuccessMessage(''), 5000);
@@ -303,8 +304,8 @@ const AccountSettings = () => {
                   <button
                     type="button"
                     onClick={togglePasswordVisibility}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer"
-                    disabled={loading}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    disabled={loading || formData.password === '************'}
                   >
                     {showPassword ? (
                       <EyeOff size={20} />
