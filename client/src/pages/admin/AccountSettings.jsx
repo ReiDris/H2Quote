@@ -77,6 +77,25 @@ const AccountSettings = () => {
       newErrors.email = 'Please enter a valid email address';
     }
 
+    if (!formData.contactNo.trim()) {
+      newErrors.contactNo = 'Contact number is required';
+    } else {
+      // Remove spaces, dashes, and parentheses for validation
+      const cleanNumber = formData.contactNo.replace(/[\s\-()]/g, '');
+      
+      // Check for Philippine mobile number formats
+      const phMobilePattern = /^(09|\+639|639)\d{9}$/;
+      // Check for Philippine landline formats (with area code)
+      const phLandlinePattern = /^(02|\+632|632)\d{7,8}$/;
+      
+      const isValidMobile = phMobilePattern.test(cleanNumber);
+      const isValidLandline = phLandlinePattern.test(cleanNumber);
+      
+      if (!isValidMobile && !isValidLandline) {
+        newErrors.contactNo = 'Please enter a valid Philippine contact number (e.g., 09XXXXXXXXX or +639XXXXXXXXX)';
+      }
+    }
+
     if (formData.password && formData.password !== '************') {
       if (formData.password.length < 12) {
         newErrors.password = 'Password must be at least 12 characters';
@@ -255,10 +274,15 @@ const AccountSettings = () => {
                   name="contactNo"
                   value={formData.contactNo}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  className={`w-full px-4 py-3 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white ${
+                    errors.contactNo ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder="Enter your contact number"
                   disabled={loading}
                 />
+                {errors.contactNo && (
+                  <p className="mt-1 text-sm text-red-600">{errors.contactNo}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

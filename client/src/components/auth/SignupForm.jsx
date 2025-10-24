@@ -52,8 +52,21 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
 
     if (!formData.contactNo.trim()) {
       newErrors.contactNo = "Contact number is required";
-    } else if (!/^[0-9+\-\s()]+$/.test(formData.contactNo)) {
-      newErrors.contactNo = "Please enter a valid contact number";
+    } else {
+      // Remove spaces, dashes, and parentheses for validation
+      const cleanNumber = formData.contactNo.replace(/[\s\-()]/g, '');
+      
+      // Check for Philippine mobile number formats
+      const phMobilePattern = /^(09|\+639|639)\d{9}$/;
+      // Check for Philippine landline formats (with area code)
+      const phLandlinePattern = /^(02|\+632|632)\d{7,8}$/;
+      
+      const isValidMobile = phMobilePattern.test(cleanNumber);
+      const isValidLandline = phLandlinePattern.test(cleanNumber);
+      
+      if (!isValidMobile && !isValidLandline) {
+        newErrors.contactNo = "Please enter a valid Philippine contact number (e.g., 09XXXXXXXXX or +639XXXXXXXXX)";
+      }
     }
 
     if (!formData.password) {
@@ -631,6 +644,6 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
       </div>
     </div>
   );
-};
+}
 
 export default SignupForm;

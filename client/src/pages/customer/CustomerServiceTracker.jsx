@@ -208,9 +208,9 @@ const CustomerServiceTracker = () => {
 
   return (
     <CustomerLayout>
-      <div className="space-y-6">
+      <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
         {/* Search and Filter Section */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex-shrink-0 mb-4 flex items-center justify-between gap-4">
           <div className="relative flex-1">
             <Search
               className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500"
@@ -227,8 +227,8 @@ const CustomerServiceTracker = () => {
         </div>
 
         {/* Table Section */}
-        <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+          <div className="overflow-x-auto flex-1 overflow-y-hidden">
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
@@ -310,7 +310,7 @@ const CustomerServiceTracker = () => {
           </div>
 
           {/* Pagination */}
-          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
+          <div className="flex-shrink-0 bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
             {/* Previous Button */}
             <button
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
