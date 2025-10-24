@@ -208,7 +208,7 @@ const CustomerServiceTracker = () => {
 
   return (
     <CustomerLayout>
-      <div className="space-y-6 pt-5">
+      <div className="space-y-6">
         {/* Search and Filter Section */}
         <div className="flex items-center justify-between gap-4">
           <div className="relative flex-1">
