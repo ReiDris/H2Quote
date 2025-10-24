@@ -66,6 +66,11 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return userData;
     } catch (error) {
+      // Handle network errors (Failed to fetch)
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+      }
+      // Re-throw other errors as-is
       throw error;
     } finally {
       setIsLoading(false);
@@ -98,6 +103,10 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      // Handle network errors (Failed to fetch)
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+      }
       throw error;
     } finally {
       setIsLoading(false);
@@ -123,6 +132,10 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return userData;
     } catch (error) {
+      // Handle network errors (Failed to fetch)
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+      }
       throw error;
     } finally {
       setIsLoading(false);
