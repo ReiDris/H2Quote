@@ -78,8 +78,24 @@ const AccountSettings = () => {
     }
 
     if (formData.password && formData.password !== '************') {
-      if (formData.password.length < 6) {
-        newErrors.password = 'Password must be at least 6 characters long';
+      if (formData.password.length < 12) {
+        newErrors.password = 'Password must be at least 12 characters';
+      } else {
+        // Check password requirements (same as backend validation)
+        const hasUppercase = /[A-Z]/.test(formData.password);
+        const hasLowercase = /[a-z]/.test(formData.password);
+        const hasNumber = /\d/.test(formData.password);
+        const hasSpecial = /[@$!%*?&]/.test(formData.password);
+
+        if (!hasUppercase) {
+          newErrors.password = 'Password must contain at least 1 uppercase letter';
+        } else if (!hasLowercase) {
+          newErrors.password = 'Password must contain at least 1 lowercase letter';
+        } else if (!hasNumber) {
+          newErrors.password = 'Password must contain at least 1 number';
+        } else if (!hasSpecial) {
+          newErrors.password = 'Password must contain at least 1 special character (@$!%*?&)';
+        }
       }
     }
 
@@ -275,6 +291,50 @@ const AccountSettings = () => {
                 </div>
                 {errors.password && (
                   <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+                )}
+
+                {/* Password Requirements - Only show when user is changing password */}
+                {formData.password && formData.password !== '************' && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    <p className="mb-1 font-medium">Password must contain:</p>
+                    <div className="grid grid-cols-1 gap-1 text-xs">
+                      <span
+                        className={
+                          formData.password.length >= 12 ? "text-green-600" : ""
+                        }
+                      >
+                        • A minimum of 12 characters
+                      </span>
+                      <span
+                        className={
+                          /[A-Z]/.test(formData.password) ? "text-green-600" : ""
+                        }
+                      >
+                        • At least 1 uppercase letter
+                      </span>
+                      <span
+                        className={
+                          /[a-z]/.test(formData.password) ? "text-green-600" : ""
+                        }
+                      >
+                        • At least 1 lowercase letter
+                      </span>
+                      <span
+                        className={/\d/.test(formData.password) ? "text-green-600" : ""}
+                      >
+                        • At least 1 number
+                      </span>
+                      <span
+                        className={
+                          /[@$!%*?&]/.test(formData.password)
+                            ? "text-green-600"
+                            : ""
+                        }
+                      >
+                        • At least 1 special character (@$!%*?&)
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
