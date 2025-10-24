@@ -99,6 +99,7 @@ const CustomerServiceRequestDetails = () => {
           id: requestDetails.request_number,
           requestId: requestDetails.request_id,
           requestedAt: requestDetails.requested_at,
+          requestAcknowledgedDate: requestDetails.request_acknowledged_date || "-",
           serviceStatus: requestDetails.service_status,
           paymentStatus: requestDetails.payment_status,
           warrantyStatus: requestDetails.warranty_status,
@@ -685,7 +686,9 @@ const CustomerServiceRequestDetails = () => {
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Request Acknowledged:
               </label>
-              <span className="text-sm text-gray-800">-</span>
+              <span className="text-sm text-gray-800">
+                {formatDateTime(requestData.requestAcknowledgedDate)}
+              </span>
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
