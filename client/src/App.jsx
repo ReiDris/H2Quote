@@ -10,6 +10,7 @@ import AboutUsPage from "./pages/AboutUsPage";
 import ServicesPage from "./pages/ServicesPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage"; // NEW IMPORT
 import GoogleCallback from "./pages/GoogleCallback";
 
 // Admin Pages
@@ -31,7 +32,7 @@ import CustomerServiceTracker from "./pages/customer/CustomerServiceTracker";
 import CustomerServiceRequestDetails from "./pages/customer/CustomerServiceRequestDetails";
 import CustomerMessages from "./pages/customer/CustomerMessages";
 import CustomerMessageDetail from "./pages/customer/CustomerMessageDetail";
-import CustomerComposeMessage from "./pages/customer/CustomerComposeMessage"; // NEW IMPORT
+import CustomerComposeMessage from "./pages/customer/CustomerComposeMessage";
 import CustomerAccountSettings from "./pages/customer/CustomerAccountSettings";
 import CustomerAccountVerification from "./pages/customer/CustomerAccountVerification";
 import CompanyOverview from "./pages/customer/CompanyOverview";
@@ -52,6 +53,7 @@ function App() {
               {/* Authentication Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} /> {/* NEW ROUTE */}
               <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
               {/* Protected Admin Routes */}
@@ -227,7 +229,6 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              {/* NEW ROUTE: Compose Message Page */}
               <Route
                 path="/customer/messages/compose"
                 element={

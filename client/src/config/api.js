@@ -254,24 +254,11 @@ export const authAPI = {
     });
   },
 
-  resetPassword: (token, email, newPassword, confirmPassword) => {
+  resetPassword: (data) => {
     return fetch(`${API_URL}/auth/reset-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        email,
-        newPassword,
-        confirmPassword,
-      }),
-    });
-  },
-
-  googleAuth: (authData) => {
-    return fetch(`${API_URL}/auth/google-auth`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(authData),
+      body: JSON.stringify(data),
     });
   },
 
@@ -281,6 +268,14 @@ export const authAPI = {
       email: email,
     });
     return fetch(`${API_URL}/auth/validate-reset-token?${params}`);
+  },
+
+  googleAuth: (authData) => {
+    return fetch(`${API_URL}/auth/google-auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(authData),
+    });
   },
 };
 
