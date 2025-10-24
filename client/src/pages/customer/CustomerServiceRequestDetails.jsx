@@ -706,12 +706,17 @@ const CustomerServiceRequestDetails = () => {
                 </div>
               ) : (
                 <>
-                  <p className="text-black mb-6 text-sm">
-                    Are you sure you want to approve this service request? By
-                    approving, you confirm that you have reviewed the services,
-                    pricing, and terms, and agree to proceed with TRISHKAYE
-                    performing the service.
-                  </p>
+                  <div className="space-y-4 my-5">
+                    <p className="text-black leading-relaxed font-semibold">
+                      Are you sure you want to approve this service request?
+                    </p>
+
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      By approving, you confirm that you have reviewed the
+                      services, pricing, and terms, and agree to proceed with
+                      TRISHKAYE performing the service.
+                    </p>
+                  </div>
 
                   {approvalError && (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
