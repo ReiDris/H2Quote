@@ -85,7 +85,7 @@ const CustomerServiceTracker = () => {
         // Transform backend data to match your existing UI structure
         const transformedData = (data.data || []).map(item => ({
           id: item.request_number,
-          requestedAt: formatDate(item.created_at),
+          requestedAt: item.created_at, // Backend formats the date
           serviceCategory: parseServiceCategory(
             item.services_count || 0, 
             item.chemicals_count || 0, 
@@ -229,37 +229,37 @@ const CustomerServiceTracker = () => {
         {/* Table Section */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           <div className="overflow-x-auto flex-1 overflow-y-hidden">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-32">
                     Request ID
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-44">
                     Requested At
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-36">
                     Service Category
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-64">
                     Requested Service
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-36">
                     Assigned Staff
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-32">
                     Service Status
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-32">
                     Payment Status
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-32">
                     Warranty Status
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-32">
                     Total Cost
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black w-24">
                     View Details
                   </th>
                 </tr>
@@ -267,34 +267,34 @@ const CustomerServiceTracker = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedData.map((item, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800 w-32">
                       {item.id}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 w-44">
                       {item.requestedAt}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 w-36">
                       {item.serviceCategory}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 w-64 max-w-xs truncate" title={item.requestedService}>
                       {item.requestedService}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800 w-36">
                       {item.assignedStaff || "-"}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap w-32">
                       {getStatusBadge(item.serviceStatus, "serviceStatus")}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap w-32">
                       {getStatusBadge(item.paymentStatus, "paymentStatus")}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap w-32">
                       {getStatusBadge(item.warrantyStatus, "warrantyStatus")}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800 w-32">
                       {item.totalCost}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-center">
+                    <td className="px-3 py-4 whitespace-nowrap text-center w-24">
                       <button
                         onClick={() => handleMoreActions(item)}
                         className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
