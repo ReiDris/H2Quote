@@ -509,7 +509,7 @@ const CustomerServiceRequestDetails = () => {
             </div>
             <div className="flex items-center">
               <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Payment Status:
+                Full Payment Status:
               </label>
               <div className="mt-1">
                 {getStatusBadge(requestData.paymentStatus, "paymentStatus")}
@@ -599,16 +599,10 @@ const CustomerServiceRequestDetails = () => {
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {payment.paidOn}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      <select
-                        value={payment.paymentStatus}
-                        className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer"
-                        disabled
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Paid">Paid</option>
-                        <option value="Overdue">Overdue</option>
-                      </select>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-center">
+                      <span className="text-xs xl:text-sm text-gray-800">
+                        {getStatusBadge(payment.paymentStatus, "paymentStatus")}
+                      </span>
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-center">
                       <button
@@ -616,7 +610,18 @@ const CustomerServiceRequestDetails = () => {
                           setSelectedPaymentId(payment.payment_id);
                           setIsUploadModalOpen(true);
                         }}
-                        className="flex items-center gap-1 px-3 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] mx-auto text-xs cursor-pointer"
+                        disabled={
+                          !["Approved", "Ongoing", "Completed"].includes(
+                            requestData.serviceStatus
+                          )
+                        }
+                        className={`flex items-center gap-1 px-3 py-2 rounded-lg mx-auto text-xs ${
+                          ["Approved", "Ongoing", "Completed"].includes(
+                            requestData.serviceStatus
+                          )
+                            ? "bg-[#004785] text-white hover:bg-[#003666] cursor-pointer"
+                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        }`}
                       >
                         <Upload size={14} />
                         {payment.proofOfPayment === "-" ? "Upload" : "Update"}
