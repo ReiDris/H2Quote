@@ -29,7 +29,7 @@ const CustomerServiceRequestDetails = () => {
     return modeMap[mode] || mode;
   };
 
-  // Format date to local timezone
+  // Format date to match Service Tracker format
   const formatDateTime = (dateString) => {
     if (!dateString || dateString === '-') return '-';
     try {
@@ -37,11 +37,11 @@ const CustomerServiceRequestDetails = () => {
       // Check if date is valid
       if (isNaN(date.getTime())) return dateString;
       
-      // Format: "MM/DD/YYYY, HH:MM AM/PM"
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
+      // Format: "Mon DD, YYYY, HH:MM AM/PM" - matches ServiceTracker
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: '2-digit',
+        year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         hour12: true

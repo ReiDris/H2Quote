@@ -598,15 +598,12 @@ const getRequestDetails = async (req, res) => {
     CONCAT(u.first_name, ' ', u.last_name) as customer_name,
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
-    q.quotation_id,
-    q.quotation_number,
-    q.status as quotation_status,
+    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH12:MI AM') as requested_at,
     CASE 
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
       WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
       WHEN rs.status_name = 'Completed' THEN 'Completed'
       ELSE rs.status_name
@@ -632,7 +629,6 @@ const getRequestDetails = async (req, res) => {
   JOIN users u ON sr.requested_by_user_id = u.user_id
   JOIN companies c ON sr.company_id = c.company_id
   LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-  LEFT JOIN quotations q ON sr.request_id = q.request_id
   WHERE ${whereClause}
 `;
 
@@ -722,6 +718,7 @@ const getRequestDetails = async (req, res) => {
         pool.query(refrigerantsQuery, [requestId]),
       ]);
 
+    // Calculate subtotal from all items
     const subtotal = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -730,10 +727,12 @@ const getRequestDetails = async (req, res) => {
       return sum + parseFloat(item.line_total || 0);
     }, 0);
 
+    // Calculate discount
     const discountPercentage = request.discount_percentage || 0;
     const discountAmount = (subtotal * discountPercentage) / 100;
     const totalCostAfterDiscount = subtotal - discountAmount;
 
+    // Format items for display
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -744,6 +743,7 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
+    // ✅ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -765,11 +765,12 @@ const getRequestDetails = async (req, res) => {
       WHERE request_id = $1
       ORDER BY payment_id
     `;
-
+    
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
     let paymentHistory = paymentResult.rows;
 
+    // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
@@ -806,24 +807,15 @@ const getRequestDetails = async (req, res) => {
         request: {
           ...request,
           id: request.request_number,
-          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-PH", {
+          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}`,
           paymentHistory: paymentHistory,
-          quotation_id: request.quotation_id || null,
-          quotation_number: request.quotation_number || null,
-          quotation_status: request.quotation_status || null,
         },
         items: allItems,
         statusHistory: [],
-        quotation: request.quotation_id
-          ? {
-              quotation_id: request.quotation_id,
-              quotation_number: request.quotation_number,
-              status: request.quotation_status,
-            }
-          : null,
+        quotation: null,
       },
     });
   } catch (error) {
