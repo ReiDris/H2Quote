@@ -30,7 +30,12 @@ const createDefaultPayments = async (requestId) => {
       WHERE sr.request_id = $1
     `;
     const result = await client.query(totalQuery, [requestId]);
-    const { subtotal, downpayment_percentage, payment_terms, discount_percentage } = result.rows[0];
+    const {
+      subtotal,
+      downpayment_percentage,
+      payment_terms,
+      discount_percentage,
+    } = result.rows[0];
 
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
@@ -105,7 +110,12 @@ const recreatePayments = async (requestId) => {
       WHERE sr.request_id = $1
     `;
     const result = await client.query(totalQuery, [requestId]);
-    const { subtotal, downpayment_percentage, payment_terms, discount_percentage } = result.rows[0];
+    const {
+      subtotal,
+      downpayment_percentage,
+      payment_terms,
+      discount_percentage,
+    } = result.rows[0];
 
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
@@ -330,11 +340,11 @@ const createServiceRequest = async (req, res) => {
       }
     }
 
-     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'service_requests',
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_requests",
         record_id: requestId,
-        action: 'CREATE',
+        action: "CREATE",
         new_values: {
           request_created: true,
           request_number: requestNumber,
@@ -343,16 +353,15 @@ const createServiceRequest = async (req, res) => {
           payment_terms: paymentTerms,
           services_count: services.length,
           chemicals_count: chemicals?.length || 0,
-          refrigerants_count: refrigerants?.length || 0
+          refrigerants_count: refrigerants?.length || 0,
         },
         changed_by: req.user.email,
         change_reason: `Service request #${requestNumber} created by customer`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
-
 
     await client.query("COMMIT");
 
@@ -435,17 +444,11 @@ const getCustomerRequests = async (req, res) => {
 
     const query = `
       SELECT 
-        sr.request_id, 
-        sr.request_number, 
-        rs.status_name as status, 
+        sr.request_id,
+        sr.request_number,
         sr.request_date as created_at,
-        sr.target_completion_date, 
-        sr.estimated_duration_days,
+        rs.status_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        sr.payment_mode, 
-        sr.payment_terms, 
-        sr.downpayment_percentage,
-        sr.discount_percentage,
         
         COALESCE(
           (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
@@ -479,12 +482,13 @@ const getCustomerRequests = async (req, res) => {
           0
         ) as estimated_cost,
         
-        -- Add service status for frontend
+        -- Add service status for frontend (FIXED to match admin/staff)
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
           WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
           WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
           WHEN rs.status_name = 'Completed' THEN 'Completed'
           ELSE rs.status_name
@@ -813,11 +817,13 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: request.quotation_id ? {
-          quotation_id: request.quotation_id,
-          quotation_number: request.quotation_number,
-          status: request.quotation_status
-        } : null,
+        quotation: request.quotation_id
+          ? {
+              quotation_id: request.quotation_id,
+              quotation_number: request.quotation_number,
+              status: request.quotation_status,
+            }
+          : null,
       },
     });
   } catch (error) {
@@ -1083,22 +1089,22 @@ const addServicesToRequest = async (req, res) => {
     }
 
     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'service_request_items',
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_items",
         record_id: requestId,
-        action: 'CREATE',
+        action: "CREATE",
         new_values: {
           services_added: addedServices.length,
-          service_names: addedServices.map(s => s.service_name),
+          service_names: addedServices.map((s) => s.service_name),
           additional_cost: additionalCost,
-          new_total_cost: request.estimated_cost + additionalCost
+          new_total_cost: request.estimated_cost + additionalCost,
         },
         changed_by: req.user.email,
         change_reason: `Added ${addedServices.length} service(s) to request`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -1221,23 +1227,23 @@ const createQuotation = async (req, res) => {
     }
 
     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'quotations',
+      await supabase.from("audit_log").insert({
+        table_name: "quotations",
         record_id: quotationId,
-        action: 'CREATE',
+        action: "CREATE",
         new_values: {
           quotation_created: true,
           request_number: request.request_number,
           total_amount: totalAmount,
           items_count: items.length,
-          valid_until: validUntil
+          valid_until: validUntil,
         },
         changed_by: req.user.email,
         change_reason: `Quotation created for request #${request.request_number}`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -1347,29 +1353,28 @@ const respondToQuotation = async (req, res) => {
     }
 
     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'quotations',
+      await supabase.from("audit_log").insert({
+        table_name: "quotations",
         record_id: quotationId,
-        action: 'UPDATE',
+        action: "UPDATE",
         old_values: {
-          status: quotation.quotation_status
+          status: quotation.quotation_status,
         },
         new_values: {
           status: newQuotationStatus,
           approved: approved,
           customer_notes: customerNotes || null,
-          request_number: quotation.request_number
+          request_number: quotation.request_number,
         },
         changed_by: req.user.email,
-        change_reason: approved 
-          ? `Customer approved quotation for request #${quotation.request_number}` 
+        change_reason: approved
+          ? `Customer approved quotation for request #${quotation.request_number}`
           : `Customer rejected quotation for request #${quotation.request_number}`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
-
 
     await client.query("COMMIT");
 
@@ -1823,13 +1828,13 @@ const updateRequestStatus = async (req, res) => {
     };
 
     const statusOrder = [
-      "New", 
-      "Under Review", 
-      "Quote Prepared", 
-      "Quote Sent", 
-      "Quote Approved", 
-      "In Progress", 
-      "Completed", 
+      "New",
+      "Under Review",
+      "Quote Prepared",
+      "Quote Sent",
+      "Quote Approved",
+      "In Progress",
+      "Completed",
     ];
 
     let newStatusId = currentRequest.status_id;
@@ -1981,25 +1986,25 @@ const updateRequestStatus = async (req, res) => {
     }
 
     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'service_requests',
+      await supabase.from("audit_log").insert({
+        table_name: "service_requests",
         record_id: requestId,
-        action: 'UPDATE',
+        action: "UPDATE",
         old_values: {
-          status: currentStatusName
+          status: currentStatusName,
         },
         new_values: {
           status: backendStatus,
-          assigned_staff: assignedStaffId ? staffName : 'Not assigned',
+          assigned_staff: assignedStaffId ? staffName : "Not assigned",
           service_start_date: serviceStartDate || null,
-          actual_completion_date: actualCompletionDate || null
+          actual_completion_date: actualCompletionDate || null,
         },
         changed_by: req.user.email,
         change_reason: `Status changed from "${currentStatusName}" to "${backendStatus}"`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -2328,7 +2333,7 @@ const removeChemicalsFromRequest = async (req, res) => {
     await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { chemicalItemIds } = req.body; 
+    const { chemicalItemIds } = req.body;
     const adminId = req.user.id;
 
     if (!Array.isArray(chemicalItemIds) || chemicalItemIds.length === 0) {
@@ -2432,22 +2437,22 @@ const removeChemicalsFromRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'service_request_chemicals',
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_chemicals",
         record_id: requestId,
-        action: 'DELETE',
+        action: "DELETE",
         new_values: {
           chemicals_removed: chemicalItemIds.length,
           cost_reduction: costReduction,
-          new_total_cost: request.estimated_cost - costReduction
+          new_total_cost: request.estimated_cost - costReduction,
         },
         changed_by: req.user.email,
         change_reason: `Removed ${chemicalItemIds.length} chemical(s) from request`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -2587,21 +2592,21 @@ const removeRefrigerantsFromRequest = async (req, res) => {
     }
 
     try {
-      await supabase.from('audit_log').insert({
-        table_name: 'service_request_refrigerants',
+      await supabase.from("audit_log").insert({
+        table_name: "service_request_refrigerants",
         record_id: requestId,
-        action: 'DELETE',
+        action: "DELETE",
         new_values: {
           refrigerants_removed: refrigerantItemIds.length,
           cost_reduction: costReduction,
-          new_total_cost: request.estimated_cost - costReduction
+          new_total_cost: request.estimated_cost - costReduction,
         },
         changed_by: req.user.email,
         change_reason: `Removed ${refrigerantItemIds.length} refrigerant(s) from request`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -2944,14 +2949,15 @@ const updateServiceRequest = async (req, res) => {
         FROM service_requests sr
         WHERE sr.request_id = $1
       `;
-      
+
       const subtotalResult = await client.query(subtotalQuery, [requestId]);
-      const { subtotal, payment_terms, downpayment_percentage } = subtotalResult.rows[0];
-      
+      const { subtotal, payment_terms, downpayment_percentage } =
+        subtotalResult.rows[0];
+
       // Calculate total after discount
       const discountAmount = (subtotal * discountPercentage) / 100;
       const totalAfterDiscount = subtotal - discountAmount;
-      
+
       // Get existing payment records to update
       const paymentsQuery = `
         SELECT payment_id, payment_phase 
@@ -2960,7 +2966,7 @@ const updateServiceRequest = async (req, res) => {
         ORDER BY payment_phase
       `;
       const paymentsResult = await client.query(paymentsQuery, [requestId]);
-      
+
       if (paymentsResult.rows.length > 0) {
         // Recalculate amounts based on payment structure
         if (payment_terms === "Full" || paymentsResult.rows.length === 1) {
@@ -2974,16 +2980,18 @@ const updateServiceRequest = async (req, res) => {
         } else {
           // Down Payment structure: recalculate both payments
           const downpaymentPercent = downpayment_percentage || 50;
-          const downpaymentAmount = Math.round((totalAfterDiscount * downpaymentPercent) / 100);
+          const downpaymentAmount = Math.round(
+            (totalAfterDiscount * downpaymentPercent) / 100
+          );
           const remainingAmount = totalAfterDiscount - downpaymentAmount;
-          
+
           await client.query(
             `UPDATE payments 
              SET amount = $1, updated_at = NOW() 
              WHERE request_id = $2 AND payment_phase = 'Down Payment'`,
             [downpaymentAmount, requestId]
           );
-          
+
           await client.query(
             `UPDATE payments 
              SET amount = $1, updated_at = NOW() 
@@ -3008,24 +3016,25 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-     try {
+    try {
       const changesLog = {};
-      if (statusId !== currentRequest.status_id) changesLog.status_updated = true;
+      if (statusId !== currentRequest.status_id)
+        changesLog.status_updated = true;
       if (paymentStatus) changesLog.payment_status = paymentStatus;
       if (assignedStaffId) changesLog.staff_assigned = staffName;
       if (serviceStartDate) changesLog.service_start_date = serviceStartDate;
 
-      await supabase.from('audit_log').insert({
-        table_name: 'service_requests',
+      await supabase.from("audit_log").insert({
+        table_name: "service_requests",
         record_id: requestId,
-        action: 'UPDATE',
+        action: "UPDATE",
         new_values: changesLog,
         changed_by: req.user.email,
-        change_reason: 'Service request updated by admin/staff',
+        change_reason: "Service request updated by admin/staff",
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -3334,12 +3343,16 @@ const approveServiceRequest = async (req, res) => {
       JOIN users u ON sr.requested_by_user_id = u.user_id
       WHERE sr.request_id = $1 AND sr.requested_by_user_id = $2
     `;
-    const requestResult = await client.query(requestQuery, [requestId, customerId]);
+    const requestResult = await client.query(requestQuery, [
+      requestId,
+      customerId,
+    ]);
 
     if (requestResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Service request not found or you don't have permission to approve it",
+        message:
+          "Service request not found or you don't have permission to approve it",
       });
     }
 
@@ -3356,7 +3369,7 @@ const approveServiceRequest = async (req, res) => {
       "SELECT status_id FROM request_statuses WHERE status_name = $1",
       ["Quote Approved"]
     );
-    
+
     if (statusResult.rows.length === 0) {
       throw new Error("Quote Approved status not found in database");
     }
@@ -3419,8 +3432,12 @@ const approveServiceRequest = async (req, res) => {
           staff.user_id,
           "Service Request Approved",
           `Approved - ${request.request_number}`,
-          `Customer ${request.customer_name} has approved service request #${request.request_number}. ${
-            customerNotes ? `Note: ${customerNotes}` : "You can now proceed with the service."
+          `Customer ${request.customer_name} has approved service request #${
+            request.request_number
+          }. ${
+            customerNotes
+              ? `Note: ${customerNotes}`
+              : "You can now proceed with the service."
           }`,
           staff.email
         );
