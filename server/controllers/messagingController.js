@@ -24,19 +24,26 @@ const getInboxMessages = async (req, res) => {
       whereClause = `
         NOT EXISTS (
           SELECT 1 FROM message_replies mr 
-          WHERE mr.reply_message_id = message_id
+          WHERE mr.reply_message_id = m.message_id
         )
       `;
       queryParams = [];
     } else {
       // Customers only see messages where they are recipient and haven't deleted
-      whereClause = 'recipient_id = $1 AND recipient_deleted = FALSE AND NOT EXISTS (SELECT 1 FROM message_replies mr WHERE mr.reply_message_id = message_id)';
+      whereClause = `
+        m.recipient_id = $1 
+        AND m.recipient_deleted = FALSE 
+        AND NOT EXISTS (
+          SELECT 1 FROM message_replies mr 
+          WHERE mr.reply_message_id = m.message_id
+        )
+      `;
       queryParams = [userId];
     }
     
     if (type !== 'all') {
       const paramIndex = queryParams.length + 1;
-      whereClause += ` AND message_type = $${paramIndex}`;
+      whereClause += ` AND m.message_type = $${paramIndex}`;
       queryParams.push(type);
     }
 
