@@ -118,6 +118,7 @@ const CustomerServiceRequestDetails = () => {
           paymentDeadline: requestDetails.payment_deadline || "-",
           assignedStaff: requestDetails.assigned_staff_name || "-",
           serviceStartDate: requestDetails.service_start_date || "-",
+          serviceEndDate: requestDetails.service_end_date || "-",
           estimatedEndDate: requestDetails.estimated_end_date || "-",
           warranty: requestDetails.warranty || "6 months",
           statusName: requestDetails.status_name, // Backend status name
@@ -691,7 +692,7 @@ const CustomerServiceRequestDetails = () => {
                 Service End Date:
               </label>
               <span className="text-sm text-gray-800">
-                {formatDateTime(requestData.estimatedEndDate)}
+                {formatDateTime(requestData.serviceEndDate)}
               </span>
             </div>
           </div>
