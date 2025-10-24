@@ -916,7 +916,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           </div>
           <div className="flex items-center">
             <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Payment Status:
+              Full Payment Status:
             </label>
             <div className="mt-1">
               <select
