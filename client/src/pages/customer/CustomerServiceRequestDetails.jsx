@@ -29,6 +29,29 @@ const CustomerServiceRequestDetails = () => {
     return modeMap[mode] || mode;
   };
 
+  // Format date to local timezone
+  const formatDateTime = (dateString) => {
+    if (!dateString || dateString === '-') return '-';
+    try {
+      const date = new Date(dateString);
+      // Check if date is valid
+      if (isNaN(date.getTime())) return dateString;
+      
+      // Format: "MM/DD/YYYY, HH:MM AM/PM"
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateString;
+    }
+  };
+
   // Payment proof modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -396,7 +419,7 @@ const CustomerServiceRequestDetails = () => {
                 Requested At:
               </label>
               <span className="text-sm text-gray-800">
-                {requestData.requestedAt}
+                {formatDateTime(requestData.requestedAt)}
               </span>
             </div>
             <div>
@@ -528,7 +551,7 @@ const CustomerServiceRequestDetails = () => {
                 Payment Deadline:
               </label>
               <span className="text-sm text-gray-800">
-                {requestData.paymentDeadline}
+                {formatDateTime(requestData.paymentDeadline)}
               </span>
             </div>
           </div>
@@ -597,7 +620,7 @@ const CustomerServiceRequestDetails = () => {
                       )}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {payment.paidOn}
+                      {formatDateTime(payment.paidOn)}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-center">
                       <span className="text-xs xl:text-sm text-gray-800">
@@ -653,7 +676,7 @@ const CustomerServiceRequestDetails = () => {
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-800">
-                  {requestData.serviceStartDate}
+                  {formatDateTime(requestData.serviceStartDate)}
                 </span>
               </div>
             </div>
@@ -668,7 +691,7 @@ const CustomerServiceRequestDetails = () => {
                 Service End Date:
               </label>
               <span className="text-sm text-gray-800">
-                {requestData.serviceEndDate}
+                {formatDateTime(requestData.estimatedEndDate)}
               </span>
             </div>
           </div>
