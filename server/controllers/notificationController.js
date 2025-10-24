@@ -172,6 +172,33 @@ const deleteNotification = async (req, res) => {
   }
 };
 
+// Clear all read notifications (NEW FUNCTION)
+const clearReadNotifications = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      `DELETE FROM notifications 
+       WHERE recipient_user_id = $1 AND status = 'Sent'
+       RETURNING notification_id`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      message: `${result.rows.length} read notification(s) cleared successfully`,
+      deletedCount: result.rows.length
+    });
+
+  } catch (error) {
+    console.error('Clear read notifications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear read notifications'
+    });
+  }
+};
+
 // Generate notification email HTML
 const generateNotificationEmail = (userName, subject, messageBody, notificationType) => {
   // Map notification types to colors
@@ -364,6 +391,7 @@ module.exports = {
   markAsRead,
   markAllAsRead,
   deleteNotification,
+  clearReadNotifications,
   createNotification,
   createBulkNotifications,
   createServiceRequestNotification

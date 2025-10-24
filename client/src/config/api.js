@@ -362,6 +362,25 @@ export const notificationsAPI = {
       method: "DELETE",
     });
   },
+
+  clearReadNotifications: async () => {
+    const token = localStorage.getItem('token');
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    
+    const response = await fetch(`${API_URL}/api/notifications/clear-read`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to clear read notifications');
+    }
+
+    return response;
+  },
 };
 
 export const accountAPI = {

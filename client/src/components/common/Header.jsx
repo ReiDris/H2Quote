@@ -59,6 +59,16 @@ const Header = () => {
     }
   };
 
+  // Clear read notifications
+  const clearReadNotifications = async () => {
+    try {
+      await notificationsAPI.clearReadNotifications();
+      fetchNotifications();
+    } catch (error) {
+      console.error("Error clearing read notifications:", error);
+    }
+  };
+
   const getTimeAgo = (timestamp) => {
     const now = new Date();
     const notifTime = new Date(timestamp);
@@ -219,14 +229,24 @@ const Header = () => {
                 <div className="p-4 border-b border-gray-200 pb-5">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-black">New</h4>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllAsRead}
-                        className="text-xs text-[#004785] hover:underline"
-                      >
-                        Mark all as read
-                      </button>
-                    )}
+                    <div className="flex gap-2">
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllAsRead}
+                          className="text-xs text-[#004785] hover:underline"
+                        >
+                          Mark all as read
+                        </button>
+                      )}
+                      {notifications.some(n => !n.is_unread) && (
+                        <button
+                          onClick={clearReadNotifications}
+                          className="text-xs text-red-600 hover:underline"
+                        >
+                          Clear read
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div 
