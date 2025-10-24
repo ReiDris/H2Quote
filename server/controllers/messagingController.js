@@ -467,8 +467,9 @@ const createServiceRequestMessage = async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    const requestId = req.params.requestId;
+    
     const {
-      requestId,
       subject,
       content
     } = req.body;
