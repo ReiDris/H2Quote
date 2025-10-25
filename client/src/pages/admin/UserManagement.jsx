@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from "react";
 import AdminLayout from "../../layouts/AdminLayout";
-import { usersAPI } from "../../config/api";
+import { usersAPI } from "../../services/api";
+import { CgMaximizeAlt } from "react-icons/cg";
+import { X } from "lucide-react";
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedRole, setSelectedRole] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
   
   const usersPerPage = 10;
 
@@ -48,6 +54,62 @@ const UserManagementPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMoreActions = (user) => {
+    setSelectedUser(user);
+    setSelectedRole(user.user_type);
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setSelectedUser(null);
+    setSelectedRole("");
+  };
+
+  const handleRoleChange = async () => {
+    if (!selectedUser || selectedRole === selectedUser.user_type) {
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+      
+      const response = await usersAPI.updateUser(selectedUser.user_id, {
+        user_type: selectedRole
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user role');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update local state
+        setUsers(users.map(u => 
+          u.user_id === selectedUser.user_id 
+            ? { ...u, user_type: selectedRole }
+            : u
+        ));
+        
+        handleCloseModal();
+      } else {
+        throw new Error(data.message || 'Failed to update user role');
+      }
+      
+    } catch (err) {
+      console.error('Error updating user role:', err);
+      alert('Failed to update user role: ' + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleArchiveUser = () => {
+    // Function to be implemented later
+    alert('Archive functionality will be implemented later');
   };
 
   // Pagination logic
@@ -154,9 +216,13 @@ const UserManagementPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {formatRole(user.user_type)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button className="text-blue-600 hover:text-blue-800 font-medium transition-colors">
-                          Edit
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <button
+                          onClick={() => handleMoreActions(user)}
+                          className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
+                          title="Manage User"
+                        >
+                          <CgMaximizeAlt size={20} />
                         </button>
                       </td>
                     </tr>
@@ -206,6 +272,101 @@ const UserManagementPage = () => {
           </div>
         </div>
       </div>
+
+      {/* User Management Modal */}
+      {showModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800">
+                Manage User
+              </h2>
+              <button
+                onClick={handleCloseModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-4 space-y-4">
+              {/* User Info */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">User ID:</span>
+                  <span className="text-sm text-gray-900">{formatUserId(selectedUser.user_id)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Name:</span>
+                  <span className="text-sm text-gray-900">
+                    {`${selectedUser.first_name} ${selectedUser.last_name}`.trim()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Email:</span>
+                  <span className="text-sm text-gray-900">{selectedUser.email}</span>
+                </div>
+              </div>
+
+              {/* Role Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  User Role
+                </label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={isUpdating}
+                >
+                  <option value="admin">Administrator</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={handleRoleChange}
+                  disabled={isUpdating || selectedRole === selectedUser.user_type}
+                  className={`w-full px-4 py-2 rounded-md font-medium transition-colors ${
+                    isUpdating || selectedRole === selectedUser.user_type
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {isUpdating ? "Updating..." : "Update Role"}
+                </button>
+
+                <button
+                  onClick={handleArchiveUser}
+                  disabled={isUpdating}
+                  className={`w-full px-4 py-2 rounded-md font-medium transition-colors ${
+                    isUpdating
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-red-600 text-white hover:bg-red-700"
+                  }`}
+                >
+                  Archive User
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={handleCloseModal}
+                disabled={isUpdating}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };
