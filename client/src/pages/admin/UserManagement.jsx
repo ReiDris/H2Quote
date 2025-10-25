@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import AdminLayout from "../../layouts/AdminLayout";
-import { usersAPI } from "../../services/api";
+import { usersAPI } from "../../config/api";
 import { CgMaximizeAlt } from "react-icons/cg";
 import { X } from "lucide-react";
 
