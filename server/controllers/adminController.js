@@ -194,11 +194,12 @@ const rejectUser = async (req, res) => {
 
     console.log('✅ User found:', existingUser.first_name, existingUser.last_name);
 
-    // Update user status
+    // Update user status - CHANGED FROM 'Rejected' TO 'Suspended'
+    // The database constraint only allows: 'Active', 'Inactive', 'Suspended'
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')
       .update({ 
-        status: 'Rejected',
+        status: 'Suspended',
         rejection_reason: reason.trim(),
         updated_at: new Date().toISOString()
       })
@@ -220,7 +221,7 @@ const rejectUser = async (req, res) => {
           table_name: 'users',
           record_id: userId,
           action: 'UPDATE',
-          new_values: { status: 'Rejected', rejection_reason: reason.trim() },
+          new_values: { status: 'Suspended', rejection_reason: reason.trim() },
           changed_by: req.user?.email || 'Unknown',
           change_reason: 'User rejected by admin',
           ip_address: req.ip || req.connection?.remoteAddress || 'Unknown'
