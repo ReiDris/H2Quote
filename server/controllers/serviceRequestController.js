@@ -801,6 +801,24 @@ const getRequestDetails = async (req, res) => {
       ];
     }
 
+   const quotationQuery = `
+      SELECT 
+        quotation_id,
+        quotation_number,
+        status,
+        total_amount,
+        TO_CHAR(created_at, 'Mon DD, YYYY') as created_date,
+        TO_CHAR(valid_until, 'Mon DD, YYYY') as valid_until,
+        TO_CHAR(approved_date, 'Mon DD, YYYY') as approved_date
+      FROM quotations
+      WHERE request_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    const quotationResult = await pool.query(quotationQuery, [requestId]);
+    const quotation = quotationResult.rows.length > 0 ? quotationResult.rows[0] : null;
+
     res.json({
       success: true,
       data: {
@@ -815,7 +833,7 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: null,
+        quotation: quotation,  // ← CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {

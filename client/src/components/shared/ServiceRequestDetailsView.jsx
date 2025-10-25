@@ -360,6 +360,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     ];
 
     const getCurrentStep = () => {
+      // ✅ FIX: Use serviceStatus state instead of requestData.serviceStatus
+      // This makes the tracker update immediately when dropdown changes
       switch (serviceStatus) {
         case "Pending":
           return 0;

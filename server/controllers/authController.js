@@ -49,16 +49,61 @@ const signup = async (req, res) => {
 
     console.log('✅ Verification file uploaded to Supabase at:', req.file.path);
 
-    const existingUserQuery = "SELECT user_id FROM users WHERE email = $1";
+    // ⭐ UPDATED: Check if email exists and handle rejected/suspended accounts
+    const existingUserQuery = "SELECT user_id, status, company_id, verification_file_path FROM users WHERE email = $1";
     const existingUsers = await client.query(existingUserQuery, [email]);
 
     if (existingUsers.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        success: false,
-        message: "Email already registered",
-      });
+      const existingUser = existingUsers.rows[0];
+      
+      // If account is Suspended (rejected), allow re-registration by deleting old record
+      if (existingUser.status === 'Suspended') {
+        console.log(`🔄 Deleting rejected account for email: ${email}`);
+        
+        // Delete old user record (will cascade delete related records)
+        await client.query("DELETE FROM users WHERE user_id = $1", [existingUser.user_id]);
+        
+        // Optionally delete old company if it has no other users
+        const companyUsersQuery = "SELECT COUNT(*) FROM users WHERE company_id = $1";
+        const companyUsers = await client.query(companyUsersQuery, [existingUser.company_id]);
+        
+        if (parseInt(companyUsers.rows[0].count) === 0) {
+          await client.query("DELETE FROM companies WHERE company_id = $1", [existingUser.company_id]);
+          console.log(`✅ Deleted orphaned company (ID: ${existingUser.company_id})`);
+        }
+        
+        // Delete old verification file from Supabase if it exists
+        if (existingUser.verification_file_path) {
+          try {
+            const fileName = existingUser.verification_file_path.split('/').pop();
+            const { error: deleteError } = await supabase.storage
+              .from('verification-documents')
+              .remove([fileName]);
+            
+            if (!deleteError) {
+              console.log(`✅ Deleted old verification file: ${fileName}`);
+            }
+          } catch (fileError) {
+            console.error('⚠️  Warning: Could not delete old verification file:', fileError.message);
+            // Continue even if file deletion fails
+          }
+        }
+        
+        console.log(`✅ Old rejected account cleaned up for: ${email}`);
+        // Continue with new registration below
+      } 
+      // If account is Active or Inactive (pending), don't allow duplicate
+      else {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          success: false,
+          message: existingUser.status === 'Active' 
+            ? "Email already registered. Please login instead." 
+            : "Email already registered. Your account is pending verification.",
+        });
+      }
     }
+   
 
     const filePath = req.file.path;
 
