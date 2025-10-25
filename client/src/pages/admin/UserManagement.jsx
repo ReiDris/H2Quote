@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import AdminLayout from "../../layouts/AdminLayout";
+import { usersAPI } from "../../config/api";
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState([]);
@@ -19,15 +20,7 @@ const UserManagementPage = () => {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch('http://localhost:5000/api/users', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await usersAPI.getAllUsers();
       
       if (!response.ok) {
         const errorText = await response.text();
