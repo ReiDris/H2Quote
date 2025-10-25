@@ -52,26 +52,6 @@ const CustomerServiceRequestDetails = () => {
     }
   };
 
-  // Format date only (no time) for Request Acknowledged
-  const formatDateOnly = (dateString) => {
-    if (!dateString || dateString === '-') return '-';
-    try {
-      const date = new Date(dateString);
-      // Check if date is valid
-      if (isNaN(date.getTime())) return dateString;
-      
-      // Format: "Mon DD, YYYY" - date only, no time
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric'
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return dateString;
-    }
-  };
-
   // Payment proof modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -698,7 +678,7 @@ const CustomerServiceRequestDetails = () => {
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-800">
-                  {formatDateOnly(requestData.serviceStartDate)}
+                  {formatDateTime(requestData.serviceStartDate)}
                 </span>
               </div>
             </div>
@@ -707,7 +687,7 @@ const CustomerServiceRequestDetails = () => {
                 Request Acknowledged:
               </label>
               <span className="text-sm text-gray-800">
-                {formatDateOnly(requestData.requestAcknowledgedDate)}
+                {formatDateTime(requestData.requestAcknowledgedDate)}
               </span>
             </div>
             <div>
@@ -715,7 +695,7 @@ const CustomerServiceRequestDetails = () => {
                 Service End Date:
               </label>
               <span className="text-sm text-gray-800">
-                {formatDateOnly(requestData.serviceEndDate)}
+                {formatDateTime(requestData.serviceEndDate)}
               </span>
             </div>
           </div>
