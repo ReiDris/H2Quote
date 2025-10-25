@@ -554,7 +554,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       </div>
 
       <div className="p-6">
-        <StatusTracker />
+        <StatusTracker key={serviceStatus} />
       </div>
 
       {/* Approval Notification Banner */}
