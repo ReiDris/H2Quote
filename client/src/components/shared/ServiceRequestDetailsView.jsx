@@ -519,8 +519,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         // Don't update UI here - let backend confirm via fetchRequestDetails()
       }
 
-      // ✅ VALIDATION 2: Prevent manually setting status to "Assigned" without staff
-      // This catches if user manually changed dropdown to "Assigned" without assigning staff
       if (
         finalServiceStatus === "Assigned" &&
         requestData.assignedStaff === "Not assigned"
