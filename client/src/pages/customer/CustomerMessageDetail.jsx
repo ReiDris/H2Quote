@@ -196,7 +196,7 @@ const CustomerMessageDetail = () => {
               </div>
             )}
 
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-10">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Reply</h3>
               <div className="relative">
                 <textarea
