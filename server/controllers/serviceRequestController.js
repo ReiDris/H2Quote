@@ -2806,11 +2806,22 @@ const updateServiceRequest = async (req, res) => {
     console.log("Assigned Staff:", assignedStaff);
     console.log("============================");
 
-    // ✅ VALIDATION: Prevent "Quote Sent" (Waiting for Approval) without assigned staff
+    // ✅ VALIDATION: Prevent "Under Review" (Assigned) or "Quote Sent" (Waiting for Approval) without assigned staff
     // Check BOTH the frontend name and backend mapped name
     const staffValue = (assignedStaff || "").trim();
     const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
     
+    // Block "Assigned for Processing" without staff
+    if ((serviceStatus === "Assigned" || backendStatus === "Under Review") && isNoStaff) {
+      console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff");
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign a staff member first.",
+      });
+    }
+    
+    // Block "Waiting for Approval" without staff
     if ((serviceStatus === "Waiting for Approval" || backendStatus === "Quote Sent") && isNoStaff) {
       console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff");
       await client.query("ROLLBACK");
