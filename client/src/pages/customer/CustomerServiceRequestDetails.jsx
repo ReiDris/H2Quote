@@ -369,7 +369,7 @@ const CustomerServiceRequestDetails = () => {
 
         {/* Approval Notification Banner */}
         {requestData.quotation && 
-         requestData.quotation.status === "Sent" && 
+         //requestData.quotation.status === "Sent" && 
          (requestData.serviceStatus === "Waiting for Approval" || requestData.serviceStatus === "Processing") && (
           <div className="mx-6 mb-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
