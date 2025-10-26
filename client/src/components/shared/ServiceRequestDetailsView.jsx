@@ -66,6 +66,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   );
 
   const handleServiceStatusChange = (newStatus) => {
+    // Check if trying to set to "Waiting for Approval" without assigning staff
+    if (newStatus === "Waiting for Approval" && requestData.assignedStaff === "Not assigned") {
+      setStatusRestrictionMessage(
+        "Cannot set status to Waiting for Approval. Please assign a staff member first."
+      );
+      setShowStatusRestrictionModal(true);
+      return;
+    }
+
     // Check if trying to set to "Ongoing" without being "Approved"
     if (newStatus === "Ongoing" && serviceStatus !== "Approved") {
       setStatusRestrictionMessage(
