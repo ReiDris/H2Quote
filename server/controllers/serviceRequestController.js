@@ -3214,6 +3214,30 @@ const updateServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
+    // ✅ Update quotation status to "Sent" when service request status changes to "Quote Sent"
+    if (serviceStatus && backendStatus === "Quote Sent") {
+      console.log(`📋 Status changed to "Quote Sent" - updating quotation to 'Sent' for request ${requestId}`);
+      
+      try {
+        const updateResult = await client.query(
+          `UPDATE quotations 
+           SET status = 'Sent', updated_at = NOW() 
+           WHERE request_id = $1 AND status = 'Draft'
+           RETURNING quotation_id, quotation_number, status`,
+          [requestId]
+        );
+        
+        if (updateResult.rows.length > 0) {
+          console.log(`✓ Quotation ${updateResult.rows[0].quotation_number} updated from 'Draft' to 'Sent'`);
+        } else {
+          console.log(`⚠ No Draft quotation found to update for request_id: ${requestId}`);
+        }
+      } catch (quotError) {
+        console.error(`✗ Failed to update quotation status:`, quotError.message);
+        // Don't throw - allow the service request update to succeed even if quotation update fails
+      }
+    }
+
     await client.query("COMMIT");
 
     try {
