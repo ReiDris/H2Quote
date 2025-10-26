@@ -532,8 +532,7 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    await client.query("COMMIT");
-
+    // Create quotation INSIDE the transaction before committing
     try {
       const quotationResult = await createQuotationForRequest(requestId, {
         paymentTerms: paymentTerms,
@@ -542,13 +541,16 @@ const createServiceRequest = async (req, res) => {
         taxRate: 0,
         termsConditions: "Standard terms and conditions apply.",
         createdBy: null, // System created
-      });
+      }, client); // Pass the client to use the same transaction
       
-      console.log(`Quotation ${quotationResult.quotationNumber} created automatically for request ${requestNumber}`);
+      console.log(`✓ Quotation ${quotationResult.quotationNumber} created automatically for request ${requestNumber}`);
     } catch (quotError) {
-      console.error("Failed to create quotation automatically:", quotError);
-      // Don't fail the request if quotation creation fails - admin can create it manually
+      console.error("✗ Failed to create quotation automatically:", quotError);
+      // This will rollback the entire transaction including the service request
+      throw quotError;
     }
+
+    await client.query("COMMIT");
 
 
     try {
