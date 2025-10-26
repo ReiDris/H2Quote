@@ -489,43 +489,54 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // ✅ FIX: Proper status management based on staff assignment
+      // ✅ IMPROVED: Smart status management based on staff assignment
       let finalServiceStatus = serviceStatus;
 
-      // If status is "Assigned" but no staff is assigned, revert to "Pending"
+      // ✅ VALIDATION 1: If currently "Assigned" but staff was just unassigned
+      // This means user is trying to remove staff from an Assigned request
       if (
         serviceStatus === "Assigned" &&
         requestData.assignedStaff === "Not assigned"
       ) {
-        finalServiceStatus = "Pending";
-        setServiceStatus("Pending");
         setStatusRestrictionMessage(
-          "Cannot keep status as 'Assigned for Processing' without assigning staff. Status has been reverted to 'Pending'."
+          "Cannot unassign staff while status is 'Assigned for Processing'. " +
+          "The status will be automatically reverted to 'Pending' when you save."
         );
         setShowStatusRestrictionModal(true);
-        return; // Don't save until user acknowledges
+        // Change status to Pending automatically
+        finalServiceStatus = "Pending";
+        setServiceStatus("Pending");
+        return; // Stop here so user can see the revert, then save again
       }
 
-      // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
+      // ✅ AUTO-ASSIGN: If staff is assigned and status is "Pending", auto-promote to "Assigned"
       if (
         requestData.assignedStaff !== "Not assigned" &&
         serviceStatus === "Pending"
       ) {
         finalServiceStatus = "Assigned";
-        setServiceStatus("Assigned");
+        // Don't update UI here - let backend confirm via fetchRequestDetails()
       }
 
-      // ✅ VALIDATION: Prevent manually selecting "Assigned" without staff
+      // ✅ VALIDATION 2: Prevent manually setting status to "Assigned" without staff
+      // This catches if user manually changed dropdown to "Assigned" without assigning staff
       if (
         finalServiceStatus === "Assigned" &&
         requestData.assignedStaff === "Not assigned"
       ) {
         setStatusRestrictionMessage(
-          "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign staff first."
+          "Cannot set status to 'Assigned for Processing' without assigning a staff member. " +
+          "Please assign staff first, or keep status as 'Pending'."
         );
         setShowStatusRestrictionModal(true);
         return;
       }
+
+      // ✅ ALL OTHER CASES: Allow save!
+      // - Pending with no staff → Save allowed (for adding items, changing discount, etc.)
+      // - Pending with staff → Auto-promotes to Assigned
+      // - Assigned with staff → Save allowed
+      // - Any other status → Save allowed
 
       // Format discount for backend
       let discountForBackend = "No Discount";
@@ -565,9 +576,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       const data = await response.json();
 
       if (data.success) {
-        setSuccessMessage("Changes saved successfully!");
+        // Check if backend auto-reverted the status
+        if (data.statusReverted) {
+          setSuccessMessage(
+            "Staff unassigned. Status has been automatically reverted to 'Pending'."
+          );
+        } else {
+          setSuccessMessage("Changes saved successfully!");
+        }
         setShowSuccessModal(true);
-        fetchRequestDetails();
+        fetchRequestDetails(); // Reload data from backend to sync UI
       } else {
         setSuccessMessage("Failed to save changes: " + data.message);
         setShowSuccessModal(true);
