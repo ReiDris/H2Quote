@@ -440,74 +440,96 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   };
 
   const handleSaveChanges = async () => {
-    try {
-      // Validate Service End Date when status is Completed
-      if (serviceStatus === "Completed" && !serviceEndDate) {
-        setStatusRestrictionMessage(
-          "Service End Date is required when marking service as Completed."
-        );
-        setShowStatusRestrictionModal(true);
-        return;
-      }
-
-      // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
-      let finalServiceStatus = serviceStatus;
-      if (requestData.assignedStaff !== "Not assigned" && serviceStatus === "Pending") {
-        finalServiceStatus = "Assigned";
-        setServiceStatus("Assigned");
-      }
-
-      // Format discount for backend
-      let discountForBackend = "No Discount";
-      if (selectedDiscount === "Custom" && customDiscountPercent) {
-        discountForBackend = `${customDiscountPercent}%`;
-      }
-
-      const updatePayload = {
-        serviceStatus: finalServiceStatus,
-        paymentStatus: paymentStatus,
-        warrantyStatus: warrantyStatus,
-        assignedStaff: requestData.assignedStaff,
-        serviceStartDate: serviceStartDate || null,
-        serviceEndDate: serviceEndDate || null,
-        paymentDeadline: paymentDeadline || null,
-        discount: discountForBackend,
-        services: requestData.services.map((service) => ({
-          service_id: service.service_id,
-          itemType: service.itemType,
-          warranty_months: service.warranty_months,
-          warranty_start_date: service.warranty_start_date || null,
-          warranty_status: service.warranty_status,
-        })),
-        paymentBreakdown: paymentBreakdown.map((payment) => ({
-          phase: payment.phase,
-          paymentStatus: payment.paymentStatus,
-        })),
-      };
-
-      console.log("Sending update payload:", updatePayload);
-
-      // Use updateRequest (not updateRequestDetails)
-      const response = await serviceRequestsAPI.updateRequest(
-        requestId,
-        updatePayload
+  try {
+    // Validate Service End Date when status is Completed
+    if (serviceStatus === "Completed" && !serviceEndDate) {
+      setStatusRestrictionMessage(
+        "Service End Date is required when marking service as Completed."
       );
-      const data = await response.json();
+      setShowStatusRestrictionModal(true);
+      return;
+    }
 
-      if (data.success) {
-        setSuccessMessage("Changes saved successfully!");
-        setShowSuccessModal(true);
-        fetchRequestDetails();
-      } else {
-        setSuccessMessage("Failed to save changes: " + data.message);
-        setShowSuccessModal(true);
-      }
-    } catch (error) {
-      console.error("Save changes error:", error);
-      setSuccessMessage("Failed to save changes. Please try again.");
+    // ✅ FIX: Proper status management based on staff assignment
+    let finalServiceStatus = serviceStatus;
+    
+    // If status is "Assigned" but no staff is assigned, revert to "Pending"
+    if (serviceStatus === "Assigned" && requestData.assignedStaff === "Not assigned") {
+      finalServiceStatus = "Pending";
+      setServiceStatus("Pending");
+      setStatusRestrictionMessage(
+        "Cannot keep status as 'Assigned for Processing' without assigning staff. Status has been reverted to 'Pending'."
+      );
+      setShowStatusRestrictionModal(true);
+      return; // Don't save until user acknowledges
+    }
+    
+    // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
+    if (requestData.assignedStaff !== "Not assigned" && serviceStatus === "Pending") {
+      finalServiceStatus = "Assigned";
+      setServiceStatus("Assigned");
+    }
+    
+    // ✅ VALIDATION: Prevent manually selecting "Assigned" without staff
+    if (finalServiceStatus === "Assigned" && requestData.assignedStaff === "Not assigned") {
+      setStatusRestrictionMessage(
+        "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign staff first."
+      );
+      setShowStatusRestrictionModal(true);
+      return;
+    }
+
+    // Format discount for backend
+    let discountForBackend = "No Discount";
+    if (selectedDiscount === "Custom" && customDiscountPercent) {
+      discountForBackend = `${customDiscountPercent}%`;
+    }
+
+    const updatePayload = {
+      serviceStatus: finalServiceStatus,
+      paymentStatus: paymentStatus,
+      warrantyStatus: warrantyStatus,
+      assignedStaff: requestData.assignedStaff,
+      serviceStartDate: serviceStartDate || null,
+      serviceEndDate: serviceEndDate || null,
+      paymentDeadline: paymentDeadline || null,
+      discount: discountForBackend,
+      services: requestData.services.map((service) => ({
+        service_id: service.service_id,
+        itemType: service.itemType,
+        warranty_months: service.warranty_months,
+        warranty_start_date: service.warranty_start_date || null,
+        warranty_status: service.warranty_status,
+      })),
+      paymentBreakdown: paymentBreakdown.map((payment) => ({
+        phase: payment.phase,
+        paymentStatus: payment.paymentStatus,
+      })),
+    };
+
+    console.log("Sending update payload:", updatePayload);
+
+    // Use updateRequest (not updateRequestDetails)
+    const response = await serviceRequestsAPI.updateRequest(
+      requestId,
+      updatePayload
+    );
+    const data = await response.json();
+
+    if (data.success) {
+      setSuccessMessage("Changes saved successfully!");
+      setShowSuccessModal(true);
+      fetchRequestDetails();
+    } else {
+      setSuccessMessage("Failed to save changes: " + data.message);
       setShowSuccessModal(true);
     }
-  };
+  } catch (error) {
+    console.error("Save changes error:", error);
+    setSuccessMessage("Failed to save changes. Please try again.");
+    setShowSuccessModal(true);
+  }
+};
 
   if (loading) {
     return (

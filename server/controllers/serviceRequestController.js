@@ -73,7 +73,11 @@ const createDefaultPayments = async (requestId) => {
   }
 };
 
-const createQuotationForRequest = async (requestId, options = {}, client = null) => {
+const createQuotationForRequest = async (
+  requestId,
+  options = {},
+  client = null
+) => {
   const shouldReleaseClient = !client;
   if (!client) {
     client = await pool.connect();
@@ -115,11 +119,15 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
     }
 
     const request = requestResult.rows[0];
-    
+
     // Use request values if not provided in options
-    const finalPaymentTerms = paymentTerms || request.request_payment_terms || "50% Down, 50% upon Completion";
-    const finalPaymentMode = paymentMode || request.request_payment_mode || "Bank Transfer";
-    
+    const finalPaymentTerms =
+      paymentTerms ||
+      request.request_payment_terms ||
+      "50% Down, 50% upon Completion";
+    const finalPaymentMode =
+      paymentMode || request.request_payment_mode || "Bank Transfer";
+
     // Calculate totals
     const subtotal = parseFloat(request.subtotal);
     const discountedSubtotal = subtotal - parseFloat(discountAmount);
@@ -132,7 +140,11 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
     ).slice(-6)}`;
 
     // Set valid until date (30 days from now if not provided)
-    const finalValidUntil = validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const finalValidUntil =
+      validUntil ||
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
 
     // Insert quotation
     const insertQuotationQuery = `
@@ -157,7 +169,7 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       finalValidUntil,
       termsConditions,
       createdBy,
-      'Draft', // Always create as Draft - admin will send it to customer later
+      "Draft", // Always create as Draft - admin will send it to customer later
     ]);
 
     const quotationId = quotationResult.rows[0].quotation_id;
@@ -172,7 +184,9 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
     `;
     await client.query(copyItemsQuery, [quotationId, requestId]);
 
-    console.log(`✓ Quotation ${quotationNumber} created as 'Draft' - ready for staff review`);
+    console.log(
+      `✓ Quotation ${quotationNumber} created as 'Draft' - ready for staff review`
+    );
 
     // Keep service request status as "New" - it will change when admin assigns staff
     // Status flow: New → (staff reviews) → Quote Prepared → (admin sends) → Quote Sent
@@ -202,7 +216,9 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       await client.query("COMMIT");
     }
 
-    console.log(`Quotation ${quotationNumber} created automatically for request ${request.request_number}`);
+    console.log(
+      `Quotation ${quotationNumber} created automatically for request ${request.request_number}`
+    );
 
     return {
       success: true,
@@ -210,7 +226,6 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       quotationNumber: quotationNumber,
       totalAmount: totalAmount,
     };
-
   } catch (error) {
     if (shouldReleaseClient) {
       await client.query("ROLLBACK");
@@ -503,8 +518,12 @@ const createServiceRequest = async (req, res) => {
           estimated_duration: estimatedDuration,
           payment_terms: paymentTerms,
           services_count: selectedServices.length,
-          chemicals_count: selectedServices.filter(s => s.type === 'Chemicals').length,
-          refrigerants_count: selectedServices.filter(s => s.type === 'Refrigerants').length,
+          chemicals_count: selectedServices.filter(
+            (s) => s.type === "Chemicals"
+          ).length,
+          refrigerants_count: selectedServices.filter(
+            (s) => s.type === "Refrigerants"
+          ).length,
         },
         changed_by: req.user.email,
         change_reason: `Service request #${requestNumber} created by customer`,
@@ -517,16 +536,22 @@ const createServiceRequest = async (req, res) => {
     // Automatically create quotation based on customer's selected services
     // Staff will review and adjust if needed before sending to customer
     try {
-      const quotationResult = await createQuotationForRequest(requestId, {
-        paymentTerms: paymentTerms,
-        paymentMode: paymentMode,
-        discountAmount: 0,
-        taxRate: 0,
-        termsConditions: "Standard terms and conditions apply.",
-        createdBy: null, // System created
-      }, client); // Use same transaction
-      
-      console.log(`✓ Quotation ${quotationResult.quotationNumber} auto-created for request ${requestNumber}`);
+      const quotationResult = await createQuotationForRequest(
+        requestId,
+        {
+          paymentTerms: paymentTerms,
+          paymentMode: paymentMode,
+          discountAmount: 0,
+          taxRate: 0,
+          termsConditions: "Standard terms and conditions apply.",
+          createdBy: null, // System created
+        },
+        client
+      ); // Use same transaction
+
+      console.log(
+        `✓ Quotation ${quotationResult.quotationNumber} auto-created for request ${requestNumber}`
+      );
     } catch (quotError) {
       console.error("✗ Failed to auto-create quotation:", quotError);
       // Rollback entire transaction if quotation fails
@@ -534,7 +559,6 @@ const createServiceRequest = async (req, res) => {
     }
 
     await client.query("COMMIT");
-
 
     try {
       await createDefaultPayments(requestId);
@@ -1336,16 +1360,18 @@ const createQuotation = async (req, res) => {
       WHERE request_id = $1
       LIMIT 1
     `;
-    const existingQuotation = await client.query(existingQuotationQuery, [requestId]);
-    
+    const existingQuotation = await client.query(existingQuotationQuery, [
+      requestId,
+    ]);
+
     if (existingQuotation.rows.length > 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
         message: "A quotation already exists for this service request",
         data: {
-          quotationNumber: existingQuotation.rows[0].quotation_number
-        }
+          quotationNumber: existingQuotation.rows[0].quotation_number,
+        },
       });
     }
 
@@ -1369,15 +1395,19 @@ const createQuotation = async (req, res) => {
     const request = requestResult.rows[0];
 
     // Use the helper function to create quotation
-    const result = await createQuotationForRequest(requestId, {
-      discountAmount,
-      taxRate,
-      paymentTerms,
-      paymentMode,
-      validUntil,
-      termsConditions,
-      createdBy: adminId,
-    }, client);
+    const result = await createQuotationForRequest(
+      requestId,
+      {
+        discountAmount,
+        taxRate,
+        paymentTerms,
+        paymentMode,
+        validUntil,
+        termsConditions,
+        createdBy: adminId,
+      },
+      client
+    );
 
     // Update service request status to "Quote Prepared"
     const quoteStatusResult = await client.query(
@@ -1406,12 +1436,16 @@ const createQuotation = async (req, res) => {
         request.request_number,
         requestId,
         "Quote Prepared",
-        `A quotation (${result.quotationNumber}) has been prepared for your service request #${
+        `A quotation (${
+          result.quotationNumber
+        }) has been prepared for your service request #${
           request.request_number
         }. Total amount: ₱${result.totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
 
-      console.log(`Quotation notification sent for request ${request.request_number}`);
+      console.log(
+        `Quotation notification sent for request ${request.request_number}`
+      );
     } catch (notifError) {
       console.error("Failed to send quotation notification:", notifError);
     }
@@ -1438,7 +1472,6 @@ const createQuotation = async (req, res) => {
     client.release();
   }
 };
-
 
 const respondToQuotation = async (req, res) => {
   const client = await pool.connect();
@@ -2045,22 +2078,28 @@ const updateRequestStatus = async (req, res) => {
       updateValues.push(newStatusId);
 
       // Update quotation status to "Sent" when service request status changes to "Quote Sent"
-      console.log(`📋 Status change detected. serviceStatus: "${serviceStatus}"`);
-      
+      console.log(
+        `📋 Status change detected. serviceStatus: "${serviceStatus}"`
+      );
+
       if (serviceStatus === "Waiting for Approval") {
         const backendStatus = statusMapping[serviceStatus] || serviceStatus;
         console.log(`📋 Mapped to backend status: "${backendStatus}"`);
-        
+
         if (backendStatus === "Quote Sent") {
-          console.log(`📋 Updating quotation to 'Sent' for request_id: ${requestId}`);
-          
+          console.log(
+            `📋 Updating quotation to 'Sent' for request_id: ${requestId}`
+          );
+
           const updateResult = await client.query(
             `UPDATE quotations SET status = 'Sent' WHERE request_id = $1 AND status IS DISTINCT FROM 'Approved' RETURNING quotation_id, status`,
             [requestId]
           );
-          
+
           if (updateResult.rows.length > 0) {
-            console.log(`✓ Quotation ${updateResult.rows[0].quotation_id} updated to 'Sent'`);
+            console.log(
+              `✓ Quotation ${updateResult.rows[0].quotation_id} updated to 'Sent'`
+            );
           } else {
             console.log(`⚠ No quotation updated for request_id: ${requestId}`);
           }
@@ -3014,6 +3053,54 @@ const updateServiceRequest = async (req, res) => {
         }
       }
     }
+    // ✅ VALIDATION: Prevent "Under Review" (Assigned) status without staff assignment
+    if (backendStatus === "Under Review" && !assignedStaffId) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message:
+          "Cannot set status to 'Under Review' (Assigned for Processing) without assigning a staff member. Please assign staff first.",
+        validationError: "STAFF_REQUIRED_FOR_ASSIGNED_STATUS",
+      });
+    }
+
+    // ✅ AUTO-REVERT: If status is "Under Review" but staff was unassigned, revert to "New"
+    if (
+      currentStatusName === "Under Review" &&
+      !assignedStaffId &&
+      assignedStaff === "Not assigned"
+    ) {
+      // Automatically revert status to "New" (Pending)
+      const newStatusResult = await client.query(
+        "SELECT status_id FROM request_statuses WHERE status_name = $1",
+        ["New"]
+      );
+
+      if (newStatusResult.rows.length > 0) {
+        const newStatusId = newStatusResult.rows[0].status_id;
+
+        await client.query(
+          `UPDATE service_requests 
+       SET status_id = $1, assigned_to_staff_id = NULL, updated_at = NOW()
+       WHERE request_id = $2`,
+          [newStatusId, requestId]
+        );
+
+        console.log(
+          `⚠ Auto-reverted status from "Under Review" to "New" because staff was unassigned`
+        );
+
+        await client.query("COMMIT");
+
+        return res.json({
+          success: true,
+          message:
+            "Staff unassigned. Status automatically reverted to 'Pending'.",
+          statusReverted: true,
+          newStatus: "New",
+        });
+      }
+    }
 
     let actualCompletionDate = currentRequest.actual_completion_date;
     if (
@@ -3216,8 +3303,10 @@ const updateServiceRequest = async (req, res) => {
 
     // ✅ Update quotation status to "Sent" when service request status changes to "Quote Sent"
     if (serviceStatus && backendStatus === "Quote Sent") {
-      console.log(`📋 Status changed to "Quote Sent" - updating quotation to 'Sent' for request ${requestId}`);
-      
+      console.log(
+        `📋 Status changed to "Quote Sent" - updating quotation to 'Sent' for request ${requestId}`
+      );
+
       try {
         const updateResult = await client.query(
           `UPDATE quotations 
@@ -3226,14 +3315,21 @@ const updateServiceRequest = async (req, res) => {
            RETURNING quotation_id, quotation_number, status`,
           [requestId]
         );
-        
+
         if (updateResult.rows.length > 0) {
-          console.log(`✓ Quotation ${updateResult.rows[0].quotation_number} updated from 'Draft' to 'Sent'`);
+          console.log(
+            `✓ Quotation ${updateResult.rows[0].quotation_number} updated from 'Draft' to 'Sent'`
+          );
         } else {
-          console.log(`⚠ No Draft quotation found to update for request_id: ${requestId}`);
+          console.log(
+            `⚠ No Draft quotation found to update for request_id: ${requestId}`
+          );
         }
       } catch (quotError) {
-        console.error(`✗ Failed to update quotation status:`, quotError.message);
+        console.error(
+          `✗ Failed to update quotation status:`,
+          quotError.message
+        );
         // Don't throw - allow the service request update to succeed even if quotation update fails
       }
     }
@@ -3670,8 +3766,6 @@ const approveServiceRequest = async (req, res) => {
   }
 };
 
-
-
 module.exports = {
   approveServiceRequest,
   createServiceRequest,
@@ -3697,5 +3791,5 @@ module.exports = {
   updateServiceRequest,
   setServiceWarranty,
   updateIndividualServiceWarranty,
-  createQuotationForRequest
+  createQuotationForRequest,
 };
