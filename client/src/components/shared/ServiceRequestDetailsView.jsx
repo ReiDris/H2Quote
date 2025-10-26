@@ -66,8 +66,19 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   );
 
   const handleServiceStatusChange = (newStatus) => {
+    // 🔍 DEBUG LOGGING
+    console.log("=== handleServiceStatusChange DEBUG ===");
+    console.log("New Status:", newStatus);
+    console.log("Assigned Staff:", requestData?.assignedStaff);
+    console.log("Staff is 'Not assigned'?", requestData?.assignedStaff === "Not assigned");
+    console.log("=======================================");
+
     // Check if trying to set to "Waiting for Approval" without assigning staff
-    if (newStatus === "Waiting for Approval" && requestData.assignedStaff === "Not assigned") {
+    const staffValue = requestData?.assignedStaff?.trim() || "";
+    const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
+    
+    if (newStatus === "Waiting for Approval" && isNoStaff) {
+      console.error("❌ VALIDATION BLOCKED: Cannot set to Waiting for Approval without staff");
       setStatusRestrictionMessage(
         "Cannot set status to Waiting for Approval. Please assign a staff member first."
       );
@@ -506,6 +517,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
   const handleSaveChanges = async () => {
     try {
+      // 🔍 DEBUG LOGGING
+      console.log("=== handleSaveChanges DEBUG ===");
+      console.log("Service Status:", serviceStatus);
+      console.log("Assigned Staff:", requestData?.assignedStaff);
+      console.log("================================");
+
       // Validate Service End Date when status is Completed
       if (serviceStatus === "Completed" && !serviceEndDate) {
         setStatusRestrictionMessage(
@@ -516,7 +533,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       }
 
       // Validate staff assignment for "Waiting for Approval" status
-      if (serviceStatus === "Waiting for Approval" && requestData.assignedStaff === "Not assigned") {
+      const staffValue = requestData?.assignedStaff?.trim() || "";
+      const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
+      
+      if (serviceStatus === "Waiting for Approval" && isNoStaff) {
+        console.error("❌ SAVE BLOCKED: Cannot save Waiting for Approval without staff");
         setStatusRestrictionMessage(
           "Cannot set status to Waiting for Approval. Please assign a staff member first."
         );

@@ -2829,8 +2829,19 @@ const updateServiceRequest = async (req, res) => {
 
     const statusId = statusResult.rows[0].status_id;
 
+    // 🔍 DEBUG LOGGING
+    console.log("=== updateServiceRequest DEBUG ===");
+    console.log("Service Status:", serviceStatus);
+    console.log("Assigned Staff:", assignedStaff);
+    console.log("Staff is empty?", !assignedStaff || assignedStaff === "Not assigned");
+    console.log("==================================");
+
     // ✅ VALIDATION: Prevent "Waiting for Approval" without assigned staff
-    if (serviceStatus === "Waiting for Approval" && (!assignedStaff || assignedStaff === "Not assigned")) {
+    const staffValue = (assignedStaff || "").trim();
+    const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
+    
+    if (serviceStatus === "Waiting for Approval" && isNoStaff) {
+      console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to Waiting for Approval without staff");
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
