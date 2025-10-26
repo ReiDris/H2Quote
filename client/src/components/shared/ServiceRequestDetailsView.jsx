@@ -8,6 +8,14 @@ import { serviceRequestsAPI } from "../../config/api";
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
 
+  // Helper function to decode HTML entities (e.g., &#8369; to ₱)
+  const decodeHTMLEntities = (text) => {
+    if (!text) return text;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
+
   // Permission flags based on role
   const canAssignStaff = userRole === "admin";
   const canGiveDiscounts = userRole === "admin";
@@ -73,10 +81,22 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     console.log("Staff is 'Not assigned'?", requestData?.assignedStaff === "Not assigned");
     console.log("=======================================");
 
-    // Check if trying to set to "Waiting for Approval" without assigning staff
+    // Check if trying to set to "Assigned" without assigning staff
     const staffValue = requestData?.assignedStaff?.trim() || "";
     const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
     
+    if (newStatus === "Assigned" && isNoStaff) {
+      console.error("❌ VALIDATION BLOCKED: Cannot set to Assigned without staff");
+      setStatusRestrictionMessage(
+        "Cannot set status to Assigned for Processing. Please assign a staff member first."
+      );
+      setShowStatusRestrictionModal(true);
+      // Keep the current status unchanged
+      setServiceStatus(serviceStatus);
+      return;
+    }
+
+    // Check if trying to set to "Waiting for Approval" without assigning staff
     if (newStatus === "Waiting for Approval" && isNoStaff) {
       console.error("❌ VALIDATION BLOCKED: Cannot set to Waiting for Approval without staff");
       setStatusRestrictionMessage(
@@ -294,7 +314,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         // Correct "Assigned" status without staff
         if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
           console.warn(
-            "⚠️ LEGACY DATA: Correcting inconsistent status during data load"
+            "⚠️ INCONSISTENT DATA: Correcting 'Assigned' without staff"
           );
           console.log("  Database status:", dbStatus);
           console.log("  Database staff:", dbStaff);
@@ -532,9 +552,18 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // Validate staff assignment for "Waiting for Approval" status
+      // Validate staff assignment for "Assigned" or "Waiting for Approval" status
       const staffValue = requestData?.assignedStaff?.trim() || "";
       const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
+      
+      if (serviceStatus === "Assigned" && isNoStaff) {
+        console.error("❌ SAVE BLOCKED: Cannot save Assigned without staff");
+        setStatusRestrictionMessage(
+          "Cannot set status to Assigned for Processing. Please assign a staff member first."
+        );
+        setShowStatusRestrictionModal(true);
+        return;
+      }
       
       if (serviceStatus === "Waiting for Approval" && isNoStaff) {
         console.error("❌ SAVE BLOCKED: Cannot save Waiting for Approval without staff");
@@ -926,10 +955,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                     {service.quantity}
                   </td>
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                    {service.unitPrice}
+                    {decodeHTMLEntities(service.unitPrice)}
                   </td>
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                    {service.totalPrice}
+                    {decodeHTMLEntities(service.totalPrice)}
                   </td>
 
                   {service.itemType === "service" ? (
@@ -1051,7 +1080,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             {selectedDiscount !== "No Discount" && (
               <>
                 <p className="text-sm text-gray-500 line-through">
-                  {requestData.totalCost}
+                  {decodeHTMLEntities(requestData.totalCost)}
                 </p>
                 <p className="text-xs text-green-600 mb-1">
                   {customDiscountPercent}% discount applied
@@ -1059,7 +1088,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               </>
             )}
             <p className="text-2xl font-bold text-[#0260A0]">
-              {calculateDiscountedTotal()}
+              {decodeHTMLEntities(calculateDiscountedTotal())}
             </p>
           </div>
         </div>
@@ -1158,7 +1187,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                     {payment.percentage}
                   </td>
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                    {payment.amount}
+                    {decodeHTMLEntities(payment.amount)}
                   </td>
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                     {payment.proofOfPayment === "-" ? (
