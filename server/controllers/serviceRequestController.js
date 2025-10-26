@@ -174,27 +174,9 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
 
     console.log(`✓ Quotation ${quotationNumber} created as 'Draft' - ready for staff review`);
 
-    // Update service request status to "Quote Prepared" (not "Quote Sent" - that happens when admin sends it)
-    try {
-      const quotePreparedStatusQuery = `
-        SELECT status_id FROM request_statuses WHERE status_name = 'Quote Prepared'
-      `;
-      const statusResult = await client.query(quotePreparedStatusQuery);
-      
-      if (statusResult.rows.length > 0) {
-        const quotePreparedStatusId = statusResult.rows[0].status_id;
-        await client.query(
-          `UPDATE service_requests SET status_id = $1, updated_at = NOW() WHERE request_id = $2`,
-          [quotePreparedStatusId, requestId]
-        );
-        console.log(`✓ Service request status updated to 'Quote Prepared' - waiting for admin to send`);
-      } else {
-        console.warn(`⚠ 'Quote Prepared' status not found in request_statuses table`);
-      }
-    } catch (srStatusError) {
-      console.error(`✗ Error updating service request status:`, srStatusError.message);
-      // Don't throw - let the quotation be created even if SR status update fails
-    }
+    // Keep service request status as "New" - it will change when admin assigns staff
+    // Status flow: New → (staff reviews) → Quote Prepared → (admin sends) → Quote Sent
+    // No need to update status here since it's already "New"
 
     // Log audit entry
     try {
@@ -532,8 +514,24 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    // NOTE: Quotation will be created manually by staff after reviewing the request
-    // and checking chemicals/refrigerants availability. Do NOT auto-create here.
+    // Automatically create quotation based on customer's selected services
+    // Staff will review and adjust if needed before sending to customer
+    try {
+      const quotationResult = await createQuotationForRequest(requestId, {
+        paymentTerms: paymentTerms,
+        paymentMode: paymentMode,
+        discountAmount: 0,
+        taxRate: 0,
+        termsConditions: "Standard terms and conditions apply.",
+        createdBy: null, // System created
+      }, client); // Use same transaction
+      
+      console.log(`✓ Quotation ${quotationResult.quotationNumber} auto-created for request ${requestNumber}`);
+    } catch (quotError) {
+      console.error("✗ Failed to auto-create quotation:", quotError);
+      // Rollback entire transaction if quotation fails
+      throw quotError;
+    }
 
     await client.query("COMMIT");
 
