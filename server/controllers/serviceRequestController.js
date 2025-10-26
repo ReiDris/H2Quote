@@ -599,16 +599,16 @@ const getRequestDetails = async (req, res) => {
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
     TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH12:MI AM') as requested_at,
-    CASE 
-      WHEN rs.status_name = 'New' THEN 'Pending'
-      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-      WHEN rs.status_name = 'Completed' THEN 'Completed'
-      ELSE rs.status_name
-    END as service_status,
+   CASE 
+  WHEN rs.status_name = 'New' THEN 'Pending'
+  WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+  WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+  WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+  WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+  WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+  WHEN rs.status_name = 'Completed' THEN 'Completed'
+  ELSE rs.status_name
+END as service_status,
     CASE 
       WHEN sr.payment_status IS NULL THEN 'Pending'
       ELSE sr.payment_status
@@ -766,7 +766,7 @@ const getRequestDetails = async (req, res) => {
       WHERE request_id = $1
       ORDER BY payment_id
     `;
-    
+
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
     let paymentHistory = paymentResult.rows;
@@ -802,7 +802,7 @@ const getRequestDetails = async (req, res) => {
       ];
     }
 
-   const quotationQuery = `
+    const quotationQuery = `
       SELECT 
         quotation_id,
         quotation_number,
@@ -816,9 +816,10 @@ const getRequestDetails = async (req, res) => {
       ORDER BY created_at DESC
       LIMIT 1
     `;
-    
+
     const quotationResult = await pool.query(quotationQuery, [requestId]);
-    const quotation = quotationResult.rows.length > 0 ? quotationResult.rows[0] : null;
+    const quotation =
+      quotationResult.rows.length > 0 ? quotationResult.rows[0] : null;
 
     res.json({
       success: true,
@@ -834,7 +835,7 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation,  // ← CHANGE LINE 818: from null to quotation
+        quotation: quotation, // ← CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {
@@ -1186,13 +1187,13 @@ const createQuotation = async (req, res) => {
     ).slice(-6)}`;
 
     const insertQuotationQuery = `
-      INSERT INTO quotations 
-      (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
-       discount_amount, total_amount, payment_terms, payment_mode, 
-       valid_until, terms_conditions, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING quotation_id
-    `;
+  INSERT INTO quotations 
+  (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
+   discount_amount, total_amount, payment_terms, payment_mode, 
+   valid_until, terms_conditions, created_by, status)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+  RETURNING quotation_id
+`;
 
     const quotationResult = await client.query(insertQuotationQuery, [
       requestId,
@@ -1207,6 +1208,7 @@ const createQuotation = async (req, res) => {
       validUntil,
       termsConditions,
       adminId,
+      "Draft",
     ]);
 
     const quotationId = quotationResult.rows[0].quotation_id;
@@ -1900,6 +1902,17 @@ const updateRequestStatus = async (req, res) => {
     if (newStatusId !== currentRequest.status_id) {
       updateFields.push(`status_id = $${paramCount++}`);
       updateValues.push(newStatusId);
+
+      // Update quotation status to "Sent" when service request status changes to "Quote Sent"
+      if (serviceStatus === "Waiting for Approval") {
+        const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+        if (backendStatus === "Quote Sent") {
+          await client.query(
+            `UPDATE quotations SET status = 'Sent' WHERE request_id = $1 AND status IS DISTINCT FROM 'Approved'`,
+            [requestId]
+          );
+        }
+      }
     }
 
     if (paymentStatus) {
