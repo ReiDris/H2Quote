@@ -497,6 +497,35 @@ export const activityLogsAPI = {
   },
 };
 
+export const chatbotAPI = {
+  startSession: () => {
+    return fetchPublic("/chatbot/start-session", {
+      method: "POST",
+    });
+  },
+
+  sendMessage: (sessionId, message, messageType = "user") => {
+    return fetchPublic("/chatbot/send-message", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, message, messageType }),
+    });
+  },
+
+  getChatHistory: (sessionId, limit = 50) => {
+    return fetchPublic(`/chatbot/chat-history/${sessionId}?limit=${limit}`);
+  },
+
+  endSession: (sessionId) => {
+    return fetchPublic(`/chatbot/end-session/${sessionId}`, {
+      method: "POST",
+    });
+  },
+
+  getQuickActions: () => {
+    return fetchPublic("/chatbot/quick-actions");
+  },
+};
+
 export { DEBUG_MODE };
 
 export default API_URL;
