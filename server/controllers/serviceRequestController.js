@@ -73,6 +73,154 @@ const createDefaultPayments = async (requestId) => {
   }
 };
 
+const createQuotationForRequest = async (requestId, options = {}, client = null) => {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    if (shouldReleaseClient) {
+      await client.query("BEGIN");
+    }
+
+    // Set default values
+    const {
+      discountAmount = 0,
+      taxRate = 0,
+      paymentTerms = "50% Down, 50% upon Completion",
+      paymentMode = "Bank Transfer",
+      validUntil,
+      termsConditions = "Standard terms and conditions apply.",
+      createdBy = null, // System user or admin
+      sendNotification = false,
+    } = options;
+
+    // Get request details
+    const requestQuery = `
+      SELECT sr.*, calculate_request_total(sr.request_id) as subtotal,
+             sr.requested_by_user_id, sr.request_number,
+             sr.payment_terms as request_payment_terms,
+             sr.payment_mode as request_payment_mode,
+             u.email as customer_email,
+             CONCAT(u.first_name, ' ', u.last_name) as customer_name
+      FROM service_requests sr
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      throw new Error("Service request not found");
+    }
+
+    const request = requestResult.rows[0];
+    
+    // Use request values if not provided in options
+    const finalPaymentTerms = paymentTerms || request.request_payment_terms || "50% Down, 50% upon Completion";
+    const finalPaymentMode = paymentMode || request.request_payment_mode || "Bank Transfer";
+    
+    // Calculate totals
+    const subtotal = parseFloat(request.subtotal);
+    const discountedSubtotal = subtotal - parseFloat(discountAmount);
+    const taxAmount = discountedSubtotal * parseFloat(taxRate);
+    const totalAmount = discountedSubtotal + taxAmount;
+
+    // Generate quotation number
+    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+      Date.now()
+    ).slice(-6)}`;
+
+    // Set valid until date (30 days from now if not provided)
+    const finalValidUntil = validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Insert quotation
+    const insertQuotationQuery = `
+      INSERT INTO quotations 
+      (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
+       discount_amount, total_amount, payment_terms, payment_mode, 
+       valid_until, terms_conditions, created_by, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING quotation_id
+    `;
+
+    const quotationResult = await client.query(insertQuotationQuery, [
+      requestId,
+      quotationNumber,
+      subtotal,
+      taxRate,
+      taxAmount,
+      discountAmount,
+      totalAmount,
+      finalPaymentTerms,
+      finalPaymentMode,
+      finalValidUntil,
+      termsConditions,
+      createdBy,
+      'Draft', // Always start as Draft
+    ]);
+
+    const quotationId = quotationResult.rows[0].quotation_id;
+
+    // Copy items from service request to quotation
+    const copyItemsQuery = `
+      INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
+      SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
+      FROM service_request_items sri
+      JOIN services s ON sri.service_id = s.service_id
+      WHERE sri.request_id = $2
+    `;
+    await client.query(copyItemsQuery, [quotationId, requestId]);
+
+    // Don't update service request status here - let it stay in "New" status
+    // Admin can manually change to "Quote Prepared" or "Waiting for Approval" later
+
+    // Log audit entry
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "quotations",
+        record_id: quotationId,
+        action: "CREATE",
+        new_values: {
+          quotation_created: true,
+          request_number: request.request_number,
+          total_amount: totalAmount,
+          valid_until: finalValidUntil,
+          auto_created: true,
+        },
+        changed_by: "system",
+        change_reason: `Quotation automatically created for request #${request.request_number}`,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
+
+    if (shouldReleaseClient) {
+      await client.query("COMMIT");
+    }
+
+    console.log(`Quotation ${quotationNumber} created automatically for request ${request.request_number}`);
+
+    return {
+      success: true,
+      quotationId: quotationId,
+      quotationNumber: quotationNumber,
+      totalAmount: totalAmount,
+    };
+
+  } catch (error) {
+    if (shouldReleaseClient) {
+      await client.query("ROLLBACK");
+    }
+    console.error("Create quotation for request error:", error);
+    throw error;
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+};
+
 const recreatePayments = async (requestId) => {
   const client = await pool.connect();
   try {
@@ -3480,153 +3628,7 @@ const approveServiceRequest = async (req, res) => {
   }
 };
 
-const createQuotationForRequest = async (requestId, options = {}, client = null) => {
-  const shouldReleaseClient = !client;
-  if (!client) {
-    client = await pool.connect();
-  }
 
-  try {
-    if (shouldReleaseClient) {
-      await client.query("BEGIN");
-    }
-
-    // Set default values
-    const {
-      discountAmount = 0,
-      taxRate = 0,
-      paymentTerms = "50% Down, 50% upon Completion",
-      paymentMode = "Bank Transfer",
-      validUntil,
-      termsConditions = "Standard terms and conditions apply.",
-      createdBy = null, // System user or admin
-      sendNotification = false,
-    } = options;
-
-    // Get request details
-    const requestQuery = `
-      SELECT sr.*, calculate_request_total(sr.request_id) as subtotal,
-             sr.requested_by_user_id, sr.request_number,
-             sr.payment_terms as request_payment_terms,
-             sr.payment_mode as request_payment_mode,
-             u.email as customer_email,
-             CONCAT(u.first_name, ' ', u.last_name) as customer_name
-      FROM service_requests sr
-      JOIN users u ON sr.requested_by_user_id = u.user_id
-      WHERE sr.request_id = $1
-    `;
-    const requestResult = await client.query(requestQuery, [requestId]);
-
-    if (requestResult.rows.length === 0) {
-      throw new Error("Service request not found");
-    }
-
-    const request = requestResult.rows[0];
-    
-    // Use request values if not provided in options
-    const finalPaymentTerms = paymentTerms || request.request_payment_terms || "50% Down, 50% upon Completion";
-    const finalPaymentMode = paymentMode || request.request_payment_mode || "Bank Transfer";
-    
-    // Calculate totals
-    const subtotal = parseFloat(request.subtotal);
-    const discountedSubtotal = subtotal - parseFloat(discountAmount);
-    const taxAmount = discountedSubtotal * parseFloat(taxRate);
-    const totalAmount = discountedSubtotal + taxAmount;
-
-    // Generate quotation number
-    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
-      Date.now()
-    ).slice(-6)}`;
-
-    // Set valid until date (30 days from now if not provided)
-    const finalValidUntil = validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    // Insert quotation
-    const insertQuotationQuery = `
-      INSERT INTO quotations 
-      (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
-       discount_amount, total_amount, payment_terms, payment_mode, 
-       valid_until, terms_conditions, created_by, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING quotation_id
-    `;
-
-    const quotationResult = await client.query(insertQuotationQuery, [
-      requestId,
-      quotationNumber,
-      subtotal,
-      taxRate,
-      taxAmount,
-      discountAmount,
-      totalAmount,
-      finalPaymentTerms,
-      finalPaymentMode,
-      finalValidUntil,
-      termsConditions,
-      createdBy,
-      'Draft', // Always start as Draft
-    ]);
-
-    const quotationId = quotationResult.rows[0].quotation_id;
-
-    // Copy items from service request to quotation
-    const copyItemsQuery = `
-      INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
-      SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
-      FROM service_request_items sri
-      JOIN services s ON sri.service_id = s.service_id
-      WHERE sri.request_id = $2
-    `;
-    await client.query(copyItemsQuery, [quotationId, requestId]);
-
-    // Don't update service request status here - let it stay in "New" status
-    // Admin can manually change to "Quote Prepared" or "Waiting for Approval" later
-
-    // Log audit entry
-    try {
-      await supabase.from("audit_log").insert({
-        table_name: "quotations",
-        record_id: quotationId,
-        action: "CREATE",
-        new_values: {
-          quotation_created: true,
-          request_number: request.request_number,
-          total_amount: totalAmount,
-          valid_until: finalValidUntil,
-          auto_created: true,
-        },
-        changed_by: "system",
-        change_reason: `Quotation automatically created for request #${request.request_number}`,
-      });
-    } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
-    }
-
-    if (shouldReleaseClient) {
-      await client.query("COMMIT");
-    }
-
-    console.log(`Quotation ${quotationNumber} created automatically for request ${request.request_number}`);
-
-    return {
-      success: true,
-      quotationId: quotationId,
-      quotationNumber: quotationNumber,
-      totalAmount: totalAmount,
-    };
-
-  } catch (error) {
-    if (shouldReleaseClient) {
-      await client.query("ROLLBACK");
-    }
-    console.error("Create quotation for request error:", error);
-    throw error;
-  } finally {
-    if (shouldReleaseClient) {
-      client.release();
-    }
-  }
-};
 
 module.exports = {
   approveServiceRequest,
