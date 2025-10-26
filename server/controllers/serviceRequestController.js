@@ -2045,13 +2045,25 @@ const updateRequestStatus = async (req, res) => {
       updateValues.push(newStatusId);
 
       // Update quotation status to "Sent" when service request status changes to "Quote Sent"
+      console.log(`📋 Status change detected. serviceStatus: "${serviceStatus}"`);
+      
       if (serviceStatus === "Waiting for Approval") {
         const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+        console.log(`📋 Mapped to backend status: "${backendStatus}"`);
+        
         if (backendStatus === "Quote Sent") {
-          await client.query(
-            `UPDATE quotations SET status = 'Sent' WHERE request_id = $1 AND status IS DISTINCT FROM 'Approved'`,
+          console.log(`📋 Updating quotation to 'Sent' for request_id: ${requestId}`);
+          
+          const updateResult = await client.query(
+            `UPDATE quotations SET status = 'Sent' WHERE request_id = $1 AND status IS DISTINCT FROM 'Approved' RETURNING quotation_id, status`,
             [requestId]
           );
+          
+          if (updateResult.rows.length > 0) {
+            console.log(`✓ Quotation ${updateResult.rows[0].quotation_id} updated to 'Sent'`);
+          } else {
+            console.log(`⚠ No quotation updated for request_id: ${requestId}`);
+          }
         }
       }
     }
