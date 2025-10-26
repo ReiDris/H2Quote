@@ -2799,6 +2799,27 @@ const updateServiceRequest = async (req, res) => {
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
+    // 🔍 DEBUG LOGGING - Show mapping
+    console.log("=== STATUS MAPPING DEBUG ===");
+    console.log("Frontend Status (serviceStatus):", serviceStatus);
+    console.log("Backend Status (backendStatus):", backendStatus);
+    console.log("Assigned Staff:", assignedStaff);
+    console.log("============================");
+
+    // ✅ VALIDATION: Prevent "Quote Sent" (Waiting for Approval) without assigned staff
+    // Check BOTH the frontend name and backend mapped name
+    const staffValue = (assignedStaff || "").trim();
+    const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
+    
+    if ((serviceStatus === "Waiting for Approval" || backendStatus === "Quote Sent") && isNoStaff) {
+      console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff");
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "Cannot set status to 'Waiting for Approval' without assigning a staff member. Please assign a staff member first.",
+      });
+    }
+
     if (serviceStatus && backendStatus !== currentStatusName) {
       const currentIndex = statusOrder.indexOf(currentStatusName);
       const newIndex = statusOrder.indexOf(backendStatus);
@@ -2828,26 +2849,6 @@ const updateServiceRequest = async (req, res) => {
     }
 
     const statusId = statusResult.rows[0].status_id;
-
-    // 🔍 DEBUG LOGGING
-    console.log("=== updateServiceRequest DEBUG ===");
-    console.log("Service Status:", serviceStatus);
-    console.log("Assigned Staff:", assignedStaff);
-    console.log("Staff is empty?", !assignedStaff || assignedStaff === "Not assigned");
-    console.log("==================================");
-
-    // ✅ VALIDATION: Prevent "Waiting for Approval" without assigned staff
-    const staffValue = (assignedStaff || "").trim();
-    const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
-    
-    if (serviceStatus === "Waiting for Approval" && isNoStaff) {
-      console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to Waiting for Approval without staff");
-      await client.query("ROLLBACK");
-      return res.status(400).json({
-        success: false,
-        message: "Cannot set status to 'Waiting for Approval' without assigning a staff member. Please assign a staff member first.",
-      });
-    }
 
     let assignedStaffId = null;
     let requestAcknowledgedDate = currentRequest.request_acknowledged_date;
