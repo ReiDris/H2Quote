@@ -318,7 +318,7 @@ const createNotification = async (userId, notificationType, subject, messageBody
           if (emailSent) {
             await pool.query(
               `UPDATE notifications 
-               SET status = 'Sent', sent_at = NOW()
+               SET sent_at = NOW()
                WHERE notification_id = $1`,
               [notificationId]
             );

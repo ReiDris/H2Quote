@@ -31,7 +31,8 @@ const paymentRoutes = require('./routes/payment');
 const notificationRoutes = require('./routes/notifications');
 const clientRoutes = require('./routes/clients');
 const userRoutes = require('./routes/users');
-const activityLogRoutes = require('./routes/activityLog'); // ✅ ADDED
+const activityLogRoutes = require('./routes/activityLog'); 
+const { schedulePaymentReminders } = require('./paymentScheduler');
 
 // Register routes
 app.use('/api/auth', authRoutes);
@@ -45,7 +46,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/activity-logs', activityLogRoutes); // ✅ ADDED
+app.use('/api/activity-logs', activityLogRoutes); 
 
 // Error handler
 app.use((error, req, res, next) => {
@@ -68,6 +69,8 @@ app.listen(PORT, () => {
     console.log(`Port: ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'production'}`);
     console.log('Server running');
+
+    schedulePaymentReminders
 });
 
 module.exports = app;

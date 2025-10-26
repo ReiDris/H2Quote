@@ -43,8 +43,8 @@ const createDefaultPayments = async (requestId) => {
     if (payment_terms === "Full" || !downpayment_percentage) {
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Full Payment', $2, 'Pending')
+       INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       `,
         [requestId, estimated_cost]
       );
@@ -57,8 +57,11 @@ const createDefaultPayments = async (requestId) => {
 
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES 
+  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+  ($1, 'Completion Balance', $3, 'Pending', NULL)
+  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
       `,
         [requestId, downpaymentAmount, remainingAmount]
       );
@@ -123,8 +126,11 @@ const recreatePayments = async (requestId) => {
     if (payment_terms === "Full" || !downpayment_percentage) {
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Full Payment', $2, 'Pending')
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES 
+  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+  ($1, 'Completion Balance', $3, 'Pending', NULL)
+  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
       `,
         [requestId, estimated_cost]
       );
@@ -137,8 +143,11 @@ const recreatePayments = async (requestId) => {
 
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES 
+  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+  ($1, 'Completion Balance', $3, 'Pending', NULL)
+  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
       `,
         [requestId, downpaymentAmount, remainingAmount]
       );
@@ -765,7 +774,7 @@ const getRequestDetails = async (req, res) => {
       WHERE request_id = $1
       ORDER BY payment_id
     `;
-    
+
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
     let paymentHistory = paymentResult.rows;
@@ -801,7 +810,7 @@ const getRequestDetails = async (req, res) => {
       ];
     }
 
-   const quotationQuery = `
+    const quotationQuery = `
       SELECT 
         quotation_id,
         quotation_number,
@@ -815,9 +824,10 @@ const getRequestDetails = async (req, res) => {
       ORDER BY created_at DESC
       LIMIT 1
     `;
-    
+
     const quotationResult = await pool.query(quotationQuery, [requestId]);
-    const quotation = quotationResult.rows.length > 0 ? quotationResult.rows[0] : null;
+    const quotation =
+      quotationResult.rows.length > 0 ? quotationResult.rows[0] : null;
 
     res.json({
       success: true,
@@ -833,7 +843,7 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation,  // â† CHANGE LINE 818: from null to quotation
+        quotation: quotation, // â† CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {
@@ -2809,25 +2819,39 @@ const updateServiceRequest = async (req, res) => {
     // ✅ VALIDATION: Prevent "Under Review" (Assigned) or "Quote Sent" (Waiting for Approval) without assigned staff
     // Check BOTH the frontend name and backend mapped name
     const staffValue = (assignedStaff || "").trim();
-    const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
-    
+    const isNoStaff =
+      staffValue === "Not assigned" || staffValue === "" || !staffValue;
+
     // Block "Assigned for Processing" without staff
-    if ((serviceStatus === "Assigned" || backendStatus === "Under Review") && isNoStaff) {
-      console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff");
+    if (
+      (serviceStatus === "Assigned" || backendStatus === "Under Review") &&
+      isNoStaff
+    ) {
+      console.error(
+        "❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff"
+      );
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
-        message: "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign a staff member first.",
+        message:
+          "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign a staff member first.",
       });
     }
-    
+
     // Block "Waiting for Approval" without staff
-    if ((serviceStatus === "Waiting for Approval" || backendStatus === "Quote Sent") && isNoStaff) {
-      console.error("❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff");
+    if (
+      (serviceStatus === "Waiting for Approval" ||
+        backendStatus === "Quote Sent") &&
+      isNoStaff
+    ) {
+      console.error(
+        "❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff"
+      );
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
-        message: "Cannot set status to 'Waiting for Approval' without assigning a staff member. Please assign a staff member first.",
+        message:
+          "Cannot set status to 'Waiting for Approval' without assigning a staff member. Please assign a staff member first.",
       });
     }
 
