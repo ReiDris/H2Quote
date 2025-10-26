@@ -218,7 +218,7 @@ const VerifyAccountsPage = () => {
     const statusStyles = {
       Inactive: "bg-blue-100 text-blue-800",
       Active: "bg-green-100 text-green-800",
-      Rejected: "bg-red-100 text-red-800",
+      Suspended: "bg-red-100 text-red-800",
     };
 
     const displayStatus = status === "Inactive" ? "Under Review" : status;

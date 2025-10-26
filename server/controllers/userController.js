@@ -33,6 +33,47 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+const updateUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { user_type } = req.body;
+
+    // Validate user_type
+    if (!user_type || !['admin', 'staff'].includes(user_type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user type. Must be either "admin" or "staff"'
+      });
+    }
+
+    // Update user role
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({ user_type })
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      message: 'User role updated successfully',
+      data: updatedUser
+    });
+
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user'
+    });
+  }
+};
+
 module.exports = {
-  getAllUsers
+  getAllUsers,
+  updateUser
 };

@@ -29,7 +29,7 @@ const CustomerServiceRequestDetails = () => {
     return modeMap[mode] || mode;
   };
 
-  // Format date to local timezone
+  // Format date to match Service Tracker format
   const formatDateTime = (dateString) => {
     if (!dateString || dateString === '-') return '-';
     try {
@@ -37,11 +37,11 @@ const CustomerServiceRequestDetails = () => {
       // Check if date is valid
       if (isNaN(date.getTime())) return dateString;
       
-      // Format: "MM/DD/YYYY, HH:MM AM/PM"
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
+      // Format: "Mon DD, YYYY, HH:MM AM/PM" - matches ServiceTracker
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: '2-digit',
+        year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
@@ -93,12 +93,13 @@ const CustomerServiceRequestDetails = () => {
       const data = await response.json();
 
       if (data.success) {
-        const { request: requestDetails, items } = data.data;
+        const { request: requestDetails, items, quotation } = data.data;
 
         const transformedData = {
           id: requestDetails.request_number,
           requestId: requestDetails.request_id,
           requestedAt: requestDetails.requested_at,
+          requestAcknowledgedDate: requestDetails.request_acknowledged_date || "-",
           serviceStatus: requestDetails.service_status,
           paymentStatus: requestDetails.payment_status,
           warrantyStatus: requestDetails.warranty_status,
@@ -118,9 +119,11 @@ const CustomerServiceRequestDetails = () => {
           paymentDeadline: requestDetails.payment_deadline || "-",
           assignedStaff: requestDetails.assigned_staff_name || "-",
           serviceStartDate: requestDetails.service_start_date || "-",
+          serviceEndDate: requestDetails.service_end_date || "-",
           estimatedEndDate: requestDetails.estimated_end_date || "-",
           warranty: requestDetails.warranty || "6 months",
           statusName: requestDetails.status_name, // Backend status name
+          quotation: quotation, // Store quotation information
         };
 
         setRequestData(transformedData);
@@ -155,16 +158,24 @@ const CustomerServiceRequestDetails = () => {
     });
   };
 
-  // ✅ UPDATED: Approve service request directly (no quotation_id needed)
+  // ✅ UPDATED: Approve quotation using the correct endpoint
   const handleApproveQuotation = async () => {
     setApprovalLoading(true);
     setApprovalError("");
 
     try {
-      // ✅ CORRECT: Call the customer approval endpoint
-      const response = await serviceRequestsAPI.approveServiceRequest(
-        requestData.requestId,
-        "Customer approved the service request and pricing"
+      // Check if quotation exists
+      if (!requestData.quotation || !requestData.quotation.quotation_id) {
+        setApprovalError("No quotation found for this request");
+        setApprovalLoading(false);
+        return;
+      }
+
+      // ✅ CORRECT: Call the approveQuotation endpoint (uses existing API method)
+      const response = await serviceRequestsAPI.approveQuotation(
+        requestData.quotation.quotation_id,
+        true, // approved
+        "Customer approved the quotation" // customerNotes
       );
 
       const data = await response.json();
@@ -179,11 +190,11 @@ const CustomerServiceRequestDetails = () => {
           fetchRequestDetails(); // Refresh the data to show updated status
         }, 1500);
       } else {
-        setApprovalError(data.message || "Failed to approve service request");
+        setApprovalError(data.message || "Failed to approve quotation");
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the service request");
+      setApprovalError("An error occurred while approving the quotation");
     } finally {
       setApprovalLoading(false);
     }
@@ -357,7 +368,9 @@ const CustomerServiceRequestDetails = () => {
         </div>
 
         {/* Approval Notification Banner */}
-        {requestData.serviceStatus === "Waiting for Approval" && (
+        {requestData.quotation && 
+         requestData.quotation.status === "Sent" && 
+         (requestData.serviceStatus === "Waiting for Approval" || requestData.serviceStatus === "Processing") && (
           <div className="mx-6 mb-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <div className="flex items-start gap-3">
@@ -368,11 +381,11 @@ const CustomerServiceRequestDetails = () => {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-[#004785] font-semibold text-base mb-2">
-                    Quotation Revised – Please Review
+                    Quotation Ready – Please Review
                   </h3>
                   <p className="text-gray-700 text-sm mb-4">
-                    The final quotation for your request has been updated.
-                    Please review the details before proceeding.
+                    A quotation for your service request has been prepared.
+                    Please review the details and approve to proceed.
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
@@ -386,7 +399,7 @@ const CustomerServiceRequestDetails = () => {
                       onClick={openApprovalModal}
                       className="px-4 py-3 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer text-sm font-medium"
                     >
-                      Approve Updated Quotation
+                      Approve Quotation
                     </button>
                   </div>
                 </div>
@@ -684,14 +697,16 @@ const CustomerServiceRequestDetails = () => {
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Request Acknowledged:
               </label>
-              <span className="text-sm text-gray-800">-</span>
+              <span className="text-sm text-gray-800">
+                {formatDateTime(requestData.requestAcknowledgedDate)}
+              </span>
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Service End Date:
               </label>
               <span className="text-sm text-gray-800">
-                {formatDateTime(requestData.estimatedEndDate)}
+                {formatDateTime(requestData.serviceEndDate)}
               </span>
             </div>
           </div>

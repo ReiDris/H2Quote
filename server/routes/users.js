@@ -20,4 +20,7 @@ const requireAdmin = (req, res, next) => {
 // Get all users (Admin only)
 router.get('/', requireAdmin, userController.getAllUsers);
 
+// Update user (Admin only)
+router.put('/:userId', requireAdmin, userController.updateUser);
+
 module.exports = router;

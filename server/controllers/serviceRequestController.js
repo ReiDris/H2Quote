@@ -73,6 +73,157 @@ const createDefaultPayments = async (requestId) => {
   }
 };
 
+const createQuotationForRequest = async (requestId, options = {}, client = null) => {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    if (shouldReleaseClient) {
+      await client.query("BEGIN");
+    }
+
+    // Set default values
+    const {
+      discountAmount = 0,
+      taxRate = 0,
+      paymentTerms = "50% Down, 50% upon Completion",
+      paymentMode = "Bank Transfer",
+      validUntil,
+      termsConditions = "Standard terms and conditions apply.",
+      createdBy = null, // System user or admin
+      sendNotification = false,
+    } = options;
+
+    // Get request details
+    const requestQuery = `
+      SELECT sr.*, calculate_request_total(sr.request_id) as subtotal,
+             sr.requested_by_user_id, sr.request_number,
+             sr.payment_terms as request_payment_terms,
+             sr.payment_mode as request_payment_mode,
+             u.email as customer_email,
+             CONCAT(u.first_name, ' ', u.last_name) as customer_name
+      FROM service_requests sr
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      WHERE sr.request_id = $1
+    `;
+    const requestResult = await client.query(requestQuery, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      throw new Error("Service request not found");
+    }
+
+    const request = requestResult.rows[0];
+    
+    // Use request values if not provided in options
+    const finalPaymentTerms = paymentTerms || request.request_payment_terms || "50% Down, 50% upon Completion";
+    const finalPaymentMode = paymentMode || request.request_payment_mode || "Bank Transfer";
+    
+    // Calculate totals
+    const subtotal = parseFloat(request.subtotal);
+    const discountedSubtotal = subtotal - parseFloat(discountAmount);
+    const taxAmount = discountedSubtotal * parseFloat(taxRate);
+    const totalAmount = discountedSubtotal + taxAmount;
+
+    // Generate quotation number
+    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+      Date.now()
+    ).slice(-6)}`;
+
+    // Set valid until date (30 days from now if not provided)
+    const finalValidUntil = validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Insert quotation
+    const insertQuotationQuery = `
+      INSERT INTO quotations 
+      (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
+       discount_amount, total_amount, payment_terms, payment_mode, 
+       valid_until, terms_conditions, created_by, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING quotation_id
+    `;
+
+    const quotationResult = await client.query(insertQuotationQuery, [
+      requestId,
+      quotationNumber,
+      subtotal,
+      taxRate,
+      taxAmount,
+      discountAmount,
+      totalAmount,
+      finalPaymentTerms,
+      finalPaymentMode,
+      finalValidUntil,
+      termsConditions,
+      createdBy,
+      'Draft', // Always create as Draft - admin will send it to customer later
+    ]);
+
+    const quotationId = quotationResult.rows[0].quotation_id;
+
+    // Copy items from service request to quotation
+    const copyItemsQuery = `
+      INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
+      SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
+      FROM service_request_items sri
+      JOIN services s ON sri.service_id = s.service_id
+      WHERE sri.request_id = $2
+    `;
+    await client.query(copyItemsQuery, [quotationId, requestId]);
+
+    console.log(`✓ Quotation ${quotationNumber} created as 'Draft' - ready for staff review`);
+
+    // Keep service request status as "New" - it will change when admin assigns staff
+    // Status flow: New → (staff reviews) → Quote Prepared → (admin sends) → Quote Sent
+    // No need to update status here since it's already "New"
+
+    // Log audit entry
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "quotations",
+        record_id: quotationId,
+        action: "CREATE",
+        new_values: {
+          quotation_created: true,
+          request_number: request.request_number,
+          total_amount: totalAmount,
+          valid_until: finalValidUntil,
+          auto_created: true,
+        },
+        changed_by: "system",
+        change_reason: `Quotation automatically created for request #${request.request_number}`,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
+
+    if (shouldReleaseClient) {
+      await client.query("COMMIT");
+    }
+
+    console.log(`Quotation ${quotationNumber} created automatically for request ${request.request_number}`);
+
+    return {
+      success: true,
+      quotationId: quotationId,
+      quotationNumber: quotationNumber,
+      totalAmount: totalAmount,
+    };
+
+  } catch (error) {
+    if (shouldReleaseClient) {
+      await client.query("ROLLBACK");
+    }
+    console.error("Create quotation for request error:", error);
+    throw error;
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+};
+
 const recreatePayments = async (requestId) => {
   const client = await pool.connect();
   try {
@@ -363,7 +514,27 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
+    // Automatically create quotation based on customer's selected services
+    // Staff will review and adjust if needed before sending to customer
+    try {
+      const quotationResult = await createQuotationForRequest(requestId, {
+        paymentTerms: paymentTerms,
+        paymentMode: paymentMode,
+        discountAmount: 0,
+        taxRate: 0,
+        termsConditions: "Standard terms and conditions apply.",
+        createdBy: null, // System created
+      }, client); // Use same transaction
+      
+      console.log(`✓ Quotation ${quotationResult.quotationNumber} auto-created for request ${requestNumber}`);
+    } catch (quotError) {
+      console.error("✗ Failed to auto-create quotation:", quotError);
+      // Rollback entire transaction if quotation fails
+      throw quotError;
+    }
+
     await client.query("COMMIT");
+
 
     try {
       await createDefaultPayments(requestId);
@@ -598,19 +769,17 @@ const getRequestDetails = async (req, res) => {
     CONCAT(u.first_name, ' ', u.last_name) as customer_name,
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH:MI AM') as requested_at,
-    q.quotation_id,
-    q.quotation_number,
-    q.status as quotation_status,
-    CASE 
-      WHEN rs.status_name = 'New' THEN 'Pending'
-      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-      WHEN rs.status_name = 'Completed' THEN 'Completed'
-      ELSE rs.status_name
-    END as service_status,
+    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH12:MI AM') as requested_at,
+   CASE 
+  WHEN rs.status_name = 'New' THEN 'Pending'
+  WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+  WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+  WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+  WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+  WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+  WHEN rs.status_name = 'Completed' THEN 'Completed'
+  ELSE rs.status_name
+END as service_status,
     CASE 
       WHEN sr.payment_status IS NULL THEN 'Pending'
       ELSE sr.payment_status
@@ -632,7 +801,6 @@ const getRequestDetails = async (req, res) => {
   JOIN users u ON sr.requested_by_user_id = u.user_id
   JOIN companies c ON sr.company_id = c.company_id
   LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-  LEFT JOIN quotations q ON sr.request_id = q.request_id
   WHERE ${whereClause}
 `;
 
@@ -722,6 +890,7 @@ const getRequestDetails = async (req, res) => {
         pool.query(refrigerantsQuery, [requestId]),
       ]);
 
+    // Calculate subtotal from all items
     const subtotal = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -730,10 +899,12 @@ const getRequestDetails = async (req, res) => {
       return sum + parseFloat(item.line_total || 0);
     }, 0);
 
+    // Calculate discount
     const discountPercentage = request.discount_percentage || 0;
     const discountAmount = (subtotal * discountPercentage) / 100;
     const totalCostAfterDiscount = subtotal - discountAmount;
 
+    // Format items for display
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -744,6 +915,7 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
+    // ✅ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -770,6 +942,7 @@ const getRequestDetails = async (req, res) => {
 
     let paymentHistory = paymentResult.rows;
 
+    // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
@@ -800,30 +973,40 @@ const getRequestDetails = async (req, res) => {
       ];
     }
 
+    const quotationQuery = `
+      SELECT 
+        quotation_id,
+        quotation_number,
+        status,
+        total_amount,
+        TO_CHAR(created_at, 'Mon DD, YYYY') as created_date,
+        TO_CHAR(valid_until, 'Mon DD, YYYY') as valid_until,
+        TO_CHAR(approved_date, 'Mon DD, YYYY') as approved_date
+      FROM quotations
+      WHERE request_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    const quotationResult = await pool.query(quotationQuery, [requestId]);
+    const quotation =
+      quotationResult.rows.length > 0 ? quotationResult.rows[0] : null;
+
     res.json({
       success: true,
       data: {
         request: {
           ...request,
           id: request.request_number,
-          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-PH", {
+          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}`,
           paymentHistory: paymentHistory,
-          quotation_id: request.quotation_id || null,
-          quotation_number: request.quotation_number || null,
-          quotation_status: request.quotation_status || null,
         },
         items: allItems,
         statusHistory: [],
-        quotation: request.quotation_id
-          ? {
-              quotation_id: request.quotation_id,
-              quotation_number: request.quotation_number,
-              status: request.quotation_status,
-            }
-          : null,
+        quotation: quotation, // ← CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {
@@ -1146,18 +1329,37 @@ const createQuotation = async (req, res) => {
     } = req.body;
     const adminId = req.user.id;
 
+    // Check if quotation already exists
+    const existingQuotationQuery = `
+      SELECT quotation_id, quotation_number 
+      FROM quotations 
+      WHERE request_id = $1
+      LIMIT 1
+    `;
+    const existingQuotation = await client.query(existingQuotationQuery, [requestId]);
+    
+    if (existingQuotation.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message: "A quotation already exists for this service request",
+        data: {
+          quotationNumber: existingQuotation.rows[0].quotation_number
+        }
+      });
+    }
+
+    // Get request details to check status
     const requestQuery = `
-      SELECT sr.*, calculate_request_total(sr.request_id) as subtotal,
-             sr.requested_by_user_id, sr.request_number,
-             u.email as customer_email,
-             CONCAT(u.first_name, ' ', u.last_name) as customer_name
+      SELECT sr.*, rs.status_name
       FROM service_requests sr
-      JOIN users u ON sr.requested_by_user_id = u.user_id
+      JOIN request_statuses rs ON sr.status_id = rs.status_id
       WHERE sr.request_id = $1
     `;
     const requestResult = await client.query(requestQuery, [requestId]);
 
     if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Service request not found",
@@ -1165,50 +1367,19 @@ const createQuotation = async (req, res) => {
     }
 
     const request = requestResult.rows[0];
-    const subtotal = parseFloat(request.subtotal);
-    const discountedSubtotal = subtotal - parseFloat(discountAmount);
-    const taxAmount = discountedSubtotal * parseFloat(taxRate);
-    const totalAmount = discountedSubtotal + taxAmount;
 
-    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
-      Date.now()
-    ).slice(-6)}`;
-
-    const insertQuotationQuery = `
-      INSERT INTO quotations 
-      (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
-       discount_amount, total_amount, payment_terms, payment_mode, 
-       valid_until, terms_conditions, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING quotation_id
-    `;
-
-    const quotationResult = await client.query(insertQuotationQuery, [
-      requestId,
-      quotationNumber,
-      subtotal,
-      taxRate,
-      taxAmount,
+    // Use the helper function to create quotation
+    const result = await createQuotationForRequest(requestId, {
       discountAmount,
-      totalAmount,
+      taxRate,
       paymentTerms,
       paymentMode,
       validUntil,
       termsConditions,
-      adminId,
-    ]);
+      createdBy: adminId,
+    }, client);
 
-    const quotationId = quotationResult.rows[0].quotation_id;
-
-    const copyItemsQuery = `
-      INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
-      SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
-      FROM service_request_items sri
-      JOIN services s ON sri.service_id = s.service_id
-      WHERE sri.request_id = $2
-    `;
-    await client.query(copyItemsQuery, [quotationId, requestId]);
-
+    // Update service request status to "Quote Prepared"
     const quoteStatusResult = await client.query(
       "SELECT status_id FROM request_statuses WHERE status_name = $1",
       ["Quote Prepared"]
@@ -1226,40 +1397,21 @@ const createQuotation = async (req, res) => {
       );
     }
 
-    try {
-      await supabase.from("audit_log").insert({
-        table_name: "quotations",
-        record_id: quotationId,
-        action: "CREATE",
-        new_values: {
-          quotation_created: true,
-          request_number: request.request_number,
-          total_amount: totalAmount,
-          items_count: items.length,
-          valid_until: validUntil,
-        },
-        changed_by: req.user.email,
-        change_reason: `Quotation created for request #${request.request_number}`,
-        ip_address: req.ip || req.connection.remoteAddress,
-      });
-    } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
-    }
-
     await client.query("COMMIT");
 
+    // Send notification to customer
     try {
       await createServiceRequestNotification(
         request.requested_by_user_id,
         request.request_number,
         requestId,
         "Quote Prepared",
-        `A quotation (${quotationNumber}) has been prepared for your service request #${
+        `A quotation (${result.quotationNumber}) has been prepared for your service request #${
           request.request_number
-        }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
+        }. Total amount: ₱${result.totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
 
-      console.log(`Quotation notification sent to ${request.customer_email}`);
+      console.log(`Quotation notification sent for request ${request.request_number}`);
     } catch (notifError) {
       console.error("Failed to send quotation notification:", notifError);
     }
@@ -1268,9 +1420,9 @@ const createQuotation = async (req, res) => {
       success: true,
       message: "Quotation created successfully",
       data: {
-        quotationId: quotationId,
-        quotationNumber: quotationNumber,
-        totalAmount: totalAmount,
+        quotationId: result.quotationId,
+        quotationNumber: result.quotationNumber,
+        totalAmount: result.totalAmount,
         discountAmount: discountAmount,
       },
     });
@@ -1280,11 +1432,13 @@ const createQuotation = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create quotation",
+      error: error.message,
     });
   } finally {
     client.release();
   }
 };
+
 
 const respondToQuotation = async (req, res) => {
   const client = await pool.connect();
@@ -1889,6 +2043,29 @@ const updateRequestStatus = async (req, res) => {
     if (newStatusId !== currentRequest.status_id) {
       updateFields.push(`status_id = $${paramCount++}`);
       updateValues.push(newStatusId);
+
+      // Update quotation status to "Sent" when service request status changes to "Quote Sent"
+      console.log(`📋 Status change detected. serviceStatus: "${serviceStatus}"`);
+      
+      if (serviceStatus === "Waiting for Approval") {
+        const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+        console.log(`📋 Mapped to backend status: "${backendStatus}"`);
+        
+        if (backendStatus === "Quote Sent") {
+          console.log(`📋 Updating quotation to 'Sent' for request_id: ${requestId}`);
+          
+          const updateResult = await client.query(
+            `UPDATE quotations SET status = 'Sent' WHERE request_id = $1 AND status IS DISTINCT FROM 'Approved' RETURNING quotation_id, status`,
+            [requestId]
+          );
+          
+          if (updateResult.rows.length > 0) {
+            console.log(`✓ Quotation ${updateResult.rows[0].quotation_id} updated to 'Sent'`);
+          } else {
+            console.log(`⚠ No quotation updated for request_id: ${requestId}`);
+          }
+        }
+      }
     }
 
     if (paymentStatus) {
@@ -3469,6 +3646,8 @@ const approveServiceRequest = async (req, res) => {
   }
 };
 
+
+
 module.exports = {
   approveServiceRequest,
   createServiceRequest,
@@ -3494,4 +3673,5 @@ module.exports = {
   updateServiceRequest,
   setServiceWarranty,
   updateIndividualServiceWarranty,
+  createQuotationForRequest
 };

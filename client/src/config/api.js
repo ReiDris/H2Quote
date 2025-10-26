@@ -412,6 +412,29 @@ export const adminAPI = {
   },
 };
 
+export const usersAPI = {
+  getAllUsers: () => {
+    return fetchWithAuth("/users");
+  },
+
+  getUserById: (userId) => {
+    return fetchWithAuth(`/users/${userId}`);
+  },
+
+  updateUser: (userId, data) => {
+    return fetchWithAuth(`/users/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteUser: (userId) => {
+    return fetchWithAuth(`/users/${userId}`, {
+      method: "DELETE",
+    });
+  },
+};
+
 export const paymentsAPI = {
   getPaymentProof: (paymentId) => {
     return fetchWithAuth(`/payments/${paymentId}/proof`);

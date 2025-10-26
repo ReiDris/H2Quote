@@ -153,30 +153,92 @@ const rejectUser = async (req, res) => {
     const { userId } = req.params;
     const { reason } = req.body;
 
-    const { error } = await supabase
-      .from('users')
-      .update({ 
-        status: 'Rejected',
-        rejection_reason: reason || 'No reason provided',
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId);
+    // Enhanced logging for debugging
+    console.log('🔍 Reject User Request:');
+    console.log('═══════════════════════════════════════');
+    console.log('User ID:', userId);
+    console.log('Reason:', reason);
+    console.log('Admin Email:', req.user?.email);
+    console.log('═══════════════════════════════════════');
 
-    if (error) {
-      throw error;
+    // Validate inputs
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
     }
 
-    await supabase
-      .from('audit_log')
-      .insert({
-        table_name: 'users',
-        record_id: userId,
-        action: 'UPDATE',
-        new_values: { status: 'Rejected', rejection_reason: reason },
-        changed_by: req.user.email,
-        change_reason: 'User rejected by admin',
-        ip_address: req.ip || req.connection.remoteAddress
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required'
       });
+    }
+
+    // First, check if user exists
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('user_id, first_name, last_name, status')
+      .eq('user_id', userId)
+      .single();
+
+    if (checkError) {
+      console.error('❌ Error checking user:', checkError);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: process.env.NODE_ENV === 'development' ? checkError.message : undefined
+      });
+    }
+
+    console.log('✅ User found:', existingUser.first_name, existingUser.last_name);
+
+    // Update user status - CHANGED FROM 'Rejected' TO 'Suspended'
+    // The database constraint only allows: 'Active', 'Inactive', 'Suspended'
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update({ 
+        status: 'Suspended',
+        rejection_reason: reason.trim(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+      .select();
+
+    if (updateError) {
+      console.error('❌ Error updating user:', updateError);
+      throw updateError;
+    }
+
+    console.log('✅ User status updated successfully');
+
+    // Insert audit log (with error handling)
+    try {
+      const { error: auditError } = await supabase
+        .from('audit_log')
+        .insert({
+          table_name: 'users',
+          record_id: userId,
+          action: 'UPDATE',
+          new_values: { status: 'Suspended', rejection_reason: reason.trim() },
+          changed_by: req.user?.email || 'Unknown',
+          change_reason: 'User rejected by admin',
+          ip_address: req.ip || req.connection?.remoteAddress || 'Unknown'
+        });
+
+      if (auditError) {
+        console.error('⚠️  Warning: Failed to create audit log:', auditError);
+        // Don't fail the request if audit log fails
+      } else {
+        console.log('✅ Audit log created successfully');
+      }
+    } catch (auditException) {
+      console.error('⚠️  Warning: Audit log exception:', auditException);
+      // Don't fail the request if audit log fails
+    }
+
+    console.log('✅ Rejection completed successfully');
 
     res.json({
       success: true,
@@ -184,10 +246,20 @@ const rejectUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Reject user error:', error);
+    console.error('❌ Reject user error:');
+    console.error('═══════════════════════════════════════');
+    console.error('Error Message:', error.message);
+    console.error('Error Code:', error.code);
+    console.error('Error Details:', error.details);
+    console.error('Error Hint:', error.hint);
+    console.error('Full Error:', error);
+    console.error('═══════════════════════════════════════');
+    
     res.status(500).json({
       success: false,
-      message: 'Failed to reject user'
+      message: 'Failed to reject user',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? error.details : undefined
     });
   }
 };
