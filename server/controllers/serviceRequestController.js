@@ -157,7 +157,7 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       finalValidUntil,
       termsConditions,
       createdBy,
-      'Sent', // Create directly as Sent for automatic quotations
+      'Draft', // Always create as Draft - admin will send it to customer later
     ]);
 
     const quotationId = quotationResult.rows[0].quotation_id;
@@ -172,24 +172,24 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
     `;
     await client.query(copyItemsQuery, [quotationId, requestId]);
 
-    console.log(`✓ Quotation ${quotationNumber} created with 'Sent' status automatically`);
+    console.log(`✓ Quotation ${quotationNumber} created as 'Draft' - ready for staff review`);
 
-    // Update service request status to "Quote Sent"
+    // Update service request status to "Quote Prepared" (not "Quote Sent" - that happens when admin sends it)
     try {
-      const quoteSentStatusQuery = `
-        SELECT status_id FROM request_statuses WHERE status_name = 'Quote Sent'
+      const quotePreparedStatusQuery = `
+        SELECT status_id FROM request_statuses WHERE status_name = 'Quote Prepared'
       `;
-      const statusResult = await client.query(quoteSentStatusQuery);
+      const statusResult = await client.query(quotePreparedStatusQuery);
       
       if (statusResult.rows.length > 0) {
-        const quoteSentStatusId = statusResult.rows[0].status_id;
+        const quotePreparedStatusId = statusResult.rows[0].status_id;
         await client.query(
           `UPDATE service_requests SET status_id = $1, updated_at = NOW() WHERE request_id = $2`,
-          [quoteSentStatusId, requestId]
+          [quotePreparedStatusId, requestId]
         );
-        console.log(`✓ Service request status updated to 'Quote Sent' successfully`);
+        console.log(`✓ Service request status updated to 'Quote Prepared' - waiting for admin to send`);
       } else {
-        console.warn(`⚠ 'Quote Sent' status not found in request_statuses table`);
+        console.warn(`⚠ 'Quote Prepared' status not found in request_statuses table`);
       }
     } catch (srStatusError) {
       console.error(`✗ Error updating service request status:`, srStatusError.message);
@@ -532,23 +532,8 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    // Create quotation INSIDE the transaction before committing
-    try {
-      const quotationResult = await createQuotationForRequest(requestId, {
-        paymentTerms: paymentTerms,
-        paymentMode: paymentMode,
-        discountAmount: 0,
-        taxRate: 0,
-        termsConditions: "Standard terms and conditions apply.",
-        createdBy: null, // System created
-      }, client); // Pass the client to use the same transaction
-      
-      console.log(`✓ Quotation ${quotationResult.quotationNumber} created automatically for request ${requestNumber}`);
-    } catch (quotError) {
-      console.error("✗ Failed to create quotation automatically:", quotError);
-      // This will rollback the entire transaction including the service request
-      throw quotError;
-    }
+    // NOTE: Quotation will be created manually by staff after reviewing the request
+    // and checking chemicals/refrigerants availability. Do NOT auto-create here.
 
     await client.query("COMMIT");
 
