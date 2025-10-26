@@ -532,11 +532,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // ✅ ALL OTHER CASES: Allow save!
-      // - Pending with no staff → Save allowed (for adding items, changing discount, etc.)
-      // - Pending with staff → Auto-promotes to Assigned
-      // - Assigned with staff → Save allowed
-      // - Any other status → Save allowed
+
 
       // Format discount for backend
       let discountForBackend = "No Discount";
