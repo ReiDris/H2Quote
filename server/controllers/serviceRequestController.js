@@ -139,8 +139,8 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       INSERT INTO quotations 
       (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
        discount_amount, total_amount, payment_terms, payment_mode, 
-       valid_until, terms_conditions, created_by, status, sent_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+       valid_until, terms_conditions, created_by, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING quotation_id
     `;
 
