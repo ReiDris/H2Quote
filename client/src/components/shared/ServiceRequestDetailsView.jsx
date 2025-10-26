@@ -298,6 +298,25 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
   }, [requestNumber, canAssignStaff]);
 
+  // ✅ FIX: Auto-correct legacy inconsistent data on page load
+useEffect(() => {
+  // Detect if status is "Assigned" but no staff is assigned
+  if (requestData && serviceStatus === "Assigned" && requestData.assignedStaff === "Not assigned") {
+    console.warn("⚠️ Detected inconsistent state from legacy data - auto-correcting to Pending");
+    
+    // Fix the UI state immediately
+    setServiceStatus("Pending");
+    
+    // Show clear message to user
+    setStatusRestrictionMessage(
+      "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
+      "The status has been automatically corrected to Pending. " +
+      "Please assign a staff member before changing the status to Assigned for Processing."
+    );
+    setShowStatusRestrictionModal(true);
+  }
+}, [requestData, serviceStatus]); // Only run when data loads or status changes
+
   // Recalculate payment breakdown when discount changes
   useEffect(() => {
     if (requestData && paymentBreakdown.length > 0) {
