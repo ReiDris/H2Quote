@@ -157,7 +157,7 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       finalValidUntil,
       termsConditions,
       createdBy,
-      'Draft', // Always start as Draft
+      'Draft', // Start as Draft, will be updated to Sent automatically
     ]);
 
     const quotationId = quotationResult.rows[0].quotation_id;
@@ -172,8 +172,25 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
     `;
     await client.query(copyItemsQuery, [quotationId, requestId]);
 
-    // Don't update service request status here - let it stay in "New" status
-    // Admin can manually change to "Quote Prepared" or "Waiting for Approval" later
+    // Automatically update quotation status to 'Sent' for auto-created quotations
+    await client.query(
+      `UPDATE quotations SET status = 'Sent', sent_at = NOW() WHERE quotation_id = $1`,
+      [quotationId]
+    );
+
+    // Update service request status to "Quote Sent"
+    const quoteSentStatusQuery = `
+      SELECT status_id FROM request_statuses WHERE status_name = 'Quote Sent'
+    `;
+    const statusResult = await client.query(quoteSentStatusQuery);
+    
+    if (statusResult.rows.length > 0) {
+      const quoteSentStatusId = statusResult.rows[0].status_id;
+      await client.query(
+        `UPDATE service_requests SET status_id = $1, updated_at = NOW() WHERE request_id = $2`,
+        [quoteSentStatusId, requestId]
+      );
+    }
 
     // Log audit entry
     try {
