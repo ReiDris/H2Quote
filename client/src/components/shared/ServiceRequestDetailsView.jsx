@@ -28,7 +28,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
 
-
   const formatPaymentMode = (mode) => {
     const modeMap = {
       bank_transfer: "Bank Transfer",
@@ -269,13 +268,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         // ✅ Auto-correct inconsistent status from database (legacy data fix)
         const dbStatus = requestDetails.service_status || "Pending";
         const dbStaff = requestDetails.assigned_staff_name || "Not assigned";
-        
+
         if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
-          console.warn("⚠️ LEGACY DATA: Correcting inconsistent status during data load");
+          console.warn(
+            "⚠️ LEGACY DATA: Correcting inconsistent status during data load"
+          );
           console.log("  Database status:", dbStatus);
           console.log("  Database staff:", dbStaff);
           console.log("  Correcting to: Pending");
-          
+
           // Correct the status in transformedData
           transformedData.serviceStatus = "Pending";
         }
@@ -285,19 +286,19 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
         // Set service status with correction applied
         setServiceStatus(transformedData.serviceStatus);
-        
+
         // Show message if we corrected an inconsistent status
         if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
           setTimeout(() => {
             setStatusRestrictionMessage(
               "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
-              "The status has been automatically corrected to Pending. " +
-              "Please assign a staff member before changing the status to Assigned for Processing."
+                "The status has been automatically corrected to Pending. " +
+                "Please assign a staff member before changing the status to Assigned for Processing."
             );
             setShowStatusRestrictionModal(true);
           }, 500);
         }
-        
+
         setPaymentStatus(requestDetails.payment_status || "Pending");
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
         setServiceStartDate(requestDetails.service_start_date || "");
@@ -500,7 +501,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       ) {
         setStatusRestrictionMessage(
           "Cannot unassign staff while status is 'Assigned for Processing'. " +
-          "The status will be automatically reverted to 'Pending' when you save."
+            "The status will be automatically reverted to 'Pending' when you save."
         );
         setShowStatusRestrictionModal(true);
         // Change status to Pending automatically
@@ -525,8 +526,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         requestData.assignedStaff === "Not assigned"
       ) {
         setStatusRestrictionMessage(
-          "Cannot set status to 'Assigned for Processing' without assigning a staff member. " +
-          "Please assign staff first, or keep status as 'Pending'."
+          "Cannot change status to 'Assigned for Processing' without assigning a staff member. Keep status as 'Pending' or assign staff first."
         );
         setShowStatusRestrictionModal(true);
         return;
