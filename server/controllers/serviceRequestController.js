@@ -139,8 +139,8 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       INSERT INTO quotations 
       (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
        discount_amount, total_amount, payment_terms, payment_mode, 
-       valid_until, terms_conditions, created_by, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       valid_until, terms_conditions, created_by, status, sent_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
       RETURNING quotation_id
     `;
 
@@ -157,7 +157,7 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       finalValidUntil,
       termsConditions,
       createdBy,
-      'Draft', // Start as Draft, will be updated to Sent automatically
+      'Sent', // Create directly as Sent for automatic quotations
     ]);
 
     const quotationId = quotationResult.rows[0].quotation_id;
@@ -172,24 +172,28 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
     `;
     await client.query(copyItemsQuery, [quotationId, requestId]);
 
-    // Automatically update quotation status to 'Sent' for auto-created quotations
-    await client.query(
-      `UPDATE quotations SET status = 'Sent', sent_at = NOW() WHERE quotation_id = $1`,
-      [quotationId]
-    );
+    console.log(`✓ Quotation ${quotationNumber} created with 'Sent' status automatically`);
 
     // Update service request status to "Quote Sent"
-    const quoteSentStatusQuery = `
-      SELECT status_id FROM request_statuses WHERE status_name = 'Quote Sent'
-    `;
-    const statusResult = await client.query(quoteSentStatusQuery);
-    
-    if (statusResult.rows.length > 0) {
-      const quoteSentStatusId = statusResult.rows[0].status_id;
-      await client.query(
-        `UPDATE service_requests SET status_id = $1, updated_at = NOW() WHERE request_id = $2`,
-        [quoteSentStatusId, requestId]
-      );
+    try {
+      const quoteSentStatusQuery = `
+        SELECT status_id FROM request_statuses WHERE status_name = 'Quote Sent'
+      `;
+      const statusResult = await client.query(quoteSentStatusQuery);
+      
+      if (statusResult.rows.length > 0) {
+        const quoteSentStatusId = statusResult.rows[0].status_id;
+        await client.query(
+          `UPDATE service_requests SET status_id = $1, updated_at = NOW() WHERE request_id = $2`,
+          [quoteSentStatusId, requestId]
+        );
+        console.log(`✓ Service request status updated to 'Quote Sent' successfully`);
+      } else {
+        console.warn(`⚠ 'Quote Sent' status not found in request_statuses table`);
+      }
+    } catch (srStatusError) {
+      console.error(`✗ Error updating service request status:`, srStatusError.message);
+      // Don't throw - let the quotation be created even if SR status update fails
     }
 
     // Log audit entry
