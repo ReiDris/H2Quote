@@ -81,6 +81,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return;
     }
 
+    // Automatically set service start date when status changes to Ongoing
+    if (newStatus === "Ongoing" && serviceStatus !== "Ongoing") {
+      const today = new Date().toISOString().split('T')[0];
+      setServiceStartDate(today);
+    }
+
     // If validation passes, update the status
     setServiceStatus(newStatus);
   };
@@ -1065,14 +1071,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Service Start Date:
             </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={serviceStartDate}
-                onChange={(e) => setServiceStartDate(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 cursor-pointer text-gray-400"
-              />
-            </div>
+            <span className="text-sm text-gray-800">
+              {serviceStartDate 
+                ? new Date(serviceStartDate + 'T00:00:00').toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })
+                : "-"}
+            </span>
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">

@@ -14,6 +14,11 @@ const UserManagementPage = () => {
   const [selectedRole, setSelectedRole] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   
+  // Alert modal states
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertType, setAlertType] = useState("success"); // "success" or "error"
+  const [alertMessage, setAlertMessage] = useState("");
+  
   const usersPerPage = 10;
 
   // Fetch users from API
@@ -68,6 +73,17 @@ const UserManagementPage = () => {
     setSelectedRole("");
   };
 
+  const showAlert = (type, message) => {
+    setAlertType(type);
+    setAlertMessage(message);
+    setShowAlertModal(true);
+  };
+
+  const closeAlertModal = () => {
+    setShowAlertModal(false);
+    setAlertMessage("");
+  };
+
   const handleRoleChange = async () => {
     if (!selectedUser || selectedRole === selectedUser.user_type) {
       return;
@@ -95,13 +111,14 @@ const UserManagementPage = () => {
         ));
         
         handleCloseModal();
+        showAlert("success", "User role updated successfully!");
       } else {
         throw new Error(data.message || 'Failed to update user role');
       }
       
     } catch (err) {
       console.error('Error updating user role:', err);
-      alert('Failed to update user role: ' + err.message);
+      showAlert("error", "Failed to update user role: " + err.message);
     } finally {
       setIsUpdating(false);
     }
@@ -109,7 +126,7 @@ const UserManagementPage = () => {
 
   const handleArchiveUser = () => {
     // Function to be implemented later
-    alert('Archive functionality will be implemented later');
+    showAlert("success", "Archive functionality will be implemented later");
   };
 
   // Pagination logic
@@ -195,7 +212,7 @@ const UserManagementPage = () => {
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
                     Role
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">
                     More Actions
                   </th>
                 </tr>
@@ -275,11 +292,11 @@ const UserManagementPage = () => {
 
       {/* User Management Modal */}
       {showModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-800">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 mb-4">
+              <h2 className="text-lg font-bold text-[#004785]">
                 Manage User
               </h2>
               <button
@@ -291,7 +308,7 @@ const UserManagementPage = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="px-6 py-4 space-y-4">
+            <div className="space-y-4">
               {/* User Info */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between">
@@ -312,13 +329,13 @@ const UserManagementPage = () => {
 
               {/* Role Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-black mb-2">
                   User Role
                 </label>
                 <select
                   value={selectedRole}
                   onChange={(e) => setSelectedRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#004785] focus:border-[#004785] text-sm"
                   disabled={isUpdating}
                 >
                   <option value="admin">Administrator</option>
@@ -331,10 +348,10 @@ const UserManagementPage = () => {
                 <button
                   onClick={handleRoleChange}
                   disabled={isUpdating || selectedRole === selectedUser.user_type}
-                  className={`w-full px-4 py-2 rounded-md font-medium transition-colors ${
+                  className={`w-full px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer ${
                     isUpdating || selectedRole === selectedUser.user_type
                       ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-[#004785] text-white hover:bg-[#003666]"
                   }`}
                 >
                   {isUpdating ? "Updating..." : "Update Role"}
@@ -343,7 +360,7 @@ const UserManagementPage = () => {
                 <button
                   onClick={handleArchiveUser}
                   disabled={isUpdating}
-                  className={`w-full px-4 py-2 rounded-md font-medium transition-colors ${
+                  className={`w-full px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer ${
                     isUpdating
                       ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                       : "bg-red-600 text-white hover:bg-red-700"
@@ -355,13 +372,35 @@ const UserManagementPage = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <div className="pt-4 border-t border-gray-200 mt-4">
               <button
                 onClick={handleCloseModal}
                 disabled={isUpdating}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors font-medium"
+                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Modal for Success/Error */}
+      {showAlertModal && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
+            <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
+              {alertType === "success" ? "Success" : "Error"}
+            </h2>
+            <p className="text-black mb-6 text-sm">
+              {alertMessage}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={closeAlertModal}
+                className="flex-1 px-4 py-2 bg-[#004785] text-white rounded-lg hover:bg-[#003666] transition-colors cursor-pointer"
+              >
+                OK
               </button>
             </div>
           </div>
