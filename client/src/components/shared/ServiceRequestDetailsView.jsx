@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
@@ -27,6 +27,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
+
 
   const formatPaymentMode = (mode) => {
     const modeMap = {
@@ -265,10 +266,38 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           serviceStatus: requestDetails.service_status || "Pending",
         };
 
+        // ✅ Auto-correct inconsistent status from database (legacy data fix)
+        const dbStatus = requestDetails.service_status || "Pending";
+        const dbStaff = requestDetails.assigned_staff_name || "Not assigned";
+        
+        if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
+          console.warn("⚠️ LEGACY DATA: Correcting inconsistent status during data load");
+          console.log("  Database status:", dbStatus);
+          console.log("  Database staff:", dbStaff);
+          console.log("  Correcting to: Pending");
+          
+          // Correct the status in transformedData
+          transformedData.serviceStatus = "Pending";
+        }
+
         setRequestData(transformedData);
         setPaymentBreakdown(requestDetails.paymentHistory || []);
 
-        setServiceStatus(requestDetails.service_status || "Pending");
+        // Set service status with correction applied
+        setServiceStatus(transformedData.serviceStatus);
+        
+        // Show message if we corrected an inconsistent status
+        if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
+          setTimeout(() => {
+            setStatusRestrictionMessage(
+              "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
+              "The status has been automatically corrected to Pending. " +
+              "Please assign a staff member before changing the status to Assigned for Processing."
+            );
+            setShowStatusRestrictionModal(true);
+          }, 500);
+        }
+        
         setPaymentStatus(requestDetails.payment_status || "Pending");
         setWarrantyStatus(requestDetails.warranty_status || "Pending");
         setServiceStartDate(requestDetails.service_start_date || "");
@@ -307,31 +336,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       }
     }
   }, [requestNumber, canAssignStaff]);
-
-  // ✅ FIX: Auto-correct legacy inconsistent data on page load
-  useEffect(() => {
-    // Detect if status is "Assigned" but no staff is assigned
-    if (
-      requestData &&
-      serviceStatus === "Assigned" &&
-      requestData.assignedStaff === "Not assigned"
-    ) {
-      console.warn(
-        "⚠️ Detected inconsistent state from legacy data - auto-correcting to Pending"
-      );
-
-      // Fix the UI state immediately
-      setServiceStatus("Pending");
-
-      // Show clear message to user
-      setStatusRestrictionMessage(
-        "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
-          "The status has been automatically corrected to Pending. " +
-          "Please assign a staff member before changing the status to Assigned for Processing."
-      );
-      setShowStatusRestrictionModal(true);
-    }
-  }, [requestData, serviceStatus]); // Only run when data loads or status changes
 
   // Recalculate payment breakdown when discount changes
   useEffect(() => {
