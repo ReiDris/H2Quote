@@ -56,11 +56,14 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [successMessage, setSuccessMessage] = useState("");
 
   // State for status restriction modal
-  const [showStatusRestrictionModal, setShowStatusRestrictionModal] = useState(false);
+  const [showStatusRestrictionModal, setShowStatusRestrictionModal] =
+    useState(false);
   const [statusRestrictionMessage, setStatusRestrictionMessage] = useState("");
 
   // Check if discount should be disabled based on service status
-  const isDiscountDisabled = ["Ongoing", "Completed", "Cancelled"].includes(serviceStatus);
+  const isDiscountDisabled = ["Ongoing", "Completed", "Cancelled"].includes(
+    serviceStatus
+  );
 
   const handleServiceStatusChange = (newStatus) => {
     // Check if trying to set to "Ongoing" without being "Approved"
@@ -83,7 +86,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
     // Automatically set service start date when status changes to Ongoing
     if (newStatus === "Ongoing" && serviceStatus !== "Ongoing") {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().split("T")[0];
       setServiceStartDate(today);
     }
 
@@ -99,10 +102,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
 
     // Use customDiscountPercent if it's a custom discount
-    const discountPercent = selectedDiscount === "Custom" 
-      ? parseFloat(customDiscountPercent) || 0
-      : parseFloat(selectedDiscount.replace("%", ""));
-    
+    const discountPercent =
+      selectedDiscount === "Custom"
+        ? parseFloat(customDiscountPercent) || 0
+        : parseFloat(selectedDiscount.replace("%", ""));
+
     const discountAmount = (baseTotal * discountPercent) / 100;
     const finalTotal = baseTotal - discountAmount;
 
@@ -116,29 +120,30 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     if (!requestData || paymentBreakdown.length === 0) return;
 
     const baseTotal = parseFloat(requestData.totalCost.replace(/[₱,]/g, ""));
-    
+
     // Calculate discounted total
     let discountPercent = 0;
     if (selectedDiscount !== "No Discount" && selectedDiscount) {
-      discountPercent = selectedDiscount === "Custom" 
-        ? parseFloat(customDiscountPercent) || 0
-        : parseFloat(selectedDiscount.replace("%", ""));
+      discountPercent =
+        selectedDiscount === "Custom"
+          ? parseFloat(customDiscountPercent) || 0
+          : parseFloat(selectedDiscount.replace("%", ""));
     }
-    
+
     const discountAmount = (baseTotal * discountPercent) / 100;
     const discountedTotal = baseTotal - discountAmount;
 
     // Recalculate payment breakdown amounts based on percentages
-    const updatedBreakdown = paymentBreakdown.map(payment => {
+    const updatedBreakdown = paymentBreakdown.map((payment) => {
       const percentage = parseFloat(payment.percentage.replace("%", ""));
       const newAmount = Math.round((discountedTotal * percentage) / 100);
-      
+
       return {
         ...payment,
         amount: `₱${newAmount.toLocaleString("en-US", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
-        })}`
+        })}`,
       };
     });
 
@@ -269,10 +274,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setServiceStartDate(requestDetails.service_start_date || "");
         setServiceEndDate(requestDetails.actual_completion_date || "");
         setPaymentDeadline(requestDetails.payment_deadline || "");
-        
+
         // Initialize discount states
-        if (requestDetails.discount_percentage && requestDetails.discount_percentage > 0) {
-          setCustomDiscountPercent(requestDetails.discount_percentage.toString());
+        if (
+          requestDetails.discount_percentage &&
+          requestDetails.discount_percentage > 0
+        ) {
+          setCustomDiscountPercent(
+            requestDetails.discount_percentage.toString()
+          );
           setSelectedDiscount("Custom");
         } else {
           setCustomDiscountPercent("");
@@ -299,23 +309,29 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   }, [requestNumber, canAssignStaff]);
 
   // ✅ FIX: Auto-correct legacy inconsistent data on page load
-useEffect(() => {
-  // Detect if status is "Assigned" but no staff is assigned
-  if (requestData && serviceStatus === "Assigned" && requestData.assignedStaff === "Not assigned") {
-    console.warn("⚠️ Detected inconsistent state from legacy data - auto-correcting to Pending");
-    
-    // Fix the UI state immediately
-    setServiceStatus("Pending");
-    
-    // Show clear message to user
-    setStatusRestrictionMessage(
-      "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
-      "The status has been automatically corrected to Pending. " +
-      "Please assign a staff member before changing the status to Assigned for Processing."
-    );
-    setShowStatusRestrictionModal(true);
-  }
-}, [requestData, serviceStatus]); // Only run when data loads or status changes
+  useEffect(() => {
+    // Detect if status is "Assigned" but no staff is assigned
+    if (
+      requestData &&
+      serviceStatus === "Assigned" &&
+      requestData.assignedStaff === "Not assigned"
+    ) {
+      console.warn(
+        "⚠️ Detected inconsistent state from legacy data - auto-correcting to Pending"
+      );
+
+      // Fix the UI state immediately
+      setServiceStatus("Pending");
+
+      // Show clear message to user
+      setStatusRestrictionMessage(
+        "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
+          "The status has been automatically corrected to Pending. " +
+          "Please assign a staff member before changing the status to Assigned for Processing."
+      );
+      setShowStatusRestrictionModal(true);
+    }
+  }, [requestData, serviceStatus]); // Only run when data loads or status changes
 
   // Recalculate payment breakdown when discount changes
   useEffect(() => {
@@ -459,96 +475,105 @@ useEffect(() => {
   };
 
   const handleSaveChanges = async () => {
-  try {
-    // Validate Service End Date when status is Completed
-    if (serviceStatus === "Completed" && !serviceEndDate) {
-      setStatusRestrictionMessage(
-        "Service End Date is required when marking service as Completed."
+    try {
+      // Validate Service End Date when status is Completed
+      if (serviceStatus === "Completed" && !serviceEndDate) {
+        setStatusRestrictionMessage(
+          "Service End Date is required when marking service as Completed."
+        );
+        setShowStatusRestrictionModal(true);
+        return;
+      }
+
+      // ✅ FIX: Proper status management based on staff assignment
+      let finalServiceStatus = serviceStatus;
+
+      // If status is "Assigned" but no staff is assigned, revert to "Pending"
+      if (
+        serviceStatus === "Assigned" &&
+        requestData.assignedStaff === "Not assigned"
+      ) {
+        finalServiceStatus = "Pending";
+        setServiceStatus("Pending");
+        setStatusRestrictionMessage(
+          "Cannot keep status as 'Assigned for Processing' without assigning staff. Status has been reverted to 'Pending'."
+        );
+        setShowStatusRestrictionModal(true);
+        return; // Don't save until user acknowledges
+      }
+
+      // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
+      if (
+        requestData.assignedStaff !== "Not assigned" &&
+        serviceStatus === "Pending"
+      ) {
+        finalServiceStatus = "Assigned";
+        setServiceStatus("Assigned");
+      }
+
+      // ✅ VALIDATION: Prevent manually selecting "Assigned" without staff
+      if (
+        finalServiceStatus === "Assigned" &&
+        requestData.assignedStaff === "Not assigned"
+      ) {
+        setStatusRestrictionMessage(
+          "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign staff first."
+        );
+        setShowStatusRestrictionModal(true);
+        return;
+      }
+
+      // Format discount for backend
+      let discountForBackend = "No Discount";
+      if (selectedDiscount === "Custom" && customDiscountPercent) {
+        discountForBackend = `${customDiscountPercent}%`;
+      }
+
+      const updatePayload = {
+        serviceStatus: finalServiceStatus,
+        paymentStatus: paymentStatus,
+        warrantyStatus: warrantyStatus,
+        assignedStaff: requestData.assignedStaff,
+        serviceStartDate: serviceStartDate || null,
+        serviceEndDate: serviceEndDate || null,
+        paymentDeadline: paymentDeadline || null,
+        discount: discountForBackend,
+        services: requestData.services.map((service) => ({
+          service_id: service.service_id,
+          itemType: service.itemType,
+          warranty_months: service.warranty_months,
+          warranty_start_date: service.warranty_start_date || null,
+          warranty_status: service.warranty_status,
+        })),
+        paymentBreakdown: paymentBreakdown.map((payment) => ({
+          phase: payment.phase,
+          paymentStatus: payment.paymentStatus,
+        })),
+      };
+
+      console.log("Sending update payload:", updatePayload);
+
+      // Use updateRequest (not updateRequestDetails)
+      const response = await serviceRequestsAPI.updateRequest(
+        requestId,
+        updatePayload
       );
-      setShowStatusRestrictionModal(true);
-      return;
-    }
+      const data = await response.json();
 
-    // ✅ FIX: Proper status management based on staff assignment
-    let finalServiceStatus = serviceStatus;
-    
-    // If status is "Assigned" but no staff is assigned, revert to "Pending"
-    if (serviceStatus === "Assigned" && requestData.assignedStaff === "Not assigned") {
-      finalServiceStatus = "Pending";
-      setServiceStatus("Pending");
-      setStatusRestrictionMessage(
-        "Cannot keep status as 'Assigned for Processing' without assigning staff. Status has been reverted to 'Pending'."
-      );
-      setShowStatusRestrictionModal(true);
-      return; // Don't save until user acknowledges
-    }
-    
-    // Auto-set service status to "Assigned" if staff is assigned and currently "Pending"
-    if (requestData.assignedStaff !== "Not assigned" && serviceStatus === "Pending") {
-      finalServiceStatus = "Assigned";
-      setServiceStatus("Assigned");
-    }
-    
-    // ✅ VALIDATION: Prevent manually selecting "Assigned" without staff
-    if (finalServiceStatus === "Assigned" && requestData.assignedStaff === "Not assigned") {
-      setStatusRestrictionMessage(
-        "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign staff first."
-      );
-      setShowStatusRestrictionModal(true);
-      return;
-    }
-
-    // Format discount for backend
-    let discountForBackend = "No Discount";
-    if (selectedDiscount === "Custom" && customDiscountPercent) {
-      discountForBackend = `${customDiscountPercent}%`;
-    }
-
-    const updatePayload = {
-      serviceStatus: finalServiceStatus,
-      paymentStatus: paymentStatus,
-      warrantyStatus: warrantyStatus,
-      assignedStaff: requestData.assignedStaff,
-      serviceStartDate: serviceStartDate || null,
-      serviceEndDate: serviceEndDate || null,
-      paymentDeadline: paymentDeadline || null,
-      discount: discountForBackend,
-      services: requestData.services.map((service) => ({
-        service_id: service.service_id,
-        itemType: service.itemType,
-        warranty_months: service.warranty_months,
-        warranty_start_date: service.warranty_start_date || null,
-        warranty_status: service.warranty_status,
-      })),
-      paymentBreakdown: paymentBreakdown.map((payment) => ({
-        phase: payment.phase,
-        paymentStatus: payment.paymentStatus,
-      })),
-    };
-
-    console.log("Sending update payload:", updatePayload);
-
-    // Use updateRequest (not updateRequestDetails)
-    const response = await serviceRequestsAPI.updateRequest(
-      requestId,
-      updatePayload
-    );
-    const data = await response.json();
-
-    if (data.success) {
-      setSuccessMessage("Changes saved successfully!");
+      if (data.success) {
+        setSuccessMessage("Changes saved successfully!");
+        setShowSuccessModal(true);
+        fetchRequestDetails();
+      } else {
+        setSuccessMessage("Failed to save changes: " + data.message);
+        setShowSuccessModal(true);
+      }
+    } catch (error) {
+      console.error("Save changes error:", error);
+      setSuccessMessage("Failed to save changes. Please try again.");
       setShowSuccessModal(true);
-      fetchRequestDetails();
-    } else {
-      setSuccessMessage("Failed to save changes: " + data.message);
-      setShowSuccessModal(true);
     }
-  } catch (error) {
-    console.error("Save changes error:", error);
-    setSuccessMessage("Failed to save changes. Please try again.");
-    setShowSuccessModal(true);
-  }
-};
+  };
 
   if (loading) {
     return (
@@ -609,11 +634,15 @@ useEffect(() => {
                   Customer Approval Received
                 </h3>
                 <p className="text-gray-700 text-sm mb-3">
-                  The customer has reviewed and approved the updated service request, including all added services and the final quotation. You may now proceed with the next steps.
+                  The customer has reviewed and approved the updated service
+                  request, including all added services and the final quotation.
+                  You may now proceed with the next steps.
                 </p>
                 <div className="flex items-center gap-2 text-sm text-gray-600 bg-white rounded px-3 py-2 inline-flex">
                   <span className="font-medium">Status:</span>
-                  <span className="text-green-700 font-semibold">Ready to Begin Service</span>
+                  <span className="text-green-700 font-semibold">
+                    Ready to Begin Service
+                  </span>
                 </div>
               </div>
             </div>
@@ -679,17 +708,23 @@ useEffect(() => {
               className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-55 cursor-pointer"
             >
               {/* Pending is auto-set on request creation, not selectable */}
-              {serviceStatus === "Pending" && <option value="Pending">Pending</option>}
-              
+              {serviceStatus === "Pending" && (
+                <option value="Pending">Pending</option>
+              )}
+
               {/* Assigned is auto-set when staff is assigned, not selectable */}
-              {serviceStatus === "Assigned" && <option value="Assigned">Assigned for Processing</option>}
-              
+              {serviceStatus === "Assigned" && (
+                <option value="Assigned">Assigned for Processing</option>
+              )}
+
               {/* Manual options */}
               <option value="Waiting for Approval">Waiting for Approval</option>
-              
+
               {/* Approved is auto-set by customer approval, not selectable */}
-              {serviceStatus === "Approved" && <option value="Approved">Approved</option>}
-              
+              {serviceStatus === "Approved" && (
+                <option value="Approved">Approved</option>
+              )}
+
               <option value="Ongoing">Service Ongoing</option>
               <option value="Completed">Completed</option>
             </select>
@@ -924,7 +959,7 @@ useEffect(() => {
                 }}
                 disabled={isDiscountDisabled}
                 className={`p-3 border text-sm rounded-lg font-semibold ${
-                  isDiscountDisabled 
+                  isDiscountDisabled
                     ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
                     : selectedDiscount === "No Discount"
                     ? "border-[#0260A0] bg-[#F0F8FF] text-[#0260A0] cursor-pointer"
@@ -1113,12 +1148,15 @@ useEffect(() => {
               Service Start Date:
             </label>
             <span className="text-sm text-gray-800">
-              {serviceStartDate 
-                ? new Date(serviceStartDate + 'T00:00:00').toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric' 
-                  })
+              {serviceStartDate
+                ? new Date(serviceStartDate + "T00:00:00").toLocaleDateString(
+                    "en-US",
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    }
+                  )
                 : "-"}
             </span>
           </div>
@@ -1141,8 +1179,8 @@ useEffect(() => {
                 onChange={(e) => setServiceEndDate(e.target.value)}
                 disabled={serviceStatus !== "Completed"}
                 className={`text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 ${
-                  serviceStatus === "Completed" 
-                    ? "cursor-pointer text-gray-400" 
+                  serviceStatus === "Completed"
+                    ? "cursor-pointer text-gray-400"
                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
                 }`}
               />
@@ -1210,7 +1248,9 @@ useEffect(() => {
             <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
               Status Restriction
             </h2>
-            <p className="text-black mb-6 text-sm">{statusRestrictionMessage}</p>
+            <p className="text-black mb-6 text-sm">
+              {statusRestrictionMessage}
+            </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowStatusRestrictionModal(false)}
