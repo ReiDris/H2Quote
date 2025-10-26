@@ -72,6 +72,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         "Cannot set status to Waiting for Approval. Please assign a staff member first."
       );
       setShowStatusRestrictionModal(true);
+      // Keep the current status unchanged
+      setServiceStatus(serviceStatus);
       return;
     }
 
@@ -278,9 +280,23 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         const dbStatus = requestDetails.service_status || "Pending";
         const dbStaff = requestDetails.assigned_staff_name || "Not assigned";
 
+        // Correct "Assigned" status without staff
         if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
           console.warn(
             "⚠️ LEGACY DATA: Correcting inconsistent status during data load"
+          );
+          console.log("  Database status:", dbStatus);
+          console.log("  Database staff:", dbStaff);
+          console.log("  Correcting to: Pending");
+
+          // Correct the status in transformedData
+          transformedData.serviceStatus = "Pending";
+        }
+
+        // Correct "Waiting for Approval" status without staff
+        if (dbStatus === "Waiting for Approval" && dbStaff === "Not assigned") {
+          console.warn(
+            "⚠️ INCONSISTENT DATA: Correcting 'Waiting for Approval' without staff"
           );
           console.log("  Database status:", dbStatus);
           console.log("  Database staff:", dbStaff);
@@ -297,12 +313,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setServiceStatus(transformedData.serviceStatus);
 
         // Show message if we corrected an inconsistent status
-        if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
+        if ((dbStatus === "Assigned" || dbStatus === "Waiting for Approval") && dbStaff === "Not assigned") {
           setTimeout(() => {
             setStatusRestrictionMessage(
-              "This request had an inconsistent status (Assigned for Processing without assigned staff). " +
+              `This request had an inconsistent status ('${dbStatus}' without assigned staff). ` +
                 "The status has been automatically corrected to Pending. " +
-                "Please assign a staff member before changing the status to Assigned for Processing."
+                "Please assign a staff member before changing the status."
             );
             setShowStatusRestrictionModal(true);
           }, 500);
@@ -494,6 +510,15 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       if (serviceStatus === "Completed" && !serviceEndDate) {
         setStatusRestrictionMessage(
           "Service End Date is required when marking service as Completed."
+        );
+        setShowStatusRestrictionModal(true);
+        return;
+      }
+
+      // Validate staff assignment for "Waiting for Approval" status
+      if (serviceStatus === "Waiting for Approval" && requestData.assignedStaff === "Not assigned") {
+        setStatusRestrictionMessage(
+          "Cannot set status to Waiting for Approval. Please assign a staff member first."
         );
         setShowStatusRestrictionModal(true);
         return;
