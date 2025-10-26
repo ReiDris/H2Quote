@@ -232,34 +232,34 @@ const CustomerServiceTracker = () => {
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-28">
                     Request ID
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-36">
                     Requested At
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-36">
                     Service Category
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-40">
                     Requested Service
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-32">
                     Assigned Staff
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-32">
                     Service Status
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-32">
                     Payment Status
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-32">
                     Warranty Status
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-28">
                     Total Cost
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                  <th className="px-2 py-3 text-center text-xs font-semibold text-black whitespace-nowrap w-24">
                     View Details
                   </th>
                 </tr>
@@ -267,34 +267,43 @@ const CustomerServiceTracker = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedData.map((item, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-6 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                    <td className="px-2 py-4 whitespace-nowrap text-sm font-medium text-gray-800">
                       {item.id}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                    <td className="px-2 py-4 text-sm text-gray-800 whitespace-nowrap">
                       {item.requestedAt}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                    <td 
+                      className="px-2 py-4 text-sm text-gray-800 truncate max-w-[9rem]"
+                      title={item.serviceCategory}
+                    >
                       {item.serviceCategory}
                     </td>
-                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800">
+                    <td 
+                      className="px-2 py-4 text-sm text-gray-800 truncate max-w-[10rem]"
+                      title={item.requestedService}
+                    >
                       {item.requestedService}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm text-gray-800">
+                    <td 
+                      className="px-2 py-4 text-sm text-gray-800 truncate max-w-[8rem]"
+                      title={item.assignedStaff || "-"}
+                    >
                       {item.assignedStaff || "-"}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-2 py-4 whitespace-nowrap">
                       {getStatusBadge(item.serviceStatus, "serviceStatus")}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-2 py-4 whitespace-nowrap">
                       {getStatusBadge(item.paymentStatus, "paymentStatus")}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">
+                    <td className="px-2 py-4 whitespace-nowrap">
                       {getStatusBadge(item.warrantyStatus, "warrantyStatus")}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
+                    <td className="px-2 py-4 whitespace-nowrap text-sm font-medium text-gray-800">
                       {item.totalCost}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-center">
+                    <td className="px-2 py-4 whitespace-nowrap text-center">
                       <button
                         onClick={() => handleMoreActions(item)}
                         className="text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
