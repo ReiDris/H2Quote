@@ -195,11 +195,12 @@ const Header = () => {
             </button>
 
             {isNotificationOpen && (
-              <div className="absolute top-full right-0 mt-5 w-120 bg-[#F1F4F5] rounded-lg shadow-lg border border-gray-200">
-                <div className="pt-4 px-4">
+              <div className="absolute top-full right-0 mt-2 w-[480px] max-w-[95vw] bg-[#F1F4F5] rounded-lg shadow-lg border border-gray-200 z-50 max-h-[calc(100vh-100px)] overflow-hidden flex flex-col">
+                {/* Header Section - Fixed at top */}
+                <div className="pt-4 px-4 flex-shrink-0 bg-[#F1F4F5]">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold text-[#004785]">
-                      Notificationssssssss
+                      Notifications
                     </h3>
                     <div className="flex gap-2">
                       <button
@@ -226,102 +227,100 @@ const Header = () => {
                   </div>
                 </div>
 
-                <div className="p-4 border-b border-gray-200 pb-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-medium text-black">New</h4>
-                    <div className="flex gap-2">
-                      {unreadCount > 0 && (
-                        <button
-                          onClick={markAllAsRead}
-                          className="text-xs text-[#004785] hover:underline"
-                        >
-                          Mark all as read
-                        </button>
-                      )}
-                      {notifications.some(n => !n.is_unread) && (
-                        <button
-                          onClick={clearReadNotifications}
-                          className="text-xs text-red-600 hover:underline"
-                        >
-                          Clear read
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div 
-                    className={`space-y-3 ${
-                      showAllNotifications 
-                        ? 'overflow-y-auto pr-2' 
-                        : ''
-                    }`}
-                    style={showAllNotifications ? { maxHeight: '630px' } : {}}
-                  >
-                    {loading ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <p className="text-sm">Loading...</p>
+                {/* Scrollable Content Area */}
+                <div className="overflow-y-auto flex-1">
+                  <div className="p-4 pb-5">
+                    {/* Action Buttons - Sticky at top of scrollable area */}
+                    <div className="flex items-center justify-between mb-3 sticky top-0 bg-[#F1F4F5] pb-2 z-10">
+                      <h4 className="text-sm font-medium text-black">New</h4>
+                      <div className="flex gap-2">
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={markAllAsRead}
+                            className="text-xs text-[#004785] hover:underline cursor-pointer"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                        {notifications.some(n => !n.is_unread) && (
+                          <button
+                            onClick={clearReadNotifications}
+                            className="text-xs text-red-600 hover:underline cursor-pointer"
+                          >
+                            Clear read
+                          </button>
+                        )}
                       </div>
-                    ) : notifications.length > 0 ? (
-                      displayedNotifications.map((notification) => (
-                        <div
-                          key={notification.notification_id}
-                          onClick={() => handleNotificationClick(notification)}
-                          className={`p-5 rounded-3xl cursor-pointer transition-colors ${
-                            notification.is_unread
-                              ? "bg-blue-100 hover:bg-blue-200"
-                              : "bg-white hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between">
-                                <h5
-                                  className={`text-sm font-medium ${
-                                    notification.is_unread
-                                      ? "text-gray-900"
-                                      : "text-gray-700"
-                                  }`}
-                                >
-                                  {notification.subject}
-                                </h5>
-                                {notification.is_unread && (
-                                  <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1"></div>
-                                )}
+                    </div>
+
+                    {/* Notifications List */}
+                    <div className="space-y-3">
+                      {loading ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-sm">Loading...</p>
+                        </div>
+                      ) : notifications.length > 0 ? (
+                        displayedNotifications.map((notification) => (
+                          <div
+                            key={notification.notification_id}
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`p-5 rounded-3xl cursor-pointer transition-colors ${
+                              notification.is_unread
+                                ? "bg-blue-100 hover:bg-blue-200"
+                                : "bg-white hover:bg-gray-50"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between">
+                                  <h5
+                                    className={`text-sm font-medium ${
+                                      notification.is_unread
+                                        ? "text-gray-900"
+                                        : "text-gray-700"
+                                    }`}
+                                  >
+                                    {notification.subject}
+                                  </h5>
+                                  {notification.is_unread && (
+                                    <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1"></div>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-600 mt-1 break-words">
+                                  {notification.message_body}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {getTimeAgo(notification.created_at)}
+                                </p>
                               </div>
-                              <p className="text-xs text-gray-600 mt-1">
-                                {notification.message_body}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {getTimeAgo(notification.created_at)}
-                              </p>
                             </div>
                           </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-sm">
+                            No {activeFilter === "unread" ? "unread" : ""}{" "}
+                            notifications
+                          </p>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <p className="text-sm">
-                          No {activeFilter === "unread" ? "unread" : ""}{" "}
-                          notifications
-                        </p>
+                      )}
+                    </div>
+
+                    {/* View All / Show Less Button */}
+                    {notifications.length > 5 && (
+                      <div className="mt-4 text-center border-t border-gray-200 pt-3">
+                        <button
+                          onClick={toggleShowAllNotifications}
+                          className="text-sm text-[#004785] hover:underline font-medium cursor-pointer"
+                        >
+                          {showAllNotifications 
+                            ? 'Show Less' 
+                            : `View All (${notifications.length})`
+                          }
+                        </button>
                       </div>
                     )}
                   </div>
-
-                  {/* View All / Show Less Button */}
-                  {notifications.length > 5 && (
-                    <div className="mt-4 text-center">
-                      <button
-                        onClick={toggleShowAllNotifications}
-                        className="text-sm text-[#004785] hover:underline font-medium cursor-pointer"
-                      >
-                        {showAllNotifications 
-                          ? 'Show Less' 
-                          : `View All (${notifications.length})`
-                        }
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
