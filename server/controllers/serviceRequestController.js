@@ -374,6 +374,68 @@ const createServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
+    // ✅ AUTO-CREATE QUOTATION immediately after service request creation
+    try {
+      console.log(`Creating initial quotation for request ${requestId}...`);
+
+      const taxRate = 0.12;
+      const taxAmount = totalCost * taxRate;
+      const totalWithTax = totalCost + taxAmount;
+
+      // Generate quotation number
+      const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+
+      // Format downpayment_percentage as string (e.g., "50%") - matching schema
+      const downpaymentPercentageStr = downpaymentPercentage ? `${downpaymentPercentage}%` : null;
+
+      // Insert quotation
+      const insertQuotationQuery = `
+        INSERT INTO quotations (
+          request_id, quotation_number, subtotal, tax_rate, tax_amount,
+          discount_amount, total_amount, payment_terms, payment_mode,
+          downpayment_percentage, valid_until, status, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+        RETURNING quotation_id
+      `;
+
+      const quotationResult = await pool.query(insertQuotationQuery, [
+        requestId,
+        quotationNumber,
+        totalCost,
+        taxRate,
+        taxAmount,
+        0, // discount_amount (no discount initially)
+        totalWithTax,
+        paymentTerms,
+        paymentMode,
+        downpaymentPercentageStr, // stored as string like "50%"
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days validity
+        'Draft' // Initial status is Draft until sent by admin/staff
+      ]);
+
+      const quotationId = quotationResult.rows[0].quotation_id;
+
+      // Copy service request items to quotation items
+      for (const item of serviceDetails) {
+        if (item.itemType === "service") {
+          await pool.query(
+            `INSERT INTO quotation_items (
+              quotation_id, service_id, item_description, quantity, unit_price, line_total
+            ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [quotationId, item.itemId, item.name, item.quantity, item.unitPrice, item.totalPrice]
+          );
+        }
+        // Note: Currently only services are copied to quotation_items
+        // Chemicals and refrigerants are part of the service request but not in quotation_items table
+      }
+
+      console.log(`✅ Initial quotation ${quotationNumber} created successfully`);
+    } catch (quotationError) {
+      console.error("Failed to create initial quotation:", quotationError);
+      // Don't fail the entire request if quotation creation fails
+    }
+
     try {
       await createDefaultPayments(requestId);
       console.log("Default payments created successfully");
@@ -2942,6 +3004,108 @@ const updateServiceRequest = async (req, res) => {
       discountPercentage,
       requestId,
     ]);
+
+    // ✅ UPDATE QUOTATION STATUS when status changes to "Quote Sent" (Waiting for Approval)
+    if (backendStatus === "Quote Sent" && currentStatusName !== "Quote Sent") {
+      try {
+        // Check if quotation exists
+        const existingQuotationCheck = await client.query(
+          `SELECT quotation_id, status FROM quotations WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          [requestId]
+        );
+
+        if (existingQuotationCheck.rows.length > 0) {
+          const quotation = existingQuotationCheck.rows[0];
+          
+          // Update existing quotation to 'Sent' status
+          await client.query(
+            `UPDATE quotations 
+             SET status = 'Sent', 
+                 sent_date = NOW(), 
+                 updated_at = NOW()
+             WHERE quotation_id = $1`,
+            [quotation.quotation_id]
+          );
+
+          console.log(`✅ Quotation ${quotation.quotation_id} marked as 'Sent' for request ${requestId}`);
+        } else {
+          // If somehow no quotation exists, create one (fallback)
+          console.warn(`⚠️ No quotation found for request ${requestId}, creating one now...`);
+
+          const totalsQuery = `
+            SELECT 
+              COALESCE(
+                (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = $1) +
+                (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = $1) +
+                (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = $1),
+                0
+              ) as subtotal,
+              sr.payment_terms,
+              sr.payment_mode,
+              sr.downpayment_percentage
+            FROM service_requests sr
+            WHERE sr.request_id = $1
+          `;
+          const totalsResult = await client.query(totalsQuery, [requestId]);
+          const { subtotal, payment_terms, payment_mode, downpayment_percentage } = totalsResult.rows[0];
+
+          const discountAmount = (subtotal * discountPercentage) / 100;
+          const subtotalAfterDiscount = subtotal - discountAmount;
+          const taxRate = 0.12;
+          const taxAmount = subtotalAfterDiscount * taxRate;
+          const totalAmount = subtotalAfterDiscount + taxAmount;
+
+          const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+
+          // Format downpayment_percentage as string for quotations table
+          const downpaymentPercentageStr = downpayment_percentage ? `${downpayment_percentage}%` : null;
+
+          const quotationResult = await client.query(
+            `INSERT INTO quotations (
+              request_id, quotation_number, subtotal, tax_rate, tax_amount,
+              discount_amount, total_amount, payment_terms, payment_mode,
+              downpayment_percentage, valid_until, status, sent_date,
+              created_by, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13, NOW(), NOW())
+            RETURNING quotation_id`,
+            [
+              requestId, quotationNumber, subtotal, taxRate, taxAmount,
+              discountAmount, totalAmount, payment_terms, payment_mode,
+              downpaymentPercentageStr, // stored as string
+              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              'Sent', assignedStaffId || req.user.id
+            ]
+          );
+
+          const quotationId = quotationResult.rows[0].quotation_id;
+
+          // Copy items to quotation
+          await client.query(
+            `INSERT INTO quotation_items (
+              quotation_id, service_id, item_description, quantity, unit_price, line_total, notes
+            )
+            SELECT 
+              $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
+            FROM service_request_items sri
+            JOIN services s ON sri.service_id = s.service_id
+            WHERE sri.request_id = $2`,
+            [quotationId, requestId]
+          );
+
+          console.log(`✅ Fallback quotation ${quotationNumber} created and sent`);
+        }
+
+        // Update service request with quote_sent_date
+        await client.query(
+          `UPDATE service_requests SET quote_sent_date = NOW() WHERE request_id = $1`,
+          [requestId]
+        );
+      } catch (quotationError) {
+        console.error("Failed to update/create quotation:", quotationError);
+        // Don't fail the entire update if quotation update fails
+      }
+    }
 
     const hasManualWarrantyData =
       services &&
