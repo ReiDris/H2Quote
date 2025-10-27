@@ -324,18 +324,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           transformedData.serviceStatus = "Pending";
         }
 
-        // Correct "Waiting for Approval" status without staff
-        if (dbStatus === "Waiting for Approval" && dbStaff === "Not assigned") {
-          console.warn(
-            "⚠️ INCONSISTENT DATA: Correcting 'Waiting for Approval' without staff"
-          );
-          console.log("  Database status:", dbStatus);
-          console.log("  Database staff:", dbStaff);
-          console.log("  Correcting to: Pending");
-
-          // Correct the status in transformedData
-          transformedData.serviceStatus = "Pending";
-        }
+        // NOTE: Removed auto-correction for "Waiting for Approval" 
+        // The validation in handleServiceStatusChange already prevents this
+        // Auto-correction was causing the tracker to show "Pending" incorrectly
 
         setRequestData(transformedData);
         setPaymentBreakdown(requestDetails.paymentHistory || []);
@@ -344,7 +335,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setServiceStatus(transformedData.serviceStatus);
 
         // Show message if we corrected an inconsistent status
-        if ((dbStatus === "Assigned" || dbStatus === "Waiting for Approval") && dbStaff === "Not assigned") {
+        if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
           setTimeout(() => {
             setStatusRestrictionMessage(
               `This request had an inconsistent status ('${dbStatus}' without assigned staff). ` +
