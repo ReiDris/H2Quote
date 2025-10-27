@@ -117,7 +117,7 @@ const Header = () => {
   // Determine which notifications to display
   const displayedNotifications = showAllNotifications 
     ? notifications 
-    : notifications.slice(0, 5);
+    : notifications.slice(0, 4);
 
   // Fetch notifications on mount and filter change
   useEffect(() => {
@@ -307,7 +307,7 @@ const Header = () => {
                     </div>
 
                     {/* View All / Show Less Button */}
-                    {notifications.length > 5 && (
+                    {notifications.length > 4 && (
                       <div className="mt-4 text-center border-t border-gray-200 pt-3">
                         <button
                           onClick={toggleShowAllNotifications}
