@@ -3140,27 +3140,28 @@ const updateServiceRequest = async (req, res) => {
 
     if (services && services.length > 0) {
       for (const service of services) {
-        if (service.itemType === "service" && service.service_id) {
-          if (service.warranty_start_date) {
-            const months = service.warranty_months || 6;
-            const endDate = new Date(service.warranty_start_date);
-            endDate.setMonth(endDate.getMonth() + months);
-            const warrantyEndDate = endDate.toISOString().split("T")[0];
+        // ✅ FIX: Only process actual services (not chemicals/refrigerants)
+        // Check if service_id exists AND itemType is 'service'
+        if (service.itemType === "service" && service.service_id && service.warranty_start_date) {
+          const months = service.warranty_months || 6;
+          const endDate = new Date(service.warranty_start_date);
+          endDate.setMonth(endDate.getMonth() + months);
+          const warrantyEndDate = endDate.toISOString().split("T")[0];
 
-            await client.query(
-              `UPDATE service_request_items
-              SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
-              WHERE request_id = $4 AND service_id = $5`,
-              [
-                months,
-                service.warranty_start_date,
-                warrantyEndDate,
-                requestId,
-                service.service_id,
-              ]
-            );
-          }
+          await client.query(
+            `UPDATE service_request_items
+            SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
+            WHERE request_id = $4 AND service_id = $5`,
+            [
+              months,
+              service.warranty_start_date,
+              warrantyEndDate,
+              requestId,
+              service.service_id,
+            ]
+          );
         }
+        // Skip chemicals and refrigerants - they don't have warranties
       }
     }
 

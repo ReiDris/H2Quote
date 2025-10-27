@@ -543,6 +543,31 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
+      // ✅ NEW: Validate warranty periods for services when status is Completed
+      if (serviceStatus === "Completed") {
+        // Filter only actual services (not chemicals/refrigerants)
+        const actualServices = requestData.services.filter(
+          (item) => item.itemType === "service"
+        );
+
+        // Check if any service is missing warranty information
+        const servicesWithoutWarranty = actualServices.filter(
+          (service) => !service.warranty_start_date || !service.warranty_months
+        );
+
+        if (servicesWithoutWarranty.length > 0) {
+          const serviceNames = servicesWithoutWarranty
+            .map((s) => s.service)
+            .join(", ");
+          
+          setStatusRestrictionMessage(
+            `Cannot mark service as Completed. The following service(s) are missing warranty information: ${serviceNames}. Please set warranty periods for all services before completing.`
+          );
+          setShowStatusRestrictionModal(true);
+          return;
+        }
+      }
+
       // Validate staff assignment for "Assigned" or "Waiting for Approval" status
       const staffValue = requestData?.assignedStaff?.trim() || "";
       const isNoStaff = staffValue === "Not assigned" || staffValue === "" || !staffValue;
