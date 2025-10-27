@@ -255,7 +255,7 @@ const Header = () => {
                         ? 'overflow-y-auto pr-2' 
                         : ''
                     }`}
-                    style={showAllNotifications ? { maxHeight: '630px' } : {}}
+                    style={showAllNotifications ? { maxHeight: '530px' } : {}}
                   >
                     {loading ? (
                       <div className="text-center py-8 text-gray-500">
