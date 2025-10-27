@@ -553,7 +553,7 @@ const getCustomerRequests = async (req, res) => {
           0
         ) as estimated_cost,
         
-        -- Add service status for frontend (FIXED to match admin/staff)
+        -- Service status mapping
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -565,20 +565,60 @@ const getCustomerRequests = async (req, res) => {
           ELSE rs.status_name
         END as service_status,
         
-        -- Add payment status calculation
+        -- Payment status
         CASE 
           WHEN sr.payment_status IS NULL THEN 'Pending'
           ELSE sr.payment_status
         END as payment_status,
         
-        -- Add warranty status
+        -- ✅ UPDATED WARRANTY STATUS LOGIC - Now aligned with getRequestDetails
         CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
+          WHEN rs.status_name = 'Completed' THEN
+            CASE 
+              -- Check if ALL items have valid (non-expired) warranties
+              WHEN (
+                SELECT COUNT(*) 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id 
+                AND sri.warranty_end_date IS NOT NULL
+                AND sri.warranty_end_date >= CURRENT_DATE
+              ) = (
+                SELECT COUNT(*) 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id
+              ) AND (
+                SELECT COUNT(*) 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id
+              ) > 0 
+              THEN 'Valid'
+              
+              -- Check if ANY items have expired warranties
+              WHEN EXISTS (
+                SELECT 1 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id 
+                AND sri.warranty_end_date < CURRENT_DATE
+              ) 
+              THEN 'Expired'
+              
+              -- Request has warranty but items don't have end dates set
+              WHEN sr.warranty_start_date IS NOT NULL 
+              AND NOT EXISTS (
+                SELECT 1 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id 
+                AND sri.warranty_end_date IS NOT NULL
+              )
+              THEN 'Pending'
+              
+              -- No warranty set at all
+              ELSE 'Not Set'
+            END
           ELSE 'N/A'
         END as warranty_status,
         
-        -- Add item counts for debugging
+        -- Item counts
         (
           SELECT COUNT(*)::int 
           FROM service_request_items sri 
@@ -595,7 +635,7 @@ const getCustomerRequests = async (req, res) => {
           WHERE srr.request_id = sr.request_id
         ) as refrigerants_count,
         
-        -- Add item summary for display
+        -- Items summary
         (
           SELECT STRING_AGG(
             CASE 
@@ -647,6 +687,7 @@ const getCustomerRequests = async (req, res) => {
     });
   }
 };
+
 
 const getRequestDetails = async (req, res) => {
   try {
@@ -945,7 +986,7 @@ const getAllRequests = async (req, res) => {
         sr.request_id, 
         sr.request_number, 
         rs.status_name as status,
-        -- FIXED: Calculate actual total cost from all item tables, then apply discount
+        -- Calculate total cost with discount
         (
           COALESCE(
             (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
@@ -959,7 +1000,7 @@ const getAllRequests = async (req, res) => {
         c.company_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         sr.priority,
-        -- Add service status mapping for frontend
+        -- Service status mapping
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -969,18 +1010,53 @@ const getAllRequests = async (req, res) => {
           WHEN rs.status_name = 'Completed' THEN 'Completed'
           ELSE rs.status_name
         END as service_status,
-        -- Add payment status calculation
+        -- Payment status
         CASE 
           WHEN sr.payment_status IS NULL THEN 'Pending'
           ELSE sr.payment_status
         END as payment_status,
-        -- Add warranty status
+        
+        -- ✅ UPDATED WARRANTY STATUS LOGIC - Same as getCustomerRequests
         CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
+          WHEN rs.status_name = 'Completed' THEN
+            CASE 
+              WHEN (
+                SELECT COUNT(*) 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id 
+                AND sri.warranty_end_date IS NOT NULL
+                AND sri.warranty_end_date >= CURRENT_DATE
+              ) = (
+                SELECT COUNT(*) 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id
+              ) AND (
+                SELECT COUNT(*) 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id
+              ) > 0 
+              THEN 'Valid'
+              WHEN EXISTS (
+                SELECT 1 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id 
+                AND sri.warranty_end_date < CURRENT_DATE
+              ) 
+              THEN 'Expired'
+              WHEN sr.warranty_start_date IS NOT NULL 
+              AND NOT EXISTS (
+                SELECT 1 
+                FROM service_request_items sri 
+                WHERE sri.request_id = sr.request_id 
+                AND sri.warranty_end_date IS NOT NULL
+              )
+              THEN 'Pending'
+              ELSE 'Not Set'
+            END
           ELSE 'N/A'
         END as warranty_status,
-        -- Add item counts for debugging
+        
+        -- Item counts
         (
           SELECT COUNT(*)::int 
           FROM service_request_items sri 
@@ -996,7 +1072,8 @@ const getAllRequests = async (req, res) => {
           FROM service_request_refrigerants srr 
           WHERE srr.request_id = sr.request_id
         ) as refrigerants_count,
-        -- Add item summary for display
+        
+        -- Items summary
         (
           SELECT STRING_AGG(
             CASE 
@@ -3367,7 +3444,7 @@ const setServiceWarranty = async (req, res) => {
     const { requestId } = req.params;
     const {
       warrantyStartDate,
-      warrantyMonths = 6, // Default 6 months
+      warrantyMonths = 6,
       applyToAllServices = true,
     } = req.body;
 
@@ -3390,7 +3467,6 @@ const setServiceWarranty = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Only allow setting warranty for completed services
     if (request.status_name !== "Completed") {
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -3407,7 +3483,17 @@ const setServiceWarranty = async (req, res) => {
     endDate.setMonth(endDate.getMonth() + parseInt(warrantyMonths));
     const warrantyEndDate = endDate.toISOString().split("T")[0];
 
-    // Update ALL service items in the request with warranty information
+    // ✅ CRITICAL: Update BOTH tables to maintain consistency
+
+    // 1. Update service_requests table (request-level warranty)
+    await client.query(
+      `UPDATE service_requests
+       SET warranty_start_date = $1, warranty_months = $2
+       WHERE request_id = $3`,
+      [startDate, warrantyMonths, requestId]
+    );
+
+    // 2. Update ALL service_request_items (item-level warranties)
     const updateQuery = `
       UPDATE service_request_items
       SET 
@@ -3425,18 +3511,6 @@ const setServiceWarranty = async (req, res) => {
       requestId,
     ]);
 
-    // Also update the service_requests table
-    await client.query(
-      `
-      UPDATE service_requests
-      SET 
-        warranty_start_date = $1,
-        warranty_months = $2
-      WHERE request_id = $3
-    `,
-      [startDate, warrantyMonths, requestId]
-    );
-
     // Log audit entry
     try {
       await supabase.from("audit_log").insert({
@@ -3449,9 +3523,10 @@ const setServiceWarranty = async (req, res) => {
           warranty_months: warrantyMonths,
           warranty_end_date: warrantyEndDate,
           items_updated: updateResult.rows.length,
+          synced_tables: ['service_requests', 'service_request_items']
         },
         changed_by: req.user.email,
-        change_reason: "Warranty activated for completed service",
+        change_reason: "Warranty activated for completed service (both tables synced)",
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
@@ -3468,6 +3543,7 @@ const setServiceWarranty = async (req, res) => {
         warrantyEndDate: warrantyEndDate,
         warrantyMonths: warrantyMonths,
         servicesUpdated: updateResult.rows.length,
+        tablesSynced: ['service_requests', 'service_request_items']
       },
     });
   } catch (error) {
