@@ -49,14 +49,12 @@ const ServiceTracker = () => {
 
         // If user is staff, filter to show only requests assigned to them
         if (userRole === "staff" && user?.id) {
-          const staffFullName = `${user.firstName} ${user.lastName}`;
-          
           filteredRequests = data.data.requests.filter(
-            (request) => request.assigned_staff_name === staffFullName
+            (request) => request.assigned_to_staff_id === user.id
           );
 
           console.log("Staff user - filtered requests:", {
-            staffName: staffFullName,
+            staffId: user.id,
             totalRequests: data.data.requests.length,
             assignedRequests: filteredRequests.length,
           });
