@@ -270,26 +270,26 @@ const ServiceTracker = () => {
                 {serviceRequests.length > 0 ? (
                   serviceRequests.map((item, index) => (
                     <tr key={item.request_id} className="hover:bg-gray-50">
-                      <td className="px-2 py-4 whitespace-nowrap text-sm font-medium text-gray-800">
+                      <td className="px-2 py-4 whitespace-nowrap text-sm xl:text-xs font-medium text-gray-800">
                         {item.request_number}
                       </td>
-                      <td className="px-2 py-4 text-sm text-gray-800 whitespace-nowrap">
+                      <td className="px-2 py-4 text-sm xl:text-xs text-gray-800 whitespace-nowrap">
                         {formatDate(item.created_at)}
                       </td>
                       <td 
-                        className="px-2 py-4 text-sm text-gray-800 truncate max-w-[7rem]"
+                        className="px-2 py-4 text-sm xl:text-xs text-gray-800 truncate max-w-[7rem]"
                         title={item.customer_name}
                       >
                         {item.customer_name}
                       </td>
                       <td 
-                        className="px-2 py-4 text-sm text-gray-800 truncate max-w-[8rem]"
+                        className="px-2 py-4 text-sm xl:text-xs text-gray-800 truncate max-w-[8rem]"
                         title={item.company_name}
                       >
                         {item.company_name}
                       </td>
                       <td 
-                        className="px-2 py-4 text-sm text-gray-800 truncate max-w-[10rem]"
+                        className="px-2 py-4 text-sm xl:text-xs text-gray-800 truncate max-w-[10rem]"
                         title={formatItemsSummary(item)}
                       >
                         {formatItemsSummary(item)}
@@ -305,7 +305,7 @@ const ServiceTracker = () => {
                         )}
                       </td>
                       <td 
-                        className="px-2 py-4 text-sm text-gray-800 truncate max-w-[7rem]"
+                        className="px-2 py-4 text-sm xl:text-xs text-gray-800 truncate max-w-[7rem]"
                         title={item.assigned_staff_name || "-"}
                       >
                         {item.assigned_staff_name || "-"}
