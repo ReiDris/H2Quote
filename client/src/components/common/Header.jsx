@@ -195,7 +195,7 @@ const Header = () => {
             </button>
 
             {isNotificationOpen && (
-              <div className="absolute top-full right-0 mt-5 w-120 bg-[#F1F4F5] rounded-lg shadow-lg border border-gray-200 z-50">
+              <div className="absolute top-full right-0 mt-5 w-120 bg-[#F1F4F5] rounded-lg shadow-lg border border-gray-200">
                 <div className="pt-4 px-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold text-[#004785]">
@@ -255,7 +255,7 @@ const Header = () => {
                         ? 'overflow-y-auto pr-2' 
                         : ''
                     }`}
-                    style={showAllNotifications ? { maxHeight: '230px' } : {}}
+                    style={showAllNotifications ? { maxHeight: '630px' } : {}}
                   >
                     {loading ? (
                       <div className="text-center py-8 text-gray-500">
