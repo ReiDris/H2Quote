@@ -25,7 +25,7 @@ const ServiceTracker = () => {
   const userRole = user?.role || "admin";
   const itemsPerPage = 10;
 
-  // Fetch service requests from API with role-based filtering
+  // Fetch service requests from API
   const fetchServiceRequests = async (page = 1, search = "") => {
     try {
       setLoading(true);
@@ -45,30 +45,9 @@ const ServiceTracker = () => {
       const data = await response.json();
 
       if (data.success) {
-        let filteredRequests = data.data.requests;
-
-        // If user is staff, filter to show only requests assigned to them
-        if (userRole === "staff" && user?.id) {
-          filteredRequests = data.data.requests.filter(
-            (request) => request.assigned_to_staff_id === user.id
-          );
-
-          console.log("Staff user - filtered requests:", {
-            staffId: user.id,
-            totalRequests: data.data.requests.length,
-            assignedRequests: filteredRequests.length,
-          });
-        } else {
-          console.log("Admin user - showing all requests:", data.data.requests.length);
-        }
-
-        setServiceRequests(filteredRequests);
-        // Update total count based on filtered results for staff
-        setTotalCount(
-          userRole === "staff" 
-            ? filteredRequests.length 
-            : data.data.pagination.totalCount
-        );
+        console.log("Fetched service requests:", data.data.requests);
+        setServiceRequests(data.data.requests);
+        setTotalCount(data.data.pagination.totalCount);
       } else {
         setError(data.message || "Failed to fetch service requests");
       }
