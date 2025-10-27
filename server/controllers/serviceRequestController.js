@@ -612,7 +612,8 @@ const getRequestDetails = async (req, res) => {
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
       WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-      WHEN rs.status_name = 'Quote Approved' THEN 'Approval'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
       WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
       WHEN rs.status_name = 'Completed' THEN 'Completed'
       ELSE rs.status_name
