@@ -523,7 +523,7 @@ const getCustomerRequests = async (req, res) => {
         
         CAST(
           COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             0
@@ -533,7 +533,7 @@ const getCustomerRequests = async (req, res) => {
         CAST(
           COALESCE(
             COALESCE(
-              (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+              (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
               (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
               (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
               0
@@ -544,13 +544,13 @@ const getCustomerRequests = async (req, res) => {
 
         CAST(
           COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             0
           ) - COALESCE(
             COALESCE(
-              (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+              (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
               (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
               (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
               0
@@ -1025,7 +1025,7 @@ const getAllRequests = async (req, res) => {
         -- Calculate total cost with discount
         (
           COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             sr.estimated_cost
