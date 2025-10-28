@@ -856,7 +856,7 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
-    // âœ… FIXED: Calculate percentage from sum of payment amounts, not discounted total
+    // Get payments from database
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -867,7 +867,7 @@ const getRequestDetails = async (req, res) => {
         payment_id,
         payment_phase as phase,
         CONCAT(ROUND((amount::numeric / NULLIF((SELECT total FROM payment_total), 0) * 100), 0), '%') as percentage,
-        CONCAT('₱', amount::text) as amount,
+        amount as raw_amount,
         COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
         CASE 
           WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
@@ -881,10 +881,27 @@ const getRequestDetails = async (req, res) => {
 
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
-    let paymentHistory = paymentResult.rows;
+    let paymentHistory = paymentResult.rows.map(row => ({
+      payment_id: row.payment_id,
+      phase: row.phase,
+      percentage: row.percentage,
+      amount: `₱${parseFloat(row.raw_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      proofOfPayment: row.proofOfPayment,
+      paidOn: row.paidOn,
+      paymentStatus: row.paymentStatus
+    }));
 
     // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
+      console.log('⚠️ No payments found in database for request', requestId);
+      console.log('Creating default payment breakdown...');
+      console.log('Subtotal:', subtotal);
+      console.log('Discount %:', discountPercentage);
+      console.log('Discount amount:', discountAmount);
+      console.log('Total after discount:', totalCostAfterDiscount);
+      console.log('Payment terms:', request.payment_terms);
+      console.log('Downpayment %:', request.downpayment_percentage);
+      
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
       const downpaymentAmount = Math.round(
@@ -892,12 +909,15 @@ const getRequestDetails = async (req, res) => {
       );
       const remainingAmount = totalCostAfterDiscount - downpaymentAmount;
 
+      console.log('Calculated downpayment:', downpaymentAmount);
+      console.log('Calculated remaining:', remainingAmount);
+
       paymentHistory = [
         {
           payment_id: null,
           phase: "Down Payment",
           percentage: `${downpaymentPercent}%`,
-          amount: `₱${downpaymentAmount.toLocaleString()}`,
+          amount: `₱${downpaymentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
@@ -906,12 +926,14 @@ const getRequestDetails = async (req, res) => {
           payment_id: null,
           phase: "Completion Balance",
           percentage: `${remainingPercent}%`,
-          amount: `₱${remainingAmount.toLocaleString()}`,
+          amount: `₱${remainingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
         },
       ];
+      
+      console.log('Final payment history:', JSON.stringify(paymentHistory, null, 2));
     }
 
     const quotationQuery = `
