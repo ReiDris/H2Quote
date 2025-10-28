@@ -521,37 +521,43 @@ const getCustomerRequests = async (req, res) => {
         rs.status_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          0
-        ) as subtotal,
-
-        COALESCE(
+        CAST(
           COALESCE(
             (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             0
-          ) * COALESCE(sr.discount_percentage, 0) / 100,
-          0
-        ) as discount_amount,
+          )
+        AS numeric(12,2)) as subtotal,
 
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          0
-        ) - COALESCE(
+        CAST(
+          COALESCE(
+            COALESCE(
+              (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+              (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+              (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+              0
+            ) * COALESCE(sr.discount_percentage, 0) / 100,
+            0
+          )
+        AS numeric(12,2)) as discount_amount,
+
+        CAST(
           COALESCE(
             (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             0
-          ) * COALESCE(sr.discount_percentage, 0) / 100,
-          0
-        ) as estimated_cost,
+          ) - COALESCE(
+            COALESCE(
+              (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+              (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+              (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+              0
+            ) * COALESCE(sr.discount_percentage, 0) / 100,
+            0
+          )
+        AS numeric(12,2)) as estimated_cost,
         
         -- Service status mapping
         CASE 
