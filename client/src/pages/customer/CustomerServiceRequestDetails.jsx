@@ -30,6 +30,19 @@ const CustomerServiceRequestDetails = () => {
     return modeMap[mode] || mode;
   };
 
+  // Helper function to calculate subtotal (before discount) from services
+  const calculateSubtotal = () => {
+    if (!requestData || !requestData.services) return 0;
+    
+    return requestData.services.reduce((sum, service) => {
+      // Remove currency symbol and parse the number
+      const price = parseFloat(
+        service.totalPrice.replace(/[₱,]/g, "").trim()
+      );
+      return sum + (isNaN(price) ? 0 : price);
+    }, 0);
+  };
+
   // Payment proof modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -92,6 +105,7 @@ const CustomerServiceRequestDetails = () => {
           paymentHistory: requestDetails.paymentHistory || [],
           estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
           totalCost: requestDetails.totalCost,
+          discountPercentage: requestDetails.discount_percentage || 0,
           paymentMode: requestDetails.payment_mode || "-",
           paymentTerms: requestDetails.payment_terms || "-",
           paymentDeadline: requestDetails.payment_deadline || "-",
@@ -497,10 +511,40 @@ const CustomerServiceRequestDetails = () => {
           </div>
         </div>
 
+        {/* Discount Display - Only show if discount exists */}
+        {requestData.discountPercentage > 0 && (
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-500">
+                Availed Discounts
+              </h2>
+              <div className="text-right">
+                <p className="text-sm text-gray-500">
+                  Subtotal: ₱{calculateSubtotal().toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p className="text-xs text-green-600 mt-1">
+                  {requestData.discountPercentage}% discount applied
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
             <div className="text-right">
+              {requestData.discountPercentage > 0 && (
+                <p className="text-sm text-gray-500 line-through mb-1">
+                  ₱{calculateSubtotal().toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              )}
               <p className="text-2xl font-bold text-[#0260A0]">
                 {requestData.totalCost}
               </p>
