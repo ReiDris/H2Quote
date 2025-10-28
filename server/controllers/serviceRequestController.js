@@ -681,9 +681,17 @@ const getCustomerRequests = async (req, res) => {
 
     const result = await pool.query(query, [customerId]);
 
+    // ✅ CRITICAL FIX: Convert string numbers to actual numbers
+    const sanitizedRows = result.rows.map(row => ({
+      ...row,
+      subtotal: row.subtotal ? parseFloat(row.subtotal) : 0,
+      discount_amount: row.discount_amount ? parseFloat(row.discount_amount) : 0,
+      estimated_cost: row.estimated_cost ? parseFloat(row.estimated_cost) : 0
+    }));
+
     res.json({
       success: true,
-      data: result.rows,
+      data: sanitizedRows,
     });
   } catch (error) {
     console.error("Get customer requests error:", error);
