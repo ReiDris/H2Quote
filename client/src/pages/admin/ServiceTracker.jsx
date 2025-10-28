@@ -49,30 +49,9 @@ const ServiceTracker = () => {
       if (data.success) {
         console.log("Fetched service requests:", data.data.requests);
         
-        let filteredRequests = data.data.requests;
-        
-        // Filter for staff users - only show requests assigned to them by user_id
-        if (userType === "staff" || userRole === "staff") {
-          const staffUserId = user.id || user.user_id;
-          filteredRequests = data.data.requests.filter(request => 
-            request.assigned_to_staff_id === staffUserId
-          );
-          
-          console.log(`Staff filter applied for user ID ${staffUserId}:`, {
-            totalRequests: data.data.requests.length,
-            assignedToStaff: filteredRequests.length,
-            staffUser: user
-          });
-        }
-        
-        setServiceRequests(filteredRequests);
-        
-        // Update total count based on filtered results for staff
-        if (userType === "staff" || userRole === "staff") {
-          setTotalCount(filteredRequests.length);
-        } else {
-          setTotalCount(data.data.pagination.totalCount);
-        }
+        // ✅ NO FRONTEND FILTERING - Backend now handles staff filtering
+        setServiceRequests(data.data.requests);
+        setTotalCount(data.data.pagination.totalCount);
       } else {
         setError(data.message || "Failed to fetch service requests");
       }
@@ -159,15 +138,6 @@ const ServiceTracker = () => {
     const refrigerantsCount = item.refrigerants_count || 0;
     const totalItems = servicesCount + chemicalsCount + refrigerantsCount;
 
-    // Debug logging
-    console.log(`Request ${item.request_number}:`, {
-      services: servicesCount,
-      chemicals: chemicalsCount,
-      refrigerants: refrigerantsCount,
-      total: totalItems,
-      summary: item.items_summary,
-    });
-
     if (totalItems === 0) {
       return "No items found";
     }
@@ -236,10 +206,10 @@ const ServiceTracker = () => {
           )}
         </div>
 
-        {/* Table Section - Takes remaining space, no scroll */}
+        {/* Table Section - Takes remaining space */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-          <div className="overflow-x-auto flex-1 overflow-y-hidden">
-            <table className="w-full h-full">
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
                   <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-24">

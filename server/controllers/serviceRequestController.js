@@ -1003,6 +1003,13 @@ const getAllRequests = async (req, res) => {
     let whereClause = "1=1";
     let queryParams = [];
 
+    // ✅ NEW: Filter by assigned staff for staff users at the database level
+    if (req.user && (req.user.userType === 'staff' || req.user.role === 'staff')) {
+      whereClause += " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
+      queryParams.push(req.user.id);
+      console.log(`Filtering requests for staff user ID: ${req.user.id}`);
+    }
+
     if (status) {
       whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
       queryParams.push(status);
