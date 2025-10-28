@@ -40,15 +40,18 @@ const createDefaultPayments = async (requestId) => {
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
+    // ✅ FIXED: Correct logic for Full vs Down payment
     if (payment_terms === "Full" || !downpayment_percentage) {
+      // Single full payment
       await client.query(
         `
        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
+       VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       `,
         [requestId, estimated_cost]
       );
     } else {
+      // Split into down payment and completion balance
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
         (estimated_cost * downpaymentPercent) / 100
@@ -58,10 +61,9 @@ VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES 
-  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-  ($1, 'Completion Balance', $3, 'Pending', NULL)
-  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
+        VALUES 
+          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+          ($1, 'Completion Balance', $3, 'Pending', NULL)
       `,
         [requestId, downpaymentAmount, remainingAmount]
       );
@@ -123,18 +125,18 @@ const recreatePayments = async (requestId) => {
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
+    // ✅ FIXED: Correct logic for Full vs Down payment
     if (payment_terms === "Full" || !downpayment_percentage) {
+      // Single full payment
       await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES 
-  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-  ($1, 'Completion Balance', $3, 'Pending', NULL)
-  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
+        VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       `,
         [requestId, estimated_cost]
       );
     } else {
+      // Split into down payment and completion balance
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
         (estimated_cost * downpaymentPercent) / 100
@@ -144,10 +146,9 @@ VALUES
       await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES 
-  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-  ($1, 'Completion Balance', $3, 'Pending', NULL)
-  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
+        VALUES 
+          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+          ($1, 'Completion Balance', $3, 'Pending', NULL)
       `,
         [requestId, downpaymentAmount, remainingAmount]
       );
