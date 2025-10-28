@@ -5,6 +5,7 @@ import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
 import { serviceRequestsAPI } from "../../config/api";
+import { formatPaymentDate, formatDateTime } from "../../utils/dateUtils";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -27,29 +28,6 @@ const CustomerServiceRequestDetails = () => {
       gcash: "GCash",
     };
     return modeMap[mode] || mode;
-  };
-
-  // Format date to match Service Tracker format
-  const formatDateTime = (dateString) => {
-    if (!dateString || dateString === '-') return '-';
-    try {
-      const date = new Date(dateString);
-      // Check if date is valid
-      if (isNaN(date.getTime())) return dateString;
-      
-      // Format: "Mon DD, YYYY, HH:MM AM/PM" - matches ServiceTracker
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return dateString;
-    }
   };
 
   // Payment proof modal states
@@ -633,7 +611,7 @@ const CustomerServiceRequestDetails = () => {
                       )}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {formatDateTime(payment.paidOn)}
+                      {formatPaymentDate(payment.paidOn)}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-center">
                       <span className="text-xs xl:text-sm text-gray-800">

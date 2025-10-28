@@ -11,6 +11,7 @@ import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import { useAuth } from "../../hooks/useAuth";
 import { serviceRequestsAPI } from "../../config/api";
+import { formatDateTime } from "../../utils/dateUtils";
 
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -125,20 +126,6 @@ const ServiceTracker = () => {
         {status}
       </span>
     );
-  };
-
-  // Format date helper
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
   };
 
   // Format items summary with debugging
@@ -274,7 +261,7 @@ const ServiceTracker = () => {
                         {item.request_number}
                       </td>
                       <td className="px-2 py-4 text-sm text-gray-800 whitespace-nowrap">
-                        {formatDate(item.created_at)}
+                        {formatDateTime(item.created_at)}
                       </td>
                       <td 
                         className="px-2 py-4 text-sm text-gray-800 truncate max-w-[7rem]"

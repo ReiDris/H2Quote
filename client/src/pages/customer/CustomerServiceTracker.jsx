@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { CgMaximizeAlt } from "react-icons/cg";
 import CustomerLayout from "../../layouts/CustomerLayout";
-import { serviceRequestsAPI } from "../../config/api"
+import { serviceRequestsAPI } from "../../config/api";
+import { formatDateTime } from "../../utils/dateUtils";
 
 const CustomerServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -91,7 +92,7 @@ const CustomerServiceTracker = () => {
         // Transform backend data to match your existing UI structure
         const transformedData = (data.data || []).map(item => ({
           id: item.request_number,
-          requestedAt: formatDate(item.created_at),
+          requestedAt: formatDateTime(item.created_at),
           serviceCategory: parseServiceCategory(
             item.services_count || 0, 
             item.chemicals_count || 0, 
@@ -124,19 +125,6 @@ const CustomerServiceTracker = () => {
   useEffect(() => {
     fetchCustomerRequests();
   }, []);
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
 
   const formatCurrency = (amount) => {
     // Convert to number if it's a string
