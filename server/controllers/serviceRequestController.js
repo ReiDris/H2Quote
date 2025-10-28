@@ -724,7 +724,7 @@ const getRequestDetails = async (req, res) => {
     CONCAT(u.first_name, ' ', u.last_name) as customer_name,
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH12:MI AM') as requested_at,
+    sr.request_date as requested_at,
     CASE 
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
