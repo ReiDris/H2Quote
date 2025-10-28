@@ -1022,10 +1022,10 @@ const getAllRequests = async (req, res) => {
         sr.request_id, 
         sr.request_number, 
         rs.status_name as status,
-        -- Calculate total cost with discount
+        -- FIXED: Calculate actual total cost from all item tables, then apply discount
         (
           COALESCE(
-            (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             sr.estimated_cost
@@ -1034,9 +1034,10 @@ const getAllRequests = async (req, res) => {
         sr.request_date as created_at,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
         c.company_name,
+        sr.assigned_to_staff_id,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         sr.priority,
-        -- Service status mapping
+        -- Add service status mapping for frontend
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -1046,53 +1047,18 @@ const getAllRequests = async (req, res) => {
           WHEN rs.status_name = 'Completed' THEN 'Completed'
           ELSE rs.status_name
         END as service_status,
-        -- Payment status
+        -- Add payment status calculation
         CASE 
           WHEN sr.payment_status IS NULL THEN 'Pending'
           ELSE sr.payment_status
         END as payment_status,
-        
-        -- ✅ UPDATED WARRANTY STATUS LOGIC - Same as getCustomerRequests
+        -- Add warranty status
         CASE 
-          WHEN rs.status_name = 'Completed' THEN
-            CASE 
-              WHEN (
-                SELECT COUNT(*) 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id 
-                AND sri.warranty_end_date IS NOT NULL
-                AND sri.warranty_end_date >= CURRENT_DATE
-              ) = (
-                SELECT COUNT(*) 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id
-              ) AND (
-                SELECT COUNT(*) 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id
-              ) > 0 
-              THEN 'Valid'
-              WHEN EXISTS (
-                SELECT 1 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id 
-                AND sri.warranty_end_date < CURRENT_DATE
-              ) 
-              THEN 'Expired'
-              WHEN sr.warranty_start_date IS NOT NULL 
-              AND NOT EXISTS (
-                SELECT 1 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id 
-                AND sri.warranty_end_date IS NOT NULL
-              )
-              THEN 'Pending'
-              ELSE 'Not Set'
-            END
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
           ELSE 'N/A'
         END as warranty_status,
-        
-        -- Item counts
+        -- Add item counts for debugging
         (
           SELECT COUNT(*)::int 
           FROM service_request_items sri 
@@ -1108,8 +1074,7 @@ const getAllRequests = async (req, res) => {
           FROM service_request_refrigerants srr 
           WHERE srr.request_id = sr.request_id
         ) as refrigerants_count,
-        
-        -- Items summary
+        -- Add item summary for display
         (
           SELECT STRING_AGG(
             CASE 

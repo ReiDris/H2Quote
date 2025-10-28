@@ -24,6 +24,7 @@ const ServiceTracker = () => {
   const { user } = useAuth();
 
   const userRole = user?.role || "admin";
+  const userType = user?.userType || "admin";
   const itemsPerPage = 10;
 
   // Fetch service requests from API
@@ -47,8 +48,31 @@ const ServiceTracker = () => {
 
       if (data.success) {
         console.log("Fetched service requests:", data.data.requests);
-        setServiceRequests(data.data.requests);
-        setTotalCount(data.data.pagination.totalCount);
+        
+        let filteredRequests = data.data.requests;
+        
+        // Filter for staff users - only show requests assigned to them by user_id
+        if (userType === "staff" || userRole === "staff") {
+          const staffUserId = user.id || user.user_id;
+          filteredRequests = data.data.requests.filter(request => 
+            request.assigned_to_staff_id === staffUserId
+          );
+          
+          console.log(`Staff filter applied for user ID ${staffUserId}:`, {
+            totalRequests: data.data.requests.length,
+            assignedToStaff: filteredRequests.length,
+            staffUser: user
+          });
+        }
+        
+        setServiceRequests(filteredRequests);
+        
+        // Update total count based on filtered results for staff
+        if (userType === "staff" || userRole === "staff") {
+          setTotalCount(filteredRequests.length);
+        } else {
+          setTotalCount(data.data.pagination.totalCount);
+        }
       } else {
         setError(data.message || "Failed to fetch service requests");
       }
@@ -325,6 +349,8 @@ const ServiceTracker = () => {
                     >
                       {searchTerm
                         ? "No service requests found matching your search."
+                        : userType === "staff" || userRole === "staff"
+                        ? "No service requests assigned to you yet."
                         : "No service requests found."}
                     </td>
                   </tr>
