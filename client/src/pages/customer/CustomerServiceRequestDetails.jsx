@@ -177,6 +177,35 @@ const CustomerServiceRequestDetails = () => {
     console.log('📡 Response status:', response.status); // ADD THIS
     console.log('📡 Response ok:', response.ok); // ADD THIS
 
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server response:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setApprovalSuccess(true);
+        setApprovalError("");
+
+        setTimeout(() => {
+          setShowApprovalModal(false);
+          fetchRequestDetails();
+        }, 1500);
+      } else {
+        setApprovalError(data.message || "Failed to approve service request");
+      }
+    } catch (error) {
+      console.error("Approval error:", error);
+      setApprovalError(error.message || "An error occurred while approving the service request");
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
   const openApprovalModal = () => {
     setShowApprovalModal(true);
     setApprovalSuccess(false);
