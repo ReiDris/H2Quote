@@ -359,36 +359,6 @@ const CustomerServiceRequestDetails = () => {
           <StatusTracker />
         </div>
 
-        {/* Messaging Banner - Shows when "Waiting for Approval" but no quotation yet */}
-        {requestData.serviceStatus === "Waiting for Approval" && !requestData.quotation && (
-          <div className="mx-6 mb-6">
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-1">
-                  <MessageCircle className="text-purple-600" size={20} />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-purple-900 font-semibold text-base mb-2">
-                    Quotation Under Review
-                  </h3>
-                  <p className="text-gray-700 text-sm mb-4">
-                    TRISHKAYE staff is reviewing your request. A detailed quotation
-                    will be sent to you shortly. You can send a message if you have
-                    questions.
-                  </p>
-                  <button
-                    onClick={handleMessageTrishkaye}
-                    className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors cursor-pointer text-sm font-medium"
-                  >
-                    <MessageCircle size={18} />
-                    Message TRISHKAYE
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Approval Banner - Shows when quotation exists AND status is "Waiting for Approval" */}
         {requestData.quotation && 
          requestData.serviceStatus === "Waiting for Approval" && (
