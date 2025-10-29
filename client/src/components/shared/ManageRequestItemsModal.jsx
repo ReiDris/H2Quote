@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Plus, Trash2, Search, AlertCircle } from "lucide-react";
-import { serviceRequestsAPI } from '../../config/api';
+import { serviceRequestsAPI } from "../../config/api";
 
 const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [activeTab, setActiveTab] = useState("chemicals");
@@ -12,12 +12,12 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
-  
+
   // Modal states for success/failed alerts
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertType, setAlertType] = useState("success"); // "success" or "error"
   const [alertMessage, setAlertMessage] = useState("");
-  
+
   // Modal state for remove confirmation
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [itemToRemove, setItemToRemove] = useState(null);
@@ -90,9 +90,12 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     closeRemoveModal();
 
     try {
-      const response = activeTab === "chemicals"
-        ? await serviceRequestsAPI.removeChemicals(requestId, [itemToRemove])
-        : await serviceRequestsAPI.removeRefrigerants(requestId, [itemToRemove]);
+      const response =
+        activeTab === "chemicals"
+          ? await serviceRequestsAPI.removeChemicals(requestId, [itemToRemove])
+          : await serviceRequestsAPI.removeRefrigerants(requestId, [
+              itemToRemove,
+            ]);
 
       const data = await response.json();
 
@@ -125,19 +128,33 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     setError("");
 
     try {
-      const itemData = [{
-        id: selectedItem.id,
-        quantity: parseInt(quantity),
-      }];
+      const itemData = [
+        {
+          id: selectedItem.id,
+          quantity: parseInt(quantity),
+        },
+      ];
 
-      const response = activeTab === "chemicals"
-        ? await serviceRequestsAPI.addChemicals(requestId, itemData, notes || undefined)
-        : await serviceRequestsAPI.addRefrigerants(requestId, itemData, notes || undefined);
+      const response =
+        activeTab === "chemicals"
+          ? await serviceRequestsAPI.addChemicals(
+              requestId,
+              itemData,
+              notes || undefined
+            )
+          : await serviceRequestsAPI.addRefrigerants(
+              requestId,
+              itemData,
+              notes || undefined
+            );
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        showAlert("success", data.message || `${selectedItem.name} added successfully!`);
+        showAlert(
+          "success",
+          data.message || `${selectedItem.name} added successfully!`
+        );
         setSelectedItem(null);
         setQuantity(1);
         setNotes("");
@@ -158,14 +175,25 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
     setError("");
 
     try {
-      const itemData = [{
-        id: item.id,
-        quantity: 1,
-      }];
+      const itemData = [
+        {
+          id: item.id,
+          quantity: 1,
+        },
+      ];
 
-      const response = activeTab === "chemicals"
-        ? await serviceRequestsAPI.addChemicals(requestId, itemData, "Quick add")
-        : await serviceRequestsAPI.addRefrigerants(requestId, itemData, "Quick add");
+      const response =
+        activeTab === "chemicals"
+          ? await serviceRequestsAPI.addChemicals(
+              requestId,
+              itemData,
+              "Quick add"
+            )
+          : await serviceRequestsAPI.addRefrigerants(
+              requestId,
+              itemData,
+              "Quick add"
+            );
 
       const data = await response.json();
 
@@ -251,7 +279,10 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
             {/* Error Message */}
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle
+                  size={20}
+                  className="text-red-600 flex-shrink-0 mt-0.5"
+                />
                 <span className="text-red-800 text-sm">{error}</span>
               </div>
             )}
@@ -259,7 +290,8 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
             {/* Current Items Section */}
             <div className="mb-6">
               <h3 className="text-lg font-bold text-[#004785] mb-3">
-                Current {activeTab === "chemicals" ? "Chemicals" : "Refrigerants"}
+                Current{" "}
+                {activeTab === "chemicals" ? "Chemicals" : "Refrigerants"}
               </h3>
 
               {currentItems.length === 0 ? (
@@ -278,7 +310,9 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
                         <p className="text-sm text-black">
                           Quantity: {item.quantity} | Line Total: ₱
                           {parseFloat(
-                            item.line_total_numeric || 0
+                            item.line_total ||
+                              item.total_price?.replace(/[₱,]/g, "") ||
+                              0
                           ).toLocaleString()}
                         </p>
                         {item.notes && item.notes !== "-" && (
@@ -470,9 +504,7 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
             <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
               {alertType === "success" ? "Success" : "Error"}
             </h2>
-            <p className="text-black mb-6 text-sm">
-              {alertMessage}
-            </p>
+            <p className="text-black mb-6 text-sm">{alertMessage}</p>
             <div className="flex gap-3">
               <button
                 onClick={closeAlertModal}
