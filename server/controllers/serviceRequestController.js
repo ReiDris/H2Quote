@@ -44,10 +44,8 @@ const createDefaultPayments = async (requestId) => {
     if (payment_terms === "Full" || !downpayment_percentage) {
       // Single full payment
       await client.query(
-        `
-       INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-       VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
-      `,
+        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+         VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')`,
         [requestId, estimated_cost]
       );
     } else {
@@ -59,12 +57,10 @@ const createDefaultPayments = async (requestId) => {
       const remainingAmount = estimated_cost - downpaymentAmount;
 
       await client.query(
-        `
-        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-        VALUES 
-          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-          ($1, 'Completion Balance', $3, 'Pending', NULL)
-      `,
+        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+         VALUES 
+            ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+            ($1, 'Completion Balance', $3, 'Pending', NULL)`,
         [requestId, downpaymentAmount, remainingAmount]
       );
     }
@@ -129,10 +125,8 @@ const recreatePayments = async (requestId) => {
     if (payment_terms === "Full" || !downpayment_percentage) {
       // Single full payment
       await client.query(
-        `
-        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-        VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
-      `,
+        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+         VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')`,
         [requestId, estimated_cost]
       );
     } else {
@@ -144,12 +138,10 @@ const recreatePayments = async (requestId) => {
       const remainingAmount = estimated_cost - downpaymentAmount;
 
       await client.query(
-        `
-        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-        VALUES 
-          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-          ($1, 'Completion Balance', $3, 'Pending', NULL)
-      `,
+        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+         VALUES 
+            ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+            ($1, 'Completion Balance', $3, 'Pending', NULL)`,
         [requestId, downpaymentAmount, remainingAmount]
       );
     }
@@ -384,10 +376,14 @@ const createServiceRequest = async (req, res) => {
       const totalWithTax = totalCost + taxAmount;
 
       // Generate quotation number
-      const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+      const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+        Date.now()
+      ).slice(-6)}`;
 
       // Format downpayment_percentage as string (e.g., "50%") - matching schema
-      const downpaymentPercentageStr = downpaymentPercentage ? `${downpaymentPercentage}%` : null;
+      const downpaymentPercentageStr = downpaymentPercentage
+        ? `${downpaymentPercentage}%`
+        : null;
 
       // Insert quotation
       const insertQuotationQuery = `
@@ -411,8 +407,10 @@ const createServiceRequest = async (req, res) => {
         paymentTerms,
         paymentMode,
         downpaymentPercentageStr, // stored as string like "50%"
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days validity
-        'Draft' // Initial status is Draft until sent by admin/staff
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split("T")[0], // 30 days validity
+        "Draft", // Initial status is Draft until sent by admin/staff
       ]);
 
       const quotationId = quotationResult.rows[0].quotation_id;
@@ -424,14 +422,23 @@ const createServiceRequest = async (req, res) => {
             `INSERT INTO quotation_items (
               quotation_id, service_id, item_description, quantity, unit_price, line_total
             ) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [quotationId, item.itemId, item.name, item.quantity, item.unitPrice, item.totalPrice]
+            [
+              quotationId,
+              item.itemId,
+              item.name,
+              item.quantity,
+              item.unitPrice,
+              item.totalPrice,
+            ]
           );
         }
         // Note: Currently only services are copied to quotation_items
         // Chemicals and refrigerants are part of the service request but not in quotation_items table
       }
 
-      console.log(`✅ Initial quotation ${quotationNumber} created successfully`);
+      console.log(
+        `✅ Initial quotation ${quotationNumber} created successfully`
+      );
     } catch (quotationError) {
       console.error("Failed to create initial quotation:", quotationError);
       // Don't fail the entire request if quotation creation fails
@@ -683,11 +690,13 @@ const getCustomerRequests = async (req, res) => {
     const result = await pool.query(query, [customerId]);
 
     // ✅ CRITICAL FIX: Convert string numbers to actual numbers
-    const sanitizedRows = result.rows.map(row => ({
+    const sanitizedRows = result.rows.map((row) => ({
       ...row,
       subtotal: row.subtotal ? parseFloat(row.subtotal) : 0,
-      discount_amount: row.discount_amount ? parseFloat(row.discount_amount) : 0,
-      estimated_cost: row.estimated_cost ? parseFloat(row.estimated_cost) : 0
+      discount_amount: row.discount_amount
+        ? parseFloat(row.discount_amount)
+        : 0,
+      estimated_cost: row.estimated_cost ? parseFloat(row.estimated_cost) : 0,
     }));
 
     res.json({
@@ -702,7 +711,6 @@ const getCustomerRequests = async (req, res) => {
     });
   }
 };
-
 
 const getRequestDetails = async (req, res) => {
   try {
@@ -896,27 +904,30 @@ const getRequestDetails = async (req, res) => {
 
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
-    let paymentHistory = paymentResult.rows.map(row => ({
+    let paymentHistory = paymentResult.rows.map((row) => ({
       payment_id: row.payment_id,
       phase: row.phase,
       percentage: row.percentage,
-      amount: `₱${parseFloat(row.raw_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      amount: `₱${parseFloat(row.raw_amount).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`,
       proofOfPayment: row.proofOfPayment,
       paidOn: row.paidOn,
-      paymentStatus: row.paymentStatus
+      paymentStatus: row.paymentStatus,
     }));
 
     // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
-      console.log('⚠️ No payments found in database for request', requestId);
-      console.log('Creating default payment breakdown...');
-      console.log('Subtotal:', subtotal);
-      console.log('Discount %:', discountPercentage);
-      console.log('Discount amount:', discountAmount);
-      console.log('Total after discount:', totalCostAfterDiscount);
-      console.log('Payment terms:', request.payment_terms);
-      console.log('Downpayment %:', request.downpayment_percentage);
-      
+      console.log("⚠️ No payments found in database for request", requestId);
+      console.log("Creating default payment breakdown...");
+      console.log("Subtotal:", subtotal);
+      console.log("Discount %:", discountPercentage);
+      console.log("Discount amount:", discountAmount);
+      console.log("Total after discount:", totalCostAfterDiscount);
+      console.log("Payment terms:", request.payment_terms);
+      console.log("Downpayment %:", request.downpayment_percentage);
+
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
       const downpaymentAmount = Math.round(
@@ -924,15 +935,18 @@ const getRequestDetails = async (req, res) => {
       );
       const remainingAmount = totalCostAfterDiscount - downpaymentAmount;
 
-      console.log('Calculated downpayment:', downpaymentAmount);
-      console.log('Calculated remaining:', remainingAmount);
+      console.log("Calculated downpayment:", downpaymentAmount);
+      console.log("Calculated remaining:", remainingAmount);
 
       paymentHistory = [
         {
           payment_id: null,
           phase: "Down Payment",
           percentage: `${downpaymentPercent}%`,
-          amount: `₱${downpaymentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          amount: `₱${downpaymentAmount.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
@@ -941,14 +955,20 @@ const getRequestDetails = async (req, res) => {
           payment_id: null,
           phase: "Completion Balance",
           percentage: `${remainingPercent}%`,
-          amount: `₱${remainingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          amount: `₱${remainingAmount.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
         },
       ];
-      
-      console.log('Final payment history:', JSON.stringify(paymentHistory, null, 2));
+
+      console.log(
+        "Final payment history:",
+        JSON.stringify(paymentHistory, null, 2)
+      );
     }
 
     const quotationQuery = `
@@ -1005,8 +1025,12 @@ const getAllRequests = async (req, res) => {
     let queryParams = [];
 
     // ✅ NEW: Filter by assigned staff for staff users at the database level
-    if (req.user && (req.user.userType === 'staff' || req.user.role === 'staff')) {
-      whereClause += " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
+    if (
+      req.user &&
+      (req.user.userType === "staff" || req.user.role === "staff")
+    ) {
+      whereClause +=
+        " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
       queryParams.push(req.user.id);
       console.log(`Filtering requests for staff user ID: ${req.user.id}`);
     }
@@ -3102,7 +3126,7 @@ const updateServiceRequest = async (req, res) => {
 
         if (existingQuotationCheck.rows.length > 0) {
           const quotation = existingQuotationCheck.rows[0];
-          
+
           // Update existing quotation to 'Sent' status
           await client.query(
             `UPDATE quotations 
@@ -3113,10 +3137,14 @@ const updateServiceRequest = async (req, res) => {
             [quotation.quotation_id]
           );
 
-          console.log(`✅ Quotation ${quotation.quotation_id} marked as 'Sent' for request ${requestId}`);
+          console.log(
+            `✅ Quotation ${quotation.quotation_id} marked as 'Sent' for request ${requestId}`
+          );
         } else {
           // If somehow no quotation exists, create one (fallback)
-          console.warn(`⚠️ No quotation found for request ${requestId}, creating one now...`);
+          console.warn(
+            `⚠️ No quotation found for request ${requestId}, creating one now...`
+          );
 
           const totalsQuery = `
             SELECT 
@@ -3133,7 +3161,12 @@ const updateServiceRequest = async (req, res) => {
             WHERE sr.request_id = $1
           `;
           const totalsResult = await client.query(totalsQuery, [requestId]);
-          const { subtotal, payment_terms, payment_mode, downpayment_percentage } = totalsResult.rows[0];
+          const {
+            subtotal,
+            payment_terms,
+            payment_mode,
+            downpayment_percentage,
+          } = totalsResult.rows[0];
 
           const discountAmount = (subtotal * discountPercentage) / 100;
           const subtotalAfterDiscount = subtotal - discountAmount;
@@ -3141,10 +3174,14 @@ const updateServiceRequest = async (req, res) => {
           const taxAmount = subtotalAfterDiscount * taxRate;
           const totalAmount = subtotalAfterDiscount + taxAmount;
 
-          const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+          const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+            Date.now()
+          ).slice(-6)}`;
 
           // Format downpayment_percentage as string for quotations table
-          const downpaymentPercentageStr = downpayment_percentage ? `${downpayment_percentage}%` : null;
+          const downpaymentPercentageStr = downpayment_percentage
+            ? `${downpayment_percentage}%`
+            : null;
 
           const quotationResult = await client.query(
             `INSERT INTO quotations (
@@ -3156,11 +3193,21 @@ const updateServiceRequest = async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13, NOW(), NOW())
             RETURNING quotation_id`,
             [
-              requestId, quotationNumber, subtotal, taxRate, taxAmount,
-              discountAmount, totalAmount, payment_terms, payment_mode,
+              requestId,
+              quotationNumber,
+              subtotal,
+              taxRate,
+              taxAmount,
+              discountAmount,
+              totalAmount,
+              payment_terms,
+              payment_mode,
               downpaymentPercentageStr, // stored as string
-              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              'Sent', assignedStaffId || req.user.id
+              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split("T")[0],
+              "Sent",
+              assignedStaffId || req.user.id,
             ]
           );
 
@@ -3179,7 +3226,9 @@ const updateServiceRequest = async (req, res) => {
             [quotationId, requestId]
           );
 
-          console.log(`✅ Fallback quotation ${quotationNumber} created and sent`);
+          console.log(
+            `✅ Fallback quotation ${quotationNumber} created and sent`
+          );
         }
 
         // Update service request with quote_sent_date
@@ -3228,7 +3277,11 @@ const updateServiceRequest = async (req, res) => {
       for (const service of services) {
         // ✅ FIX: Only process actual services (not chemicals/refrigerants)
         // Check if service_id exists AND itemType is 'service'
-        if (service.itemType === "service" && service.service_id && service.warranty_start_date) {
+        if (
+          service.itemType === "service" &&
+          service.service_id &&
+          service.warranty_start_date
+        ) {
           const months = service.warranty_months || 6;
           const endDate = new Date(service.warranty_start_date);
           endDate.setMonth(endDate.getMonth() + months);
@@ -3532,10 +3585,11 @@ const setServiceWarranty = async (req, res) => {
           warranty_months: warrantyMonths,
           warranty_end_date: warrantyEndDate,
           items_updated: updateResult.rows.length,
-          synced_tables: ['service_requests', 'service_request_items']
+          synced_tables: ["service_requests", "service_request_items"],
         },
         changed_by: req.user.email,
-        change_reason: "Warranty activated for completed service (both tables synced)",
+        change_reason:
+          "Warranty activated for completed service (both tables synced)",
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
@@ -3552,7 +3606,7 @@ const setServiceWarranty = async (req, res) => {
         warrantyEndDate: warrantyEndDate,
         warrantyMonths: warrantyMonths,
         servicesUpdated: updateResult.rows.length,
-        tablesSynced: ['service_requests', 'service_request_items']
+        tablesSynced: ["service_requests", "service_request_items"],
       },
     });
   } catch (error) {
