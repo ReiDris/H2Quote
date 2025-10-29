@@ -2751,6 +2751,7 @@ const updateServiceRequest = async (req, res) => {
       services,
       paymentBreakdown,
       discount,
+      paymentDeadline,
     } = req.body;
 
     const currentRequestQuery = `
@@ -2799,7 +2800,7 @@ const updateServiceRequest = async (req, res) => {
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
-    // ðŸ” DEBUG LOGGING - Show mapping
+    // DEBUG LOGGING - Show mapping
     console.log("=== STATUS MAPPING DEBUG ===");
     console.log("Frontend Status (serviceStatus):", serviceStatus);
     console.log("Backend Status (backendStatus):", backendStatus);
@@ -2917,8 +2918,9 @@ const updateServiceRequest = async (req, res) => {
         request_acknowledged_date = $5,
         actual_completion_date = $6,
         discount_percentage = $7,
+        payment_deadline = $8,        
         updated_at = NOW()
-      WHERE request_id = $8
+      WHERE request_id = $9              
     `;
 
     await client.query(updateRequestQuery, [
@@ -2929,6 +2931,7 @@ const updateServiceRequest = async (req, res) => {
       requestAcknowledgedDate,
       actualCompletionDate,
       discountPercentage,
+      paymentDeadline || null, // ✅ ADD THIS
       requestId,
     ]);
 
