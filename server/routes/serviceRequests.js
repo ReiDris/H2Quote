@@ -42,7 +42,6 @@ router.post('/', requireCustomer, serviceRequestController.createServiceRequest)
 // Quotation routes
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 
-// ✅ ADDED: Customer approval route - MUST be before generic /:requestId routes
 router.put('/:requestId/approve', requireCustomer, serviceRequestController.approveServiceRequest);
 
 // Parameterized routes - specific paths before generic

@@ -161,7 +161,7 @@ const CustomerServiceRequestDetails = () => {
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/api/service-requests/${requestData.requestId}/approve`,
         {
-          method: "POST",
+          method: "PUT",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
