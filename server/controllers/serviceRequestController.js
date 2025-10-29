@@ -676,10 +676,18 @@ const getRequestDetails = async (req, res) => {
     let whereClause = "sr.request_id = $1";
     let queryParams = [requestId];
 
+    // ✅ CLIENT FILTERING: Clients can only see their own requests
     if (userType === "client") {
       whereClause += " AND sr.requested_by_user_id = $2";
       queryParams.push(userId);
     }
+
+    // ✅ STAFF FILTERING: Staff can only see requests assigned to them
+    if (userType === "staff") {
+      whereClause += " AND sr.assigned_to_staff_id = $2";
+      queryParams.push(userId);
+    }
+    // Admin can see all requests (no additional filter needed)
 
     const requestQuery = `
   SELECT 
@@ -834,7 +842,6 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
-    // Ã¢Å“â€¦ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -925,7 +932,7 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation, // Ã¢â€ Â CHANGE LINE 818: from null to quotation
+        quotation: quotation,
       },
     });
   } catch (error) {
@@ -942,8 +949,19 @@ const getAllRequests = async (req, res) => {
     const { status, page = 1, limit = 20, search } = req.query;
     const offset = (page - 1) * limit;
 
+    // Get user information from authenticated request
+    const userId = req.user.id;
+    const userType = req.user.userType;
+
     let whereClause = "1=1";
     let queryParams = [];
+
+    // ✅ STAFF FILTERING: Staff can only see requests assigned to them
+    if (userType === "staff") {
+      whereClause += " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
+      queryParams.push(userId);
+    }
+    // Admin can see all requests (no additional filter needed)
 
     if (status) {
       whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
