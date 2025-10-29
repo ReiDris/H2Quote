@@ -20,11 +20,20 @@ const createDefaultPayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        (
-          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-        ) as subtotal
+        CASE 
+  WHEN EXISTS (
+    SELECT 1 FROM service_request_items WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_chemicals WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_refrigerants WHERE request_id = sr.request_id
+  ) THEN 
+    COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+  ELSE 
+    sr.estimated_cost
+END as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
     `;
@@ -74,7 +83,6 @@ VALUES
     client.release();
   }
 };
-
 const createDefaultQuotation = async (requestId) => {
   const client = await pool.connect();
   try {
@@ -158,7 +166,6 @@ const createDefaultQuotation = async (requestId) => {
   }
 };
 
-
 const recreatePayments = async (requestId) => {
   const client = await pool.connect();
   try {
@@ -186,11 +193,21 @@ const recreatePayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        (
-          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-        ) as subtotal
+        CASE 
+  WHEN EXISTS (
+    SELECT 1 FROM service_request_items WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_chemicals WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_refrigerants WHERE request_id = sr.request_id
+    LIMIT 1
+  ) THEN 
+    COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+  ELSE 
+    sr.estimated_cost
+END as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
     `;
@@ -438,9 +455,20 @@ const createServiceRequest = async (req, res) => {
           total_cost: totalCost,
           estimated_duration: estimatedDuration,
           payment_terms: paymentTerms,
-          services_count: serviceDetails.filter(s => s.itemType === 'service').length,
-          chemicals_count: serviceDetails.filter(s => s.itemType === 'chemical').length,
-          refrigerants_count: serviceDetails.filter(s => s.itemType === 'refrigerant').length,
+          total_items: serviceDetails.length, // Total items
+          services_count: serviceDetails.filter((s) => s.itemType === "service")
+            .length,
+          chemicals_count: serviceDetails.filter(
+            (s) => s.itemType === "chemical"
+          ).length,
+          refrigerants_count: serviceDetails.filter(
+            (s) => s.itemType === "refrigerant"
+          ).length,
+          items_detail: serviceDetails.map((s) => ({
+            type: s.itemType,
+            name: s.name,
+            quantity: s.quantity,
+          })), // Optional: detailed breakdown
         },
         changed_by: req.user.email,
         change_reason: `Service request #${requestNumber} created by customer`,
@@ -537,65 +565,75 @@ const getCustomerRequests = async (req, res) => {
     const customerId = req.user.id;
 
     const query = `
-      SELECT 
-        sr.request_id,
-        sr.request_number,
-        sr.request_date as created_at,
-        rs.status_name,
-        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        
+  SELECT 
+    sr.request_id,
+    sr.request_number,
+    sr.request_date as created_at,
+    rs.status_name,
+    CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+    
+    -- ✅ BEST: All subqueries wrapped in COALESCE
+    (
+      COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+      COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+      COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+    ) as subtotal,
+
+    -- Discount calculation
+    (
+      (
+        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+      ) * COALESCE(sr.discount_percentage, 0) / 100
+    ) as discount_amount,
+
+    -- Estimated cost
+    (
+      (
+        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+      ) - (
         (
           COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
           COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
           COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-        ) as subtotal,
-
-        (
-          (
-            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-          ) * COALESCE(sr.discount_percentage, 0) / 100
-        ) as discount_amount,
-
-        (
-          (
-            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-          ) - (
-            (
-              COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-              COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-              COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-            ) * COALESCE(sr.discount_percentage, 0) / 100
-          )
-        ) as estimated_cost,
-        
-        -- Add service status for frontend (FIXED to match admin/staff)
-        CASE 
-          WHEN rs.status_name = 'New' THEN 'Pending'
-          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-          WHEN rs.status_name = 'Completed' THEN 'Completed'
-          ELSE rs.status_name
-        END as service_status,
-        
-        -- Add payment status calculation
-        CASE 
-          WHEN sr.payment_status IS NULL THEN 'Pending'
-          ELSE sr.payment_status
-        END as payment_status,
-        
-        -- Add warranty status
-        CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
-          ELSE 'N/A'
-        END as warranty_status,
+        ) * COALESCE(sr.discount_percentage, 0) / 100
+      )
+    ) as estimated_cost,
+    
+    -- Service status mapping
+    CASE 
+      WHEN rs.status_name = 'New' THEN 'Pending'
+      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+      WHEN rs.status_name = 'Completed' THEN 'Completed'
+      ELSE rs.status_name
+    END as service_status,
+    
+    -- Payment status
+    CASE 
+      WHEN sr.payment_status IS NULL THEN 'Pending'
+      ELSE sr.payment_status
+    END as payment_status,
+    
+    -- ✅ FIXED WARRANTY: Check both levels
+    CASE 
+      WHEN rs.status_name = 'Completed' AND (
+        sr.warranty_start_date IS NOT NULL OR 
+        EXISTS (
+          SELECT 1 FROM service_request_items sri 
+          WHERE sri.request_id = sr.request_id 
+          AND sri.warranty_start_date IS NOT NULL
+        )
+      ) THEN 'Valid'
+      WHEN rs.status_name = 'Completed' THEN 'Pending'
+      ELSE 'N/A'
+    END as warranty_status,
         
         -- Add item counts for debugging
         (
@@ -645,12 +683,12 @@ const getCustomerRequests = async (req, res) => {
           ) items_summary
         ) as items_summary
         
-      FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-      WHERE sr.requested_by_user_id = $1
-      ORDER BY sr.request_date DESC
-    `;
+       FROM service_requests sr
+  JOIN request_statuses rs ON sr.status_id = rs.status_id
+  LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+  WHERE sr.requested_by_user_id = $1
+  ORDER BY sr.request_date DESC
+`;
 
     const result = await pool.query(query, [customerId]);
 
@@ -676,18 +714,15 @@ const getRequestDetails = async (req, res) => {
     let whereClause = "sr.request_id = $1";
     let queryParams = [requestId];
 
-    // ✅ CLIENT FILTERING: Clients can only see their own requests
     if (userType === "client") {
       whereClause += " AND sr.requested_by_user_id = $2";
       queryParams.push(userId);
     }
 
-    // ✅ STAFF FILTERING: Staff can only see requests assigned to them
     if (userType === "staff") {
       whereClause += " AND sr.assigned_to_staff_id = $2";
       queryParams.push(userId);
     }
-    // Admin can see all requests (no additional filter needed)
 
     const requestQuery = `
   SELECT 
@@ -696,7 +731,7 @@ const getRequestDetails = async (req, res) => {
     CONCAT(u.first_name, ' ', u.last_name) as customer_name,
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    sr.request_date as requested_at,
+     sr.request_date as requested_at,
     CASE 
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -717,7 +752,7 @@ const getRequestDetails = async (req, res) => {
     END as estimated_duration,
     TO_CHAR(sr.service_start_date, 'YYYY-MM-DD') as service_start_date,
     TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
-    TO_CHAR(sr.payment_deadline, 'YYYY-MM-DD') as payment_deadline,  
+        TO_CHAR(sr.payment_deadline, 'YYYY-MM-DD') as payment_deadline,  
     TO_CHAR(sr.request_acknowledged_date, 'Mon DD, YYYY') as request_acknowledged_date,
     TO_CHAR(sr.actual_completion_date, 'YYYY-MM-DD') as actual_completion_date,
     u.email as email,
@@ -925,7 +960,7 @@ const getRequestDetails = async (req, res) => {
         request: {
           ...request,
           id: request.request_number,
-          service_end_date: request.actual_completion_date, // ✅ Add alias for frontend
+          service_end_date: request.actual_completion_date,
           totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -980,44 +1015,56 @@ const getAllRequests = async (req, res) => {
     }
 
     const query = `
-      SELECT 
-        sr.request_id, 
-        sr.request_number, 
-        rs.status_name as status,
-        -- FIXED: Calculate actual total cost from all item tables, then apply discount
-        (
-          (
-            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-          ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
-        ) as estimated_cost,
-        sr.request_date as created_at,
-        CONCAT(u.first_name, ' ', u.last_name) as customer_name,
-        c.company_name,
-        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        sr.priority,
-        -- Add service status mapping for frontend
-        CASE 
-          WHEN rs.status_name = 'New' THEN 'Pending'
-          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-          WHEN rs.status_name = 'Completed' THEN 'Completed'
-          ELSE rs.status_name
-        END as service_status,
-        -- Add payment status calculation
-        CASE 
-          WHEN sr.payment_status IS NULL THEN 'Pending'
-          ELSE sr.payment_status
-        END as payment_status,
-        -- Add warranty status
-        CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
-          ELSE 'N/A'
-        END as warranty_status,
+  SELECT 
+    sr.request_id, 
+    sr.request_number, 
+    rs.status_name as status,
+    
+    -- ✅ BEST: Calculate from items with all COALESCE, no fallback needed
+    (
+      (
+        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+      ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
+    ) as estimated_cost,
+    
+    sr.request_date as created_at,
+    CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+    c.company_name,
+    CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+    sr.priority,
+    
+    -- Service status mapping
+    CASE 
+      WHEN rs.status_name = 'New' THEN 'Pending'
+      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+      WHEN rs.status_name = 'Completed' THEN 'Completed'
+      ELSE rs.status_name
+    END as service_status,
+    
+    -- Payment status
+    CASE 
+      WHEN sr.payment_status IS NULL THEN 'Pending'
+      ELSE sr.payment_status
+    END as payment_status,
+    
+    -- ✅ FIXED WARRANTY: Check both request and item levels
+    CASE 
+      WHEN rs.status_name = 'Completed' AND (
+        sr.warranty_start_date IS NOT NULL OR 
+        EXISTS (
+          SELECT 1 FROM service_request_items sri 
+          WHERE sri.request_id = sr.request_id 
+          AND sri.warranty_start_date IS NOT NULL
+        )
+      ) THEN 'Valid'
+      WHEN rs.status_name = 'Completed' THEN 'Pending'
+      ELSE 'N/A'
+    END as warranty_status,
         -- Add item counts for debugging
         (
           SELECT COUNT(*)::int 
@@ -1064,15 +1111,15 @@ const getAllRequests = async (req, res) => {
             WHERE srr.request_id = sr.request_id
           ) items_summary
         ) as items_summary
-      FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      JOIN users u ON sr.requested_by_user_id = u.user_id
-      JOIN companies c ON sr.company_id = c.company_id
-      LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-      WHERE ${whereClause}
-      ORDER BY sr.request_date DESC
-      LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
-    `;
+        FROM service_requests sr
+  JOIN request_statuses rs ON sr.status_id = rs.status_id
+  JOIN users u ON sr.requested_by_user_id = u.user_id
+  JOIN companies c ON sr.company_id = c.company_id
+  LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+  WHERE ${whereClause}
+  ORDER BY sr.request_date DESC
+  LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
+`;
 
     queryParams.push(limit, offset);
 
@@ -3042,7 +3089,7 @@ const updateServiceRequest = async (req, res) => {
       requestAcknowledgedDate,
       actualCompletionDate,
       discountPercentage,
-      paymentDeadline || null, // ✅ ADD THIS
+      paymentDeadline || null,
       requestId,
     ]);
 
@@ -3504,8 +3551,6 @@ const approveServiceRequest = async (req, res) => {
     const { customerNotes } = req.body;
     const customerId = req.user.id;
 
-    console.log("Approve request - ID:", requestId, "User:", customerId); // DEBUG LOG
-
     const requestQuery = `
       SELECT sr.*, rs.status_name,
              CONCAT(u.first_name, ' ', u.last_name) as customer_name,
@@ -3582,7 +3627,6 @@ const approveServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Send notifications (wrapped in try-catch to not fail main flow)
     try {
       const message = `You have approved the service request #${request.request_number}. TRISHKAYE will begin work shortly. Thank you for your confirmation!`;
 
