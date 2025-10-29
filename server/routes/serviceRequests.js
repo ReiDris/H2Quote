@@ -36,6 +36,14 @@ router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCata
 // Apply authentication to all routes below
 router.use(authenticateToken);
 
+// 🔍 DEBUG - Log all incoming requests
+router.use((req, res, next) => {
+  console.log('📥 SERVICE REQUEST ROUTE:', req.method, req.path);
+  console.log('📥 Full URL:', req.originalUrl);
+  console.log('📥 User:', req.user?.email);
+  next();
+});
+
 // Authenticated specific routes (no parameters)
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
 router.get('/staff-list', requireAdminOrStaff, serviceRequestController.getStaffList);
