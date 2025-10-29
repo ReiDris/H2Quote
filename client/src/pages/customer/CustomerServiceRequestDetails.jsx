@@ -359,10 +359,39 @@ const CustomerServiceRequestDetails = () => {
           <StatusTracker />
         </div>
 
-        {/* Approval Notification Banner */}
+        {/* Messaging Banner - Shows when "Waiting for Approval" but no quotation yet */}
+        {requestData.serviceStatus === "Waiting for Approval" && !requestData.quotation && (
+          <div className="mx-6 mb-6">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-1">
+                  <MessageCircle className="text-purple-600" size={20} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-purple-900 font-semibold text-base mb-2">
+                    Quotation Under Review
+                  </h3>
+                  <p className="text-gray-700 text-sm mb-4">
+                    TRISHKAYE staff is reviewing your request. A detailed quotation
+                    will be sent to you shortly. You can send a message if you have
+                    questions.
+                  </p>
+                  <button
+                    onClick={handleMessageTrishkaye}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors cursor-pointer text-sm font-medium"
+                  >
+                    <MessageCircle size={18} />
+                    Message TRISHKAYE
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Approval Banner - Shows when quotation exists AND status is "Waiting for Approval" */}
         {requestData.quotation && 
-         requestData.quotation.status === "Sent" && 
-         (requestData.serviceStatus === "Waiting for Approval" || requestData.serviceStatus === "Processing") && (
+         requestData.serviceStatus === "Waiting for Approval" && (
           <div className="mx-6 mb-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <div className="flex items-start gap-3">
@@ -378,6 +407,14 @@ const CustomerServiceRequestDetails = () => {
                   <p className="text-gray-700 text-sm mb-4">
                     A quotation for your service request has been prepared.
                     Please review the details and approve to proceed.
+                  </p>
+                  <p className="text-xs text-gray-600 mb-4">
+                    <strong>Quotation #:</strong> {requestData.quotation.quotation_number}
+                    {requestData.quotation.valid_until && (
+                      <span className="ml-3">
+                        <strong>Valid Until:</strong> {requestData.quotation.valid_until}
+                      </span>
+                    )}
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
