@@ -215,11 +215,11 @@ export const serviceRequestsAPI = {
   },
 
   approveServiceRequest: (requestId, notes = null) => {
-    return fetchWithAuth(`/service-requests/${requestId}/approve`, {
-      method: "PUT",
-      body: JSON.stringify({ customerNotes: notes }),
-    });
-  },
+  return fetchWithAuth(`/service-requests/${requestId}/approve`, {
+    method: "POST",  // ✅ Change from PUT to POST
+    body: JSON.stringify({ customerNotes: notes }),
+  });
+},
 };
 
 export const authAPI = {
