@@ -48,7 +48,7 @@ router.post('/', requireCustomer, serviceRequestController.createServiceRequest)
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 
 // ✅ FIXED: Specific parameterized routes BEFORE generic ones
-router.put('/:requestId/approve', requireCustomer, serviceRequestController.approveServiceRequest);
+router.post('/:requestId/approve', requireCustomer, serviceRequestController.approveServiceRequest);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
 router.post('/:requestId/add-chemicals', requireAdminOrStaff, serviceRequestController.addChemicalsToRequest);
 router.post('/:requestId/add-refrigerants', requireAdminOrStaff, serviceRequestController.addRefrigerantsToRequest);
