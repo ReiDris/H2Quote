@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, Package } from "lucide-react";
 import ManageRequestItemsModal from "./ManageRequestItemsModal";
 import PaymentProofViewer from "./PaymentProofViewer";
 import { serviceRequestsAPI } from "../../config/api";
+import { formatDateTime, formatDate } from "../../utils/dateUtils";
 
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
@@ -850,7 +851,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               Requested At:
             </label>
             <span className="text-sm text-gray-800">
-              {requestData.requestedAt}
+              {formatDateTime(requestData.requestedAt)}
             </span>
           </div>
           <div>
