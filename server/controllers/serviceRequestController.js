@@ -20,11 +20,10 @@ const createDefaultPayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          sr.estimated_cost
+        (
+          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
         ) as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
@@ -103,11 +102,10 @@ const recreatePayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          sr.estimated_cost
+        (
+          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
         ) as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
@@ -455,36 +453,32 @@ const getCustomerRequests = async (req, res) => {
         rs.status_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          0
+        (
+          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
         ) as subtotal,
 
-        COALESCE(
-          COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-            0
-          ) * COALESCE(sr.discount_percentage, 0) / 100,
-          0
+        (
+          (
+            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+          ) * COALESCE(sr.discount_percentage, 0) / 100
         ) as discount_amount,
 
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          0
-        ) - COALESCE(
-          COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-            0
-          ) * COALESCE(sr.discount_percentage, 0) / 100,
-          0
+        (
+          (
+            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+          ) - (
+            (
+              COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+              COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+              COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+            ) * COALESCE(sr.discount_percentage, 0) / 100
+          )
         ) as estimated_cost,
         
         -- Add service status for frontend (FIXED to match admin/staff)
@@ -881,11 +875,10 @@ const getAllRequests = async (req, res) => {
         rs.status_name as status,
         -- FIXED: Calculate actual total cost from all item tables, then apply discount
         (
-          COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-            sr.estimated_cost
+          (
+            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
           ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
         ) as estimated_cost,
         sr.request_date as created_at,
