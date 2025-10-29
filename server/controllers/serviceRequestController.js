@@ -618,7 +618,7 @@ const getRequestDetails = async (req, res) => {
     END as estimated_duration,
     TO_CHAR(sr.service_start_date, 'YYYY-MM-DD') as service_start_date,
     TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
-    TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline,
+    TO_CHAR(sr.payment_deadline, 'YYYY-MM-DD') as payment_deadline,  
     TO_CHAR(sr.request_acknowledged_date, 'Mon DD, YYYY') as request_acknowledged_date,
     TO_CHAR(sr.actual_completion_date, 'YYYY-MM-DD') as actual_completion_date,
     u.email as email,
