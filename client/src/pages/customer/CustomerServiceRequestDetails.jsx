@@ -359,9 +359,8 @@ const CustomerServiceRequestDetails = () => {
           <StatusTracker />
         </div>
 
-        {/* Approval Banner - Shows when quotation exists AND status is "Waiting for Approval" */}
-        {requestData.quotation && 
-         requestData.serviceStatus === "Waiting for Approval" && (
+        {/* Approval/Messaging Banner - Shows when status is "Waiting for Approval" */}
+        {requestData.serviceStatus === "Waiting for Approval" && (
           <div className="mx-6 mb-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <div className="flex items-start gap-3">
@@ -378,14 +377,16 @@ const CustomerServiceRequestDetails = () => {
                     A quotation for your service request has been prepared.
                     Please review the details and approve to proceed.
                   </p>
-                  <p className="text-xs text-gray-600 mb-4">
-                    <strong>Quotation #:</strong> {requestData.quotation.quotation_number}
-                    {requestData.quotation.valid_until && (
-                      <span className="ml-3">
-                        <strong>Valid Until:</strong> {requestData.quotation.valid_until}
-                      </span>
-                    )}
-                  </p>
+                  {requestData.quotation && (
+                    <p className="text-xs text-gray-600 mb-4">
+                      <strong>Quotation #:</strong> {requestData.quotation.quotation_number}
+                      {requestData.quotation.valid_until && (
+                        <span className="ml-3">
+                          <strong>Valid Until:</strong> {requestData.quotation.valid_until}
+                        </span>
+                      )}
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
                       onClick={handleMessageTrishkaye}
