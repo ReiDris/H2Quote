@@ -747,7 +747,11 @@ const getRequestDetails = async (req, res) => {
       ELSE sr.payment_status
     END as payment_status,
     CASE 
-      WHEN sr.estimated_duration_days IS NOT NULL THEN CONCAT(sr.estimated_duration_days, ' Days')
+      WHEN sr.estimated_duration_days IS NOT NULL THEN 
+        CASE 
+          WHEN sr.estimated_duration_days = 1 THEN '1 Day'
+          ELSE CONCAT(sr.estimated_duration_days, ' Days')
+        END
       ELSE '3 - 7 Days'
     END as estimated_duration,
     TO_CHAR(sr.service_start_date, 'YYYY-MM-DD') as service_start_date,
