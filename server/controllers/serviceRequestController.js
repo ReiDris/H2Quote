@@ -157,12 +157,7 @@ const createDefaultQuotation = async (requestId) => {
     client.release();
   }
 };
-try {
-  await createDefaultQuotation(requestId);
-  console.log("Default quotation created successfully");
-} catch (quotationError) {
-  console.error("Failed to create default quotation:", quotationError);
-}
+
 
 const recreatePayments = async (requestId) => {
   const client = await pool.connect();
@@ -443,9 +438,9 @@ const createServiceRequest = async (req, res) => {
           total_cost: totalCost,
           estimated_duration: estimatedDuration,
           payment_terms: paymentTerms,
-          services_count: services.length,
-          chemicals_count: chemicals?.length || 0,
-          refrigerants_count: refrigerants?.length || 0,
+          services_count: serviceDetails.filter(s => s.itemType === 'service').length,
+          chemicals_count: serviceDetails.filter(s => s.itemType === 'chemical').length,
+          refrigerants_count: serviceDetails.filter(s => s.itemType === 'refrigerant').length,
         },
         changed_by: req.user.email,
         change_reason: `Service request #${requestNumber} created by customer`,
