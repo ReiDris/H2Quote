@@ -360,6 +360,10 @@ const CustomerServiceRequestDetails = () => {
           <StatusTracker />
         </div>
 
+        {/* DEBUG: Remove after testing */}
+        {console.log('Service Status:', requestData.serviceStatus)}
+        {console.log('Status Name (backend):', requestData.statusName)}
+
         {/* Approval/Messaging Banner - Shows when status is "Waiting for Approval" */}
         {requestData.serviceStatus === "Waiting for Approval" && (
           <div className="mx-6 mb-6">
