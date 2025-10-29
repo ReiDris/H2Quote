@@ -842,6 +842,7 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
+    // Ã¢Å“â€¦ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -924,6 +925,7 @@ const getRequestDetails = async (req, res) => {
         request: {
           ...request,
           id: request.request_number,
+          service_end_date: request.actual_completion_date, // ✅ Add alias for frontend
           totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -932,7 +934,7 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation,
+        quotation: quotation, // Ã¢â€ Â CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {
@@ -3303,7 +3305,7 @@ const setServiceWarranty = async (req, res) => {
     const { requestId } = req.params;
     const {
       warrantyStartDate,
-      warrantyMonths = 6, // Default 6 months
+      warrantyMonths = 1, // Default 1 month
       applyToAllServices = true,
     } = req.body;
 
