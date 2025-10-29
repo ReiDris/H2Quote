@@ -161,7 +161,7 @@ const CustomerServiceRequestDetails = () => {
     console.log('🚀 Sending approve request:', requestData.requestId); // ADD THIS
     
     const response = await fetch(
-      `${process.env.REACT_APP_API_URL}/api/service-requests/${requestData.requestId}/approve`,
+      `${import.meta.env.VITE_API_URL}/service-requests/${requestData.requestId}/approve`,
       {
         method: "POST",  // Make sure this is POST
         headers: {
