@@ -98,7 +98,14 @@ const createDefaultQuotation = async (requestId) => {
       WHERE sr.request_id = $1
     `;
     const result = await client.query(requestQuery, [requestId]);
-    const { subtotal, discount_percentage, payment_terms, payment_mode, downpayment_percentage, request_number } = result.rows[0];
+    const {
+      subtotal,
+      discount_percentage,
+      payment_terms,
+      payment_mode,
+      downpayment_percentage,
+      request_number,
+    } = result.rows[0];
 
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const discountedSubtotal = subtotal - discountAmount;
@@ -107,8 +114,10 @@ const createDefaultQuotation = async (requestId) => {
     const totalAmount = discountedSubtotal;
 
     // Generate quotation number
-    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-    
+    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+      Date.now()
+    ).slice(-6)}`;
+
     // Set valid until date (30 days from now)
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + 30);
@@ -133,11 +142,13 @@ const createDefaultQuotation = async (requestId) => {
       totalAmount,
       payment_terms,
       payment_mode,
-      validUntil.toISOString().split('T')[0]
+      validUntil.toISOString().split("T")[0],
     ]);
 
     await client.query("COMMIT");
-    console.log(`Quotation ${quotationNumber} auto-created for request #${request_number}`);
+    console.log(
+      `Quotation ${quotationNumber} auto-created for request #${request_number}`
+    );
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Failed to create default quotation:", error);
