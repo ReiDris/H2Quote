@@ -40,16 +40,15 @@ const createDefaultPayments = async (requestId) => {
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
-    // ✅ FIXED: Correct logic for Full vs Down payment
     if (payment_terms === "Full" || !downpayment_percentage) {
-      // Single full payment
       await client.query(
-        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-         VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')`,
+        `
+       INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
+      `,
         [requestId, estimated_cost]
       );
     } else {
-      // Split into down payment and completion balance
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
         (estimated_cost * downpaymentPercent) / 100
@@ -57,10 +56,13 @@ const createDefaultPayments = async (requestId) => {
       const remainingAmount = estimated_cost - downpaymentAmount;
 
       await client.query(
-        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-         VALUES 
-            ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-            ($1, 'Completion Balance', $3, 'Pending', NULL)`,
+        `
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES 
+  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+  ($1, 'Completion Balance', $3, 'Pending', NULL)
+  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
+      `,
         [requestId, downpaymentAmount, remainingAmount]
       );
     }
@@ -121,16 +123,15 @@ const recreatePayments = async (requestId) => {
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
-    // ✅ FIXED: Correct logic for Full vs Down payment
     if (payment_terms === "Full" || !downpayment_percentage) {
-      // Single full payment
       await client.query(
-        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-         VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')`,
+        `
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+        VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
+      `,
         [requestId, estimated_cost]
       );
     } else {
-      // Split into down payment and completion balance
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
         (estimated_cost * downpaymentPercent) / 100
@@ -138,10 +139,12 @@ const recreatePayments = async (requestId) => {
       const remainingAmount = estimated_cost - downpaymentAmount;
 
       await client.query(
-        `INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-         VALUES 
-            ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-            ($1, 'Completion Balance', $3, 'Pending', NULL)`,
+        `
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+        VALUES 
+          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+          ($1, 'Completion Balance', $3, 'Pending', NULL)
+      `,
         [requestId, downpaymentAmount, remainingAmount]
       );
     }
@@ -367,83 +370,6 @@ const createServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ✅ AUTO-CREATE QUOTATION immediately after service request creation
-    try {
-      console.log(`Creating initial quotation for request ${requestId}...`);
-
-      const taxRate = 0.12;
-      const taxAmount = totalCost * taxRate;
-      const totalWithTax = totalCost + taxAmount;
-
-      // Generate quotation number
-      const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
-        Date.now()
-      ).slice(-6)}`;
-
-      // Format downpayment_percentage as string (e.g., "50%") - matching schema
-      const downpaymentPercentageStr = downpaymentPercentage
-        ? `${downpaymentPercentage}%`
-        : null;
-
-      // Insert quotation
-      const insertQuotationQuery = `
-        INSERT INTO quotations (
-          request_id, quotation_number, subtotal, tax_rate, tax_amount,
-          discount_amount, total_amount, payment_terms, payment_mode,
-          downpayment_percentage, valid_until, status, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
-        RETURNING quotation_id
-      `;
-
-      const quotationResult = await pool.query(insertQuotationQuery, [
-        requestId,
-        quotationNumber,
-        totalCost,
-        taxRate,
-        taxAmount,
-        0, // discount_amount (no discount initially)
-        totalWithTax,
-        paymentTerms,
-        paymentMode,
-        downpaymentPercentageStr, // stored as string like "50%"
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .split("T")[0], // 30 days validity
-        "Draft", // Initial status is Draft until sent by admin/staff
-      ]);
-
-      const quotationId = quotationResult.rows[0].quotation_id;
-
-      // Copy service request items to quotation items
-      for (const item of serviceDetails) {
-        if (item.itemType === "service") {
-          await pool.query(
-            `INSERT INTO quotation_items (
-              quotation_id, service_id, item_description, quantity, unit_price, line_total
-            ) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              quotationId,
-              item.itemId,
-              item.name,
-              item.quantity,
-              item.unitPrice,
-              item.totalPrice,
-            ]
-          );
-        }
-        // Note: Currently only services are copied to quotation_items
-        // Chemicals and refrigerants are part of the service request but not in quotation_items table
-      }
-
-      console.log(
-        `✅ Initial quotation ${quotationNumber} created successfully`
-      );
-    } catch (quotationError) {
-      console.error("Failed to create initial quotation:", quotationError);
-      // Don't fail the entire request if quotation creation fails
-    }
-
     try {
       await createDefaultPayments(requestId);
       console.log("Default payments created successfully");
@@ -457,7 +383,7 @@ const createServiceRequest = async (req, res) => {
         requestNumber,
         requestId,
         "Pending",
-        `Your service request #${requestNumber} has been submitted successfully. Total cost: ₱${totalCost.toLocaleString()}. We will review it shortly.`
+        `Your service request #${requestNumber} has been submitted successfully. Total cost: â‚±${totalCost.toLocaleString()}. We will review it shortly.`
       );
       console.log("Customer notification sent for new request");
     } catch (notifError) {
@@ -483,7 +409,7 @@ const createServiceRequest = async (req, res) => {
           `New Service Request - ${requestNumber}`,
           `A new service request #${requestNumber} has been submitted by ${
             req.user.email
-          }. Total cost: ₱${totalCost.toLocaleString()}`,
+          }. Total cost: â‚±${totalCost.toLocaleString()}`,
           staff.email
         );
       }
@@ -529,45 +455,39 @@ const getCustomerRequests = async (req, res) => {
         rs.status_name,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         
-        CAST(
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          0
+        ) as subtotal,
+
+        COALESCE(
           COALESCE(
-            (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             0
-          )
-        AS numeric(12,2)) as subtotal,
+          ) * COALESCE(sr.discount_percentage, 0) / 100,
+          0
+        ) as discount_amount,
 
-        CAST(
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          0
+        ) - COALESCE(
           COALESCE(
-            COALESCE(
-              (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-              (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-              (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-              0
-            ) * COALESCE(sr.discount_percentage, 0) / 100,
-            0
-          )
-        AS numeric(12,2)) as discount_amount,
-
-        CAST(
-          COALESCE(
-            (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
             (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
             0
-          ) - COALESCE(
-            COALESCE(
-              (SELECT COALESCE(SUM(sri.line_total), 0) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-              (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-              (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-              0
-            ) * COALESCE(sr.discount_percentage, 0) / 100,
-            0
-          )
-        AS numeric(12,2)) as estimated_cost,
+          ) * COALESCE(sr.discount_percentage, 0) / 100,
+          0
+        ) as estimated_cost,
         
-        -- Service status mapping
+        -- Add service status for frontend (FIXED to match admin/staff)
         CASE 
           WHEN rs.status_name = 'New' THEN 'Pending'
           WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -579,60 +499,20 @@ const getCustomerRequests = async (req, res) => {
           ELSE rs.status_name
         END as service_status,
         
-        -- Payment status
+        -- Add payment status calculation
         CASE 
           WHEN sr.payment_status IS NULL THEN 'Pending'
           ELSE sr.payment_status
         END as payment_status,
         
-        -- ✅ UPDATED WARRANTY STATUS LOGIC - Now aligned with getRequestDetails
+        -- Add warranty status
         CASE 
-          WHEN rs.status_name = 'Completed' THEN
-            CASE 
-              -- Check if ALL items have valid (non-expired) warranties
-              WHEN (
-                SELECT COUNT(*) 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id 
-                AND sri.warranty_end_date IS NOT NULL
-                AND sri.warranty_end_date >= CURRENT_DATE
-              ) = (
-                SELECT COUNT(*) 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id
-              ) AND (
-                SELECT COUNT(*) 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id
-              ) > 0 
-              THEN 'Valid'
-              
-              -- Check if ANY items have expired warranties
-              WHEN EXISTS (
-                SELECT 1 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id 
-                AND sri.warranty_end_date < CURRENT_DATE
-              ) 
-              THEN 'Expired'
-              
-              -- Request has warranty but items don't have end dates set
-              WHEN sr.warranty_start_date IS NOT NULL 
-              AND NOT EXISTS (
-                SELECT 1 
-                FROM service_request_items sri 
-                WHERE sri.request_id = sr.request_id 
-                AND sri.warranty_end_date IS NOT NULL
-              )
-              THEN 'Pending'
-              
-              -- No warranty set at all
-              ELSE 'Not Set'
-            END
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
+          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
           ELSE 'N/A'
         END as warranty_status,
         
-        -- Item counts
+        -- Add item counts for debugging
         (
           SELECT COUNT(*)::int 
           FROM service_request_items sri 
@@ -649,7 +529,7 @@ const getCustomerRequests = async (req, res) => {
           WHERE srr.request_id = sr.request_id
         ) as refrigerants_count,
         
-        -- Items summary
+        -- Add item summary for display
         (
           SELECT STRING_AGG(
             CASE 
@@ -689,19 +569,9 @@ const getCustomerRequests = async (req, res) => {
 
     const result = await pool.query(query, [customerId]);
 
-    // ✅ CRITICAL FIX: Convert string numbers to actual numbers
-    const sanitizedRows = result.rows.map((row) => ({
-      ...row,
-      subtotal: row.subtotal ? parseFloat(row.subtotal) : 0,
-      discount_amount: row.discount_amount
-        ? parseFloat(row.discount_amount)
-        : 0,
-      estimated_cost: row.estimated_cost ? parseFloat(row.estimated_cost) : 0,
-    }));
-
     res.json({
       success: true,
-      data: sanitizedRows,
+      data: result.rows,
     });
   } catch (error) {
     console.error("Get customer requests error:", error);
@@ -733,7 +603,7 @@ const getRequestDetails = async (req, res) => {
     CONCAT(u.first_name, ' ', u.last_name) as customer_name,
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    sr.request_date as requested_at,
+    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH12:MI AM') as requested_at,
     CASE 
       WHEN rs.status_name = 'New' THEN 'Pending'
       WHEN rs.status_name = 'Under Review' THEN 'Assigned'
@@ -875,11 +745,11 @@ const getRequestDetails = async (req, res) => {
       ...refrigerantsResult.rows,
     ].map((item) => ({
       ...item,
-      unit_price: `₱${parseFloat(item.unit_price).toLocaleString()}`,
-      total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
+      unit_price: `â‚±${parseFloat(item.unit_price).toLocaleString()}`,
+      total_price: `â‚±${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
-    // Get payments from database
+    // Ã¢Å“â€¦ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -890,7 +760,7 @@ const getRequestDetails = async (req, res) => {
         payment_id,
         payment_phase as phase,
         CONCAT(ROUND((amount::numeric / NULLIF((SELECT total FROM payment_total), 0) * 100), 0), '%') as percentage,
-        amount as raw_amount,
+        CONCAT('â‚±', amount::text) as amount,
         COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
         CASE 
           WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
@@ -904,30 +774,10 @@ const getRequestDetails = async (req, res) => {
 
     const paymentResult = await pool.query(paymentQuery, [requestId]);
 
-    let paymentHistory = paymentResult.rows.map((row) => ({
-      payment_id: row.payment_id,
-      phase: row.phase,
-      percentage: row.percentage,
-      amount: `₱${parseFloat(row.raw_amount).toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`,
-      proofOfPayment: row.proofOfPayment,
-      paidOn: row.paidOn,
-      paymentStatus: row.paymentStatus,
-    }));
+    let paymentHistory = paymentResult.rows;
 
     // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
-      console.log("⚠️ No payments found in database for request", requestId);
-      console.log("Creating default payment breakdown...");
-      console.log("Subtotal:", subtotal);
-      console.log("Discount %:", discountPercentage);
-      console.log("Discount amount:", discountAmount);
-      console.log("Total after discount:", totalCostAfterDiscount);
-      console.log("Payment terms:", request.payment_terms);
-      console.log("Downpayment %:", request.downpayment_percentage);
-
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
       const downpaymentAmount = Math.round(
@@ -935,18 +785,12 @@ const getRequestDetails = async (req, res) => {
       );
       const remainingAmount = totalCostAfterDiscount - downpaymentAmount;
 
-      console.log("Calculated downpayment:", downpaymentAmount);
-      console.log("Calculated remaining:", remainingAmount);
-
       paymentHistory = [
         {
           payment_id: null,
           phase: "Down Payment",
           percentage: `${downpaymentPercent}%`,
-          amount: `₱${downpaymentAmount.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
+          amount: `â‚±${downpaymentAmount.toLocaleString()}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
@@ -955,20 +799,12 @@ const getRequestDetails = async (req, res) => {
           payment_id: null,
           phase: "Completion Balance",
           percentage: `${remainingPercent}%`,
-          amount: `₱${remainingAmount.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
+          amount: `â‚±${remainingAmount.toLocaleString()}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
         },
       ];
-
-      console.log(
-        "Final payment history:",
-        JSON.stringify(paymentHistory, null, 2)
-      );
     }
 
     const quotationQuery = `
@@ -996,7 +832,7 @@ const getRequestDetails = async (req, res) => {
         request: {
           ...request,
           id: request.request_number,
-          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
+          totalCost: `â‚±${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}`,
@@ -1004,7 +840,7 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation, // â† CHANGE LINE 818: from null to quotation
+        quotation: quotation, // Ã¢â€ Â CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {
@@ -1023,17 +859,6 @@ const getAllRequests = async (req, res) => {
 
     let whereClause = "1=1";
     let queryParams = [];
-
-    // ✅ NEW: Filter by assigned staff for staff users at the database level
-    if (
-      req.user &&
-      (req.user.userType === "staff" || req.user.role === "staff")
-    ) {
-      whereClause +=
-        " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
-      queryParams.push(req.user.id);
-      console.log(`Filtering requests for staff user ID: ${req.user.id}`);
-    }
 
     if (status) {
       whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
@@ -1066,7 +891,6 @@ const getAllRequests = async (req, res) => {
         sr.request_date as created_at,
         CONCAT(u.first_name, ' ', u.last_name) as customer_name,
         c.company_name,
-        sr.assigned_to_staff_id,
         CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
         sr.priority,
         -- Add service status mapping for frontend
@@ -1449,7 +1273,7 @@ const createQuotation = async (req, res) => {
         "Quote Prepared",
         `A quotation (${quotationNumber}) has been prepared for your service request #${
           request.request_number
-        }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
+        }. Total amount: â‚±${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
 
       console.log(`Quotation notification sent to ${request.customer_email}`);
@@ -2982,14 +2806,14 @@ const updateServiceRequest = async (req, res) => {
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
-    // 🔍 DEBUG LOGGING - Show mapping
+    // ðŸ” DEBUG LOGGING - Show mapping
     console.log("=== STATUS MAPPING DEBUG ===");
     console.log("Frontend Status (serviceStatus):", serviceStatus);
     console.log("Backend Status (backendStatus):", backendStatus);
     console.log("Assigned Staff:", assignedStaff);
     console.log("============================");
 
-    // ✅ VALIDATION: Prevent "Under Review" (Assigned) or "Quote Sent" (Waiting for Approval) without assigned staff
+    // âœ… VALIDATION: Prevent "Under Review" (Assigned) or "Quote Sent" (Waiting for Approval) without assigned staff
     // Check BOTH the frontend name and backend mapped name
     const staffValue = (assignedStaff || "").trim();
     const isNoStaff =
@@ -3001,7 +2825,7 @@ const updateServiceRequest = async (req, res) => {
       isNoStaff
     ) {
       console.error(
-        "❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff"
+        "âŒ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff"
       );
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -3018,7 +2842,7 @@ const updateServiceRequest = async (req, res) => {
       isNoStaff
     ) {
       console.error(
-        "❌ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff"
+        "âŒ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff"
       );
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -3115,133 +2939,6 @@ const updateServiceRequest = async (req, res) => {
       requestId,
     ]);
 
-    // ✅ UPDATE QUOTATION STATUS when status changes to "Quote Sent" (Waiting for Approval)
-    if (backendStatus === "Quote Sent" && currentStatusName !== "Quote Sent") {
-      try {
-        // Check if quotation exists
-        const existingQuotationCheck = await client.query(
-          `SELECT quotation_id, status FROM quotations WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1`,
-          [requestId]
-        );
-
-        if (existingQuotationCheck.rows.length > 0) {
-          const quotation = existingQuotationCheck.rows[0];
-
-          // Update existing quotation to 'Sent' status
-          await client.query(
-            `UPDATE quotations 
-             SET status = 'Sent', 
-                 sent_date = NOW(), 
-                 updated_at = NOW()
-             WHERE quotation_id = $1`,
-            [quotation.quotation_id]
-          );
-
-          console.log(
-            `✅ Quotation ${quotation.quotation_id} marked as 'Sent' for request ${requestId}`
-          );
-        } else {
-          // If somehow no quotation exists, create one (fallback)
-          console.warn(
-            `⚠️ No quotation found for request ${requestId}, creating one now...`
-          );
-
-          const totalsQuery = `
-            SELECT 
-              COALESCE(
-                (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = $1) +
-                (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = $1) +
-                (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = $1),
-                0
-              ) as subtotal,
-              sr.payment_terms,
-              sr.payment_mode,
-              sr.downpayment_percentage
-            FROM service_requests sr
-            WHERE sr.request_id = $1
-          `;
-          const totalsResult = await client.query(totalsQuery, [requestId]);
-          const {
-            subtotal,
-            payment_terms,
-            payment_mode,
-            downpayment_percentage,
-          } = totalsResult.rows[0];
-
-          const discountAmount = (subtotal * discountPercentage) / 100;
-          const subtotalAfterDiscount = subtotal - discountAmount;
-          const taxRate = 0.12;
-          const taxAmount = subtotalAfterDiscount * taxRate;
-          const totalAmount = subtotalAfterDiscount + taxAmount;
-
-          const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
-            Date.now()
-          ).slice(-6)}`;
-
-          // Format downpayment_percentage as string for quotations table
-          const downpaymentPercentageStr = downpayment_percentage
-            ? `${downpayment_percentage}%`
-            : null;
-
-          const quotationResult = await client.query(
-            `INSERT INTO quotations (
-              request_id, quotation_number, subtotal, tax_rate, tax_amount,
-              discount_amount, total_amount, payment_terms, payment_mode,
-              downpayment_percentage, valid_until, status, sent_date,
-              created_by, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13, NOW(), NOW())
-            RETURNING quotation_id`,
-            [
-              requestId,
-              quotationNumber,
-              subtotal,
-              taxRate,
-              taxAmount,
-              discountAmount,
-              totalAmount,
-              payment_terms,
-              payment_mode,
-              downpaymentPercentageStr, // stored as string
-              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                .toISOString()
-                .split("T")[0],
-              "Sent",
-              assignedStaffId || req.user.id,
-            ]
-          );
-
-          const quotationId = quotationResult.rows[0].quotation_id;
-
-          // Copy items to quotation
-          await client.query(
-            `INSERT INTO quotation_items (
-              quotation_id, service_id, item_description, quantity, unit_price, line_total, notes
-            )
-            SELECT 
-              $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
-            FROM service_request_items sri
-            JOIN services s ON sri.service_id = s.service_id
-            WHERE sri.request_id = $2`,
-            [quotationId, requestId]
-          );
-
-          console.log(
-            `✅ Fallback quotation ${quotationNumber} created and sent`
-          );
-        }
-
-        // Update service request with quote_sent_date
-        await client.query(
-          `UPDATE service_requests SET quote_sent_date = NOW() WHERE request_id = $1`,
-          [requestId]
-        );
-      } catch (quotationError) {
-        console.error("Failed to update/create quotation:", quotationError);
-        // Don't fail the entire update if quotation update fails
-      }
-    }
-
     const hasManualWarrantyData =
       services &&
       services.length > 0 &&
@@ -3275,36 +2972,31 @@ const updateServiceRequest = async (req, res) => {
 
     if (services && services.length > 0) {
       for (const service of services) {
-        // ✅ FIX: Only process actual services (not chemicals/refrigerants)
-        // Check if service_id exists AND itemType is 'service'
-        if (
-          service.itemType === "service" &&
-          service.service_id &&
-          service.warranty_start_date
-        ) {
-          const months = service.warranty_months || 6;
-          const endDate = new Date(service.warranty_start_date);
-          endDate.setMonth(endDate.getMonth() + months);
-          const warrantyEndDate = endDate.toISOString().split("T")[0];
+        if (service.itemType === "service" && service.service_id) {
+          if (service.warranty_start_date) {
+            const months = service.warranty_months || 6;
+            const endDate = new Date(service.warranty_start_date);
+            endDate.setMonth(endDate.getMonth() + months);
+            const warrantyEndDate = endDate.toISOString().split("T")[0];
 
-          await client.query(
-            `UPDATE service_request_items
-            SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
-            WHERE request_id = $4 AND service_id = $5`,
-            [
-              months,
-              service.warranty_start_date,
-              warrantyEndDate,
-              requestId,
-              service.service_id,
-            ]
-          );
+            await client.query(
+              `UPDATE service_request_items
+              SET warranty_months = $1, warranty_start_date = $2, warranty_end_date = $3
+              WHERE request_id = $4 AND service_id = $5`,
+              [
+                months,
+                service.warranty_start_date,
+                warrantyEndDate,
+                requestId,
+                service.service_id,
+              ]
+            );
+          }
         }
-        // Skip chemicals and refrigerants - they don't have warranties
       }
     }
 
-    // âœ… FIXED: Recalculate payment breakdown amounts when discount changes
+    // Ã¢Å“â€¦ FIXED: Recalculate payment breakdown amounts when discount changes
     if (discount !== undefined) {
       // Get the current subtotal (before discount)
       const subtotalQuery = `
@@ -3506,7 +3198,7 @@ const setServiceWarranty = async (req, res) => {
     const { requestId } = req.params;
     const {
       warrantyStartDate,
-      warrantyMonths = 6,
+      warrantyMonths = 6, // Default 6 months
       applyToAllServices = true,
     } = req.body;
 
@@ -3529,6 +3221,7 @@ const setServiceWarranty = async (req, res) => {
 
     const request = requestResult.rows[0];
 
+    // Only allow setting warranty for completed services
     if (request.status_name !== "Completed") {
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -3545,17 +3238,7 @@ const setServiceWarranty = async (req, res) => {
     endDate.setMonth(endDate.getMonth() + parseInt(warrantyMonths));
     const warrantyEndDate = endDate.toISOString().split("T")[0];
 
-    // ✅ CRITICAL: Update BOTH tables to maintain consistency
-
-    // 1. Update service_requests table (request-level warranty)
-    await client.query(
-      `UPDATE service_requests
-       SET warranty_start_date = $1, warranty_months = $2
-       WHERE request_id = $3`,
-      [startDate, warrantyMonths, requestId]
-    );
-
-    // 2. Update ALL service_request_items (item-level warranties)
+    // Update ALL service items in the request with warranty information
     const updateQuery = `
       UPDATE service_request_items
       SET 
@@ -3573,6 +3256,18 @@ const setServiceWarranty = async (req, res) => {
       requestId,
     ]);
 
+    // Also update the service_requests table
+    await client.query(
+      `
+      UPDATE service_requests
+      SET 
+        warranty_start_date = $1,
+        warranty_months = $2
+      WHERE request_id = $3
+    `,
+      [startDate, warrantyMonths, requestId]
+    );
+
     // Log audit entry
     try {
       await supabase.from("audit_log").insert({
@@ -3585,11 +3280,9 @@ const setServiceWarranty = async (req, res) => {
           warranty_months: warrantyMonths,
           warranty_end_date: warrantyEndDate,
           items_updated: updateResult.rows.length,
-          synced_tables: ["service_requests", "service_request_items"],
         },
         changed_by: req.user.email,
-        change_reason:
-          "Warranty activated for completed service (both tables synced)",
+        change_reason: "Warranty activated for completed service",
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
@@ -3606,7 +3299,6 @@ const setServiceWarranty = async (req, res) => {
         warrantyEndDate: warrantyEndDate,
         warrantyMonths: warrantyMonths,
         servicesUpdated: updateResult.rows.length,
-        tablesSynced: ["service_requests", "service_request_items"],
       },
     });
   } catch (error) {
