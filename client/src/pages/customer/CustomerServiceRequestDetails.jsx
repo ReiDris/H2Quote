@@ -150,24 +150,26 @@ const CustomerServiceRequestDetails = () => {
     });
   };
 
-  // ✅ UPDATED: Approve quotation using the correct endpoint
+  // ✅ UPDATED: Approve service request directly (quotation auto-created on submit)
   const handleApproveQuotation = async () => {
     setApprovalLoading(true);
     setApprovalError("");
 
     try {
-      // Check if quotation exists
-      if (!requestData.quotation || !requestData.quotation.quotation_id) {
-        setApprovalError("No quotation found for this request");
-        setApprovalLoading(false);
-        return;
-      }
-
-      // ✅ CORRECT: Call the approveQuotation endpoint (uses existing API method)
-      const response = await serviceRequestsAPI.approveQuotation(
-        requestData.quotation.quotation_id,
-        true, // approved
-        "Customer approved the quotation" // customerNotes
+      const token = localStorage.getItem("h2quote_token");
+      
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/service-requests/${requestData.requestId}/approve`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            customerNotes: "Customer approved the service request"
+          }),
+        }
       );
 
       const data = await response.json();
@@ -176,17 +178,16 @@ const CustomerServiceRequestDetails = () => {
         setApprovalSuccess(true);
         setApprovalError("");
 
-        // Wait a moment to show success message, then refresh
         setTimeout(() => {
           setShowApprovalModal(false);
-          fetchRequestDetails(); // Refresh the data to show updated status
+          fetchRequestDetails();
         }, 1500);
       } else {
-        setApprovalError(data.message || "Failed to approve quotation");
+        setApprovalError(data.message || "Failed to approve service request");
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the quotation");
+      setApprovalError("An error occurred while approving the service request");
     } finally {
       setApprovalLoading(false);
     }
