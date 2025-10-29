@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { LucideArrowLeft, LucideArrowRight } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import CustomerLayout from "../../layouts/CustomerLayout";
-import { messagingAPI } from '../../config/api';
+import { messagingAPI } from "../../config/api";
 
 const Messages = () => {
   const { user } = useAuth();
@@ -15,9 +16,9 @@ const Messages = () => {
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 6,
     totalCount: 0,
-    totalPages: 0
+    totalPages: 0,
   });
 
   useEffect(() => {
@@ -28,26 +29,26 @@ const Messages = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await messagingAPI.getInbox({
         page: pagination.page,
-        limit: pagination.limit
+        limit: pagination.limit,
       });
-      
+
       const data = await response.json();
 
       if (data.success) {
         setMessages(data.data.messages);
-        setPagination(prev => ({
+        setPagination((prev) => ({
           ...prev,
-          ...data.data.pagination
+          ...data.data.pagination,
         }));
       } else {
-        setError(data.message || 'Failed to load messages');
+        setError(data.message || "Failed to load messages");
       }
     } catch (err) {
-      console.error('Error fetching messages:', err);
-      setError('Failed to load messages. Please try again.');
+      console.error("Error fetching messages:", err);
+      setError("Failed to load messages. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -59,26 +60,28 @@ const Messages = () => {
       try {
         const response = await messagingAPI.markAsRead([messageId]);
         const data = await response.json();
-        
+
         if (data.success) {
           // Update local state
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId ? { ...msg, isRead: true } : msg
-          ));
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === messageId ? { ...msg, isRead: true } : msg
+            )
+          );
         }
       } catch (err) {
-        console.error('Error marking message as read:', err);
+        console.error("Error marking message as read:", err);
       }
     }
 
-    const userRole = user?.role || 'admin';
+    const userRole = user?.role || "admin";
     navigate(`/${userRole}/messages/${messageId}`);
   };
 
   const handleCheckboxChange = (messageId) => {
-    setSelectedMessages(prev => 
-      prev.includes(messageId) 
-        ? prev.filter(id => id !== messageId)
+    setSelectedMessages((prev) =>
+      prev.includes(messageId)
+        ? prev.filter((id) => id !== messageId)
         : [...prev, messageId]
     );
   };
@@ -156,7 +159,13 @@ const Messages = () => {
                   {/* Message Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className={`text-sm ${!message.isRead ? "font-semibold text-gray-900" : "font-medium text-gray-700"}`}>
+                      <p
+                        className={`text-sm ${
+                          !message.isRead
+                            ? "font-semibold text-gray-900"
+                            : "font-medium text-gray-700"
+                        }`}
+                      >
                         {message.sender}
                       </p>
                       <p className="text-sm text-gray-500">{message.date}</p>
@@ -166,7 +175,8 @@ const Messages = () => {
                     </p>
                     {message.hasReplies && (
                       <p className="mt-1 text-xs text-blue-600">
-                        {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
+                        {message.replyCount}{" "}
+                        {message.replyCount === 1 ? "reply" : "replies"}
                       </p>
                     )}
                   </div>
@@ -174,55 +184,58 @@ const Messages = () => {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
-            <div className="flex flex-1 justify-between sm:hidden">
+          
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm rounded-lg">
+              {/* Previous Button */}
               <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    page: Math.max(prev.page - 1, 1),
+                  }))
+                }
                 disabled={pagination.page === 1}
-                className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
+                  pagination.page === 1
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
               >
+                <LucideArrowLeft className="w-4 mr-2" />
                 Previous
               </button>
+
+              {/* Page Numbers - Centered */}
+              <div className="flex items-center space-x-3">
+                <span className="text-gray-600">
+                  Page {pagination.page} of {pagination.totalPages} (
+                  {pagination.totalCount} total)
+                </span>
+              </div>
+
+              {/* Next Button */}
               <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    page: Math.min(prev.page + 1, pagination.totalPages),
+                  }))
+                }
                 disabled={pagination.page === pagination.totalPages}
-                className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
+                  pagination.page === pagination.totalPages
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
               >
                 Next
+                <LucideArrowRight className="w-4 ms-2" />
               </button>
             </div>
-            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing page <span className="font-medium">{pagination.page}</span> of{' '}
-                  <span className="font-medium">{pagination.totalPages}</span>
-                </p>
-              </div>
-              <div>
-                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                  <button
-                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                    disabled={pagination.page === 1}
-                    className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                    disabled={pagination.page === pagination.totalPages}
-                    className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </LayoutComponent>
   );
