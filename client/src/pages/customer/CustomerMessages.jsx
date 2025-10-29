@@ -21,7 +21,7 @@ const CustomerMessages = () => {
   });
 
   useEffect(() => {
-    // Check for success message from navigation state
+    // Check for success message from navigation states
     if (location.state?.successMessage) {
       setSuccessMessage(location.state.successMessage);
       // Clear the navigation state
