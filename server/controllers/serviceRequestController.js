@@ -381,7 +381,7 @@ const createServiceRequest = async (req, res) => {
         requestNumber,
         requestId,
         "Pending",
-        `Your service request #${requestNumber} has been submitted successfully. Total cost: â‚±${totalCost.toLocaleString()}. We will review it shortly.`
+        `Your service request #${requestNumber} has been submitted successfully. Total cost: ₱${totalCost.toLocaleString()}. We will review it shortly.`
       );
       console.log("Customer notification sent for new request");
     } catch (notifError) {
@@ -407,7 +407,7 @@ const createServiceRequest = async (req, res) => {
           `New Service Request - ${requestNumber}`,
           `A new service request #${requestNumber} has been submitted by ${
             req.user.email
-          }. Total cost: â‚±${totalCost.toLocaleString()}`,
+          }. Total cost: ₱${totalCost.toLocaleString()}`,
           staff.email
         );
       }
@@ -739,8 +739,8 @@ const getRequestDetails = async (req, res) => {
       ...refrigerantsResult.rows,
     ].map((item) => ({
       ...item,
-      unit_price: `â‚±${parseFloat(item.unit_price).toLocaleString()}`,
-      total_price: `â‚±${parseFloat(item.line_total).toLocaleString()}`,
+      unit_price: `₱${parseFloat(item.unit_price).toLocaleString()}`,
+      total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
     // Ã¢Å“â€¦ FIXED: Calculate percentage from sum of payment amounts, not discounted total
@@ -754,7 +754,7 @@ const getRequestDetails = async (req, res) => {
         payment_id,
         payment_phase as phase,
         CONCAT(ROUND((amount::numeric / NULLIF((SELECT total FROM payment_total), 0) * 100), 0), '%') as percentage,
-        CONCAT('â‚±', amount::text) as amount,
+        CONCAT('₱', amount::text) as amount,
         COALESCE(proof_of_payment_file, '-') as "proofOfPayment",
         CASE 
           WHEN paid_on IS NOT NULL THEN TO_CHAR(paid_on, 'Mon DD, YYYY')
@@ -784,7 +784,7 @@ const getRequestDetails = async (req, res) => {
           payment_id: null,
           phase: "Down Payment",
           percentage: `${downpaymentPercent}%`,
-          amount: `â‚±${downpaymentAmount.toLocaleString()}`,
+          amount: `₱${downpaymentAmount.toLocaleString()}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
@@ -793,7 +793,7 @@ const getRequestDetails = async (req, res) => {
           payment_id: null,
           phase: "Completion Balance",
           percentage: `${remainingPercent}%`,
-          amount: `â‚±${remainingAmount.toLocaleString()}`,
+          amount: `₱${remainingAmount.toLocaleString()}`,
           proofOfPayment: "-",
           paidOn: "Pending",
           paymentStatus: "Pending",
@@ -826,7 +826,7 @@ const getRequestDetails = async (req, res) => {
         request: {
           ...request,
           id: request.request_number,
-          totalCost: `â‚±${totalCostAfterDiscount.toLocaleString("en-US", {
+          totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}`,
@@ -1266,7 +1266,7 @@ const createQuotation = async (req, res) => {
         "Quote Prepared",
         `A quotation (${quotationNumber}) has been prepared for your service request #${
           request.request_number
-        }. Total amount: â‚±${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
+        }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
 
       console.log(`Quotation notification sent to ${request.customer_email}`);
