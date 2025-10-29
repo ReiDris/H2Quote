@@ -3489,6 +3489,8 @@ const approveServiceRequest = async (req, res) => {
     const { customerNotes } = req.body;
     const customerId = req.user.id;
 
+    console.log("Approve request - ID:", requestId, "User:", customerId); // DEBUG LOG
+
     const requestQuery = `
       SELECT sr.*, rs.status_name,
              CONCAT(u.first_name, ' ', u.last_name) as customer_name,
@@ -3504,16 +3506,18 @@ const approveServiceRequest = async (req, res) => {
     ]);
 
     if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
-        message:
-          "Service request not found or you don't have permission to approve it",
+        message: "Service request not found or you don't have permission to approve it",
       });
     }
 
     const request = requestResult.rows[0];
 
-    if (request.status_name !== "Quote Sent") {
+    // ✅ FIXED: Check for both "Quote Sent" AND "Waiting for Approval"
+    if (request.status_name !== "Quote Sent" && request.status_name !== "Waiting for Approval") {
+      await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
         message: `Service request cannot be approved. Current status: ${request.status_name}`,
@@ -3526,7 +3530,11 @@ const approveServiceRequest = async (req, res) => {
     );
 
     if (statusResult.rows.length === 0) {
-      throw new Error("Quote Approved status not found in database");
+      await client.query("ROLLBACK");
+      return res.status(500).json({
+        success: false,
+        message: "Quote Approved status not found in database",
+      });
     }
 
     const approvedStatusId = statusResult.rows[0].status_id;
@@ -3559,6 +3567,7 @@ const approveServiceRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
+    // Send notifications (wrapped in try-catch to not fail main flow)
     try {
       const message = `You have approved the service request #${request.request_number}. TRISHKAYE will begin work shortly. Thank you for your confirmation!`;
 
@@ -3618,6 +3627,7 @@ const approveServiceRequest = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to approve service request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
     client.release();

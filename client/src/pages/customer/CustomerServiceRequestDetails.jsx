@@ -172,9 +172,16 @@ const CustomerServiceRequestDetails = () => {
         }
       );
 
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server response:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (data.success) {
         setApprovalSuccess(true);
         setApprovalError("");
 
@@ -187,7 +194,7 @@ const CustomerServiceRequestDetails = () => {
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the service request");
+      setApprovalError(error.message || "An error occurred while approving the service request");
     } finally {
       setApprovalLoading(false);
     }

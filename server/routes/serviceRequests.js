@@ -14,10 +14,15 @@ const requireAdminOrStaff = (req, res, next) => {
 };
 
 const requireCustomer = (req, res, next) => {
-  if (req.user.userType !== 'client') {
+  // Log to debug
+  console.log('User object:', req.user);
+  console.log('User type:', req.user.userType);
+  
+  if (!req.user || req.user.userType !== 'client') {
     return res.status(403).json({
       success: false,
-      message: 'Customer access required'
+      message: 'Customer access required',
+      debug: { userType: req.user?.userType } // Remove this after debugging
     });
   }
   next();
