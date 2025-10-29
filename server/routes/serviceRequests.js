@@ -42,10 +42,8 @@ router.post('/', requireCustomer, serviceRequestController.createServiceRequest)
 // Quotation routes
 router.put('/quotations/:quotationId/respond', requireCustomer, serviceRequestController.respondToQuotation);
 
+// ✅ FIXED: Specific parameterized routes BEFORE generic ones
 router.put('/:requestId/approve', requireCustomer, serviceRequestController.approveServiceRequest);
-
-// Parameterized routes - specific paths before generic
-router.get('/:requestId/details', serviceRequestController.getRequestDetails);
 router.post('/:requestId/add-services', requireAdminOrStaff, serviceRequestController.addServicesToRequest);
 router.post('/:requestId/add-chemicals', requireAdminOrStaff, serviceRequestController.addChemicalsToRequest);
 router.post('/:requestId/add-refrigerants', requireAdminOrStaff, serviceRequestController.addRefrigerantsToRequest);
@@ -54,6 +52,9 @@ router.delete('/:requestId/remove-refrigerants', requireAdminOrStaff, serviceReq
 router.post('/:requestId/create-quotation', requireAdminOrStaff, serviceRequestController.createQuotation);
 router.put('/:requestId/update', requireAdminOrStaff, serviceRequestController.updateServiceRequest);
 router.post('/:requestId/warranty', requireAdminOrStaff, serviceRequestController.setServiceWarranty);
+
+// Generic parameterized route - AFTER specific ones
+router.get('/:requestId/details', serviceRequestController.getRequestDetails);
 
 // Routes with multiple parameters - MUST be last
 router.put('/:requestId/items/:itemId/warranty', requireAdminOrStaff, serviceRequestController.updateIndividualServiceWarranty);
