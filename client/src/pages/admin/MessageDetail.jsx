@@ -5,7 +5,8 @@ import { useAuth } from "../../hooks/useAuth";
 import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import CustomerLayout from "../../layouts/CustomerLayout";
-import { messagingAPI } from '../../config/api';  
+import { messagingAPI } from '../../config/api';
+import { formatDateTime } from "../../utils/dateUtils";
 
 const MessageDetail = () => {
   const { user } = useAuth();
@@ -90,18 +91,6 @@ const MessageDetail = () => {
     }
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
-
   const getInitials = (name) => {
     return name
       .split(' ')
@@ -171,7 +160,7 @@ const MessageDetail = () => {
                 </div>
                 <div>
                   <h3 className="font-medium text-gray-900">{messageData.message.sender}</h3>
-                  <p className="text-sm text-gray-600">{formatDate(messageData.message.sentAt)}</p>
+                  <p className="text-sm text-gray-600">{formatDateTime(messageData.message.sentAt)}</p>
                 </div>
               </div>
 
@@ -199,7 +188,7 @@ const MessageDetail = () => {
                       </div>
                       <div>
                         <h4 className="font-medium text-gray-900">{reply.sender}</h4>
-                        <p className="text-sm text-gray-600">{formatDate(reply.sentAt)}</p>
+                        <p className="text-sm text-gray-600">{formatDateTime(reply.sentAt)}</p>
                       </div>
                     </div>
                     <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">

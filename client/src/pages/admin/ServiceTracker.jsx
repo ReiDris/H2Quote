@@ -11,6 +11,7 @@ import AdminLayout from "../../layouts/AdminLayout";
 import StaffLayout from "../../layouts/StaffLayout";
 import { useAuth } from "../../hooks/useAuth";
 import { serviceRequestsAPI } from "../../config/api";
+import { formatDateTime } from "../../utils/dateUtils";
 
 const ServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -23,6 +24,7 @@ const ServiceTracker = () => {
   const { user } = useAuth();
 
   const userRole = user?.role || "admin";
+  const userType = user?.userType || "admin";
   const itemsPerPage = 10;
 
   // Fetch service requests from API
@@ -46,6 +48,8 @@ const ServiceTracker = () => {
 
       if (data.success) {
         console.log("Fetched service requests:", data.data.requests);
+        
+        // ✅ NO FRONTEND FILTERING - Backend now handles staff filtering
         setServiceRequests(data.data.requests);
         setTotalCount(data.data.pagination.totalCount);
       } else {
@@ -127,35 +131,12 @@ const ServiceTracker = () => {
     );
   };
 
-  // Format date helper
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
   // Format items summary with debugging
   const formatItemsSummary = (item) => {
     const servicesCount = item.services_count || 0;
     const chemicalsCount = item.chemicals_count || 0;
     const refrigerantsCount = item.refrigerants_count || 0;
     const totalItems = servicesCount + chemicalsCount + refrigerantsCount;
-
-    // Debug logging
-    console.log(`Request ${item.request_number}:`, {
-      services: servicesCount,
-      chemicals: chemicalsCount,
-      refrigerants: refrigerantsCount,
-      total: totalItems,
-      summary: item.items_summary,
-    });
 
     if (totalItems === 0) {
       return "No items found";
@@ -225,10 +206,10 @@ const ServiceTracker = () => {
           )}
         </div>
 
-        {/* Table Section - Takes remaining space, no scroll */}
+        {/* Table Section - Takes remaining space */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-          <div className="overflow-x-auto flex-1 overflow-y-hidden">
-            <table className="w-full h-full">
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
                   <th className="px-2 py-3 text-left text-xs font-semibold text-black whitespace-nowrap w-24">
@@ -274,7 +255,7 @@ const ServiceTracker = () => {
                         {item.request_number}
                       </td>
                       <td className="px-2 py-4 text-sm text-gray-800 whitespace-nowrap">
-                        {formatDate(item.created_at)}
+                        {formatDateTime(item.created_at)}
                       </td>
                       <td 
                         className="px-2 py-4 text-sm text-gray-800 truncate max-w-[7rem]"
@@ -338,6 +319,8 @@ const ServiceTracker = () => {
                     >
                       {searchTerm
                         ? "No service requests found matching your search."
+                        : userType === "staff" || userRole === "staff"
+                        ? "No service requests assigned to you yet."
                         : "No service requests found."}
                     </td>
                   </tr>

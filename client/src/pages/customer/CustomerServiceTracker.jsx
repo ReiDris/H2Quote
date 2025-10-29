@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { CgMaximizeAlt } from "react-icons/cg";
 import CustomerLayout from "../../layouts/CustomerLayout";
-import { serviceRequestsAPI } from "../../config/api"
+import { serviceRequestsAPI } from "../../config/api";
+import { formatDateTime } from "../../utils/dateUtils";
 
 const CustomerServiceTracker = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -82,10 +83,16 @@ const CustomerServiceTracker = () => {
       if (data.success) {
         console.log('Fetched customer requests:', data.data);
         
+        // Debug: Log estimated_cost values
+        console.log('💰 Cost values from backend:');
+        data.data.forEach(item => {
+          console.log(`  ${item.request_number}: estimated_cost =`, item.estimated_cost, '(type:', typeof item.estimated_cost, ')');
+        });
+        
         // Transform backend data to match your existing UI structure
         const transformedData = (data.data || []).map(item => ({
           id: item.request_number,
-          requestedAt: formatDate(item.created_at),
+          requestedAt: formatDateTime(item.created_at),
           serviceCategory: parseServiceCategory(
             item.services_count || 0, 
             item.chemicals_count || 0, 
@@ -119,22 +126,18 @@ const CustomerServiceTracker = () => {
     fetchCustomerRequests();
   }, []);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
-
   const formatCurrency = (amount) => {
-    if (!amount) return "₱0";
-    return `₱${parseFloat(amount).toLocaleString('en-PH')}`;
+    // Convert to number if it's a string
+    const numAmount = parseFloat(amount);
+    
+    // Check if it's a valid number (this handles null, undefined, NaN)
+    if (isNaN(numAmount)) return "₱0.00";
+    
+    // Format with 2 decimal places and thousands separator
+    return `₱${numAmount.toLocaleString('en-US', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    })}`;
   };
 
   const handleMoreActions = (item) => {

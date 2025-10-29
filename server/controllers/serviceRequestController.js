@@ -20,12 +20,20 @@ const createDefaultPayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          sr.estimated_cost
-        ) as subtotal
+        CASE 
+  WHEN EXISTS (
+    SELECT 1 FROM service_request_items WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_chemicals WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_refrigerants WHERE request_id = sr.request_id
+  ) THEN 
+    COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+  ELSE 
+    sr.estimated_cost
+END as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
     `;
@@ -43,8 +51,8 @@ const createDefaultPayments = async (requestId) => {
     if (payment_terms === "Full" || !downpayment_percentage) {
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Full Payment', $2, 'Pending')
+       INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       `,
         [requestId, estimated_cost]
       );
@@ -57,8 +65,11 @@ const createDefaultPayments = async (requestId) => {
 
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+VALUES 
+  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+  ($1, 'Completion Balance', $3, 'Pending', NULL)
+  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
       `,
         [requestId, downpaymentAmount, remainingAmount]
       );
@@ -72,79 +83,64 @@ const createDefaultPayments = async (requestId) => {
     client.release();
   }
 };
-
-const createQuotationForRequest = async (requestId, options = {}, client = null) => {
-  const shouldReleaseClient = !client;
-  if (!client) {
-    client = await pool.connect();
-  }
-
+const createDefaultQuotation = async (requestId) => {
+  const client = await pool.connect();
   try {
-    if (shouldReleaseClient) {
-      await client.query("BEGIN");
-    }
-
-    // Set default values
-    const {
-      discountAmount = 0,
-      taxRate = 0,
-      paymentTerms = "50% Down, 50% upon Completion",
-      paymentMode = "Bank Transfer",
-      validUntil,
-      termsConditions = "Standard terms and conditions apply.",
-      createdBy = null, // System user or admin
-      sendNotification = false,
-    } = options;
+    await client.query("BEGIN");
 
     // Get request details
     const requestQuery = `
-      SELECT sr.*, calculate_request_total(sr.request_id) as subtotal,
-             sr.requested_by_user_id, sr.request_number,
-             sr.payment_terms as request_payment_terms,
-             sr.payment_mode as request_payment_mode,
-             u.email as customer_email,
-             CONCAT(u.first_name, ' ', u.last_name) as customer_name
+      SELECT 
+        sr.request_number,
+        sr.payment_terms,
+        sr.payment_mode,
+        sr.downpayment_percentage,
+        sr.discount_percentage,
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          sr.estimated_cost
+        ) as subtotal
       FROM service_requests sr
-      JOIN users u ON sr.requested_by_user_id = u.user_id
       WHERE sr.request_id = $1
     `;
-    const requestResult = await client.query(requestQuery, [requestId]);
+    const result = await client.query(requestQuery, [requestId]);
+    const {
+      subtotal,
+      discount_percentage,
+      payment_terms,
+      payment_mode,
+      downpayment_percentage,
+      request_number,
+    } = result.rows[0];
 
-    if (requestResult.rows.length === 0) {
-      throw new Error("Service request not found");
-    }
-
-    const request = requestResult.rows[0];
-    
-    // Use request values if not provided in options
-    const finalPaymentTerms = paymentTerms || request.request_payment_terms || "50% Down, 50% upon Completion";
-    const finalPaymentMode = paymentMode || request.request_payment_mode || "Bank Transfer";
-    
-    // Calculate totals
-    const subtotal = parseFloat(request.subtotal);
-    const discountedSubtotal = subtotal - parseFloat(discountAmount);
-    const taxAmount = discountedSubtotal * parseFloat(taxRate);
-    const totalAmount = discountedSubtotal + taxAmount;
+    const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
+    const discountedSubtotal = subtotal - discountAmount;
+    const taxRate = 0; // No tax
+    const taxAmount = 0;
+    const totalAmount = discountedSubtotal;
 
     // Generate quotation number
     const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
       Date.now()
     ).slice(-6)}`;
 
-    // Set valid until date (30 days from now if not provided)
-    const finalValidUntil = validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Set valid until date (30 days from now)
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + 30);
 
     // Insert quotation
     const insertQuotationQuery = `
       INSERT INTO quotations 
       (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
        discount_amount, total_amount, payment_terms, payment_mode, 
-       valid_until, terms_conditions, created_by, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       valid_until, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Draft')
       RETURNING quotation_id
     `;
 
-    const quotationResult = await client.query(insertQuotationQuery, [
+    await client.query(insertQuotationQuery, [
       requestId,
       quotationNumber,
       subtotal,
@@ -152,75 +148,21 @@ const createQuotationForRequest = async (requestId, options = {}, client = null)
       taxAmount,
       discountAmount,
       totalAmount,
-      finalPaymentTerms,
-      finalPaymentMode,
-      finalValidUntil,
-      termsConditions,
-      createdBy,
-      'Draft', // Always create as Draft - admin will send it to customer later
+      payment_terms,
+      payment_mode,
+      validUntil.toISOString().split("T")[0],
     ]);
 
-    const quotationId = quotationResult.rows[0].quotation_id;
-
-    // Copy items from service request to quotation
-    const copyItemsQuery = `
-      INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
-      SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
-      FROM service_request_items sri
-      JOIN services s ON sri.service_id = s.service_id
-      WHERE sri.request_id = $2
-    `;
-    await client.query(copyItemsQuery, [quotationId, requestId]);
-
-    console.log(`✓ Quotation ${quotationNumber} created as 'Draft' - ready for staff review`);
-
-    // Keep service request status as "New" - it will change when admin assigns staff
-    // Status flow: New → (staff reviews) → Quote Prepared → (admin sends) → Quote Sent
-    // No need to update status here since it's already "New"
-
-    // Log audit entry
-    try {
-      await supabase.from("audit_log").insert({
-        table_name: "quotations",
-        record_id: quotationId,
-        action: "CREATE",
-        new_values: {
-          quotation_created: true,
-          request_number: request.request_number,
-          total_amount: totalAmount,
-          valid_until: finalValidUntil,
-          auto_created: true,
-        },
-        changed_by: "system",
-        change_reason: `Quotation automatically created for request #${request.request_number}`,
-      });
-    } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
-    }
-
-    if (shouldReleaseClient) {
-      await client.query("COMMIT");
-    }
-
-    console.log(`Quotation ${quotationNumber} created automatically for request ${request.request_number}`);
-
-    return {
-      success: true,
-      quotationId: quotationId,
-      quotationNumber: quotationNumber,
-      totalAmount: totalAmount,
-    };
-
+    await client.query("COMMIT");
+    console.log(
+      `Quotation ${quotationNumber} auto-created for request #${request_number}`
+    );
   } catch (error) {
-    if (shouldReleaseClient) {
-      await client.query("ROLLBACK");
-    }
-    console.error("Create quotation for request error:", error);
+    await client.query("ROLLBACK");
+    console.error("Failed to create default quotation:", error);
     throw error;
   } finally {
-    if (shouldReleaseClient) {
-      client.release();
-    }
+    client.release();
   }
 };
 
@@ -251,12 +193,21 @@ const recreatePayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          sr.estimated_cost
-        ) as subtotal
+        CASE 
+  WHEN EXISTS (
+    SELECT 1 FROM service_request_items WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_chemicals WHERE request_id = sr.request_id
+    UNION ALL
+    SELECT 1 FROM service_request_refrigerants WHERE request_id = sr.request_id
+    LIMIT 1
+  ) THEN 
+    COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+    COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+  ELSE 
+    sr.estimated_cost
+END as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
     `;
@@ -274,8 +225,8 @@ const recreatePayments = async (requestId) => {
     if (payment_terms === "Full" || !downpayment_percentage) {
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Full Payment', $2, 'Pending')
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+        VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       `,
         [requestId, estimated_cost]
       );
@@ -288,8 +239,10 @@ const recreatePayments = async (requestId) => {
 
       await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status)
-        VALUES ($1, 'Down Payment', $2, 'Pending'), ($1, 'Completion Balance', $3, 'Pending')
+        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+        VALUES 
+          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+          ($1, 'Completion Balance', $3, 'Pending', NULL)
       `,
         [requestId, downpaymentAmount, remainingAmount]
       );
@@ -502,9 +455,20 @@ const createServiceRequest = async (req, res) => {
           total_cost: totalCost,
           estimated_duration: estimatedDuration,
           payment_terms: paymentTerms,
-          services_count: selectedServices.length,
-          chemicals_count: selectedServices.filter(s => s.type === 'Chemicals').length,
-          refrigerants_count: selectedServices.filter(s => s.type === 'Refrigerants').length,
+          total_items: serviceDetails.length, // Total items
+          services_count: serviceDetails.filter((s) => s.itemType === "service")
+            .length,
+          chemicals_count: serviceDetails.filter(
+            (s) => s.itemType === "chemical"
+          ).length,
+          refrigerants_count: serviceDetails.filter(
+            (s) => s.itemType === "refrigerant"
+          ).length,
+          items_detail: serviceDetails.map((s) => ({
+            type: s.itemType,
+            name: s.name,
+            quantity: s.quantity,
+          })), // Optional: detailed breakdown
         },
         changed_by: req.user.email,
         change_reason: `Service request #${requestNumber} created by customer`,
@@ -514,33 +478,20 @@ const createServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    // Automatically create quotation based on customer's selected services
-    // Staff will review and adjust if needed before sending to customer
-    try {
-      const quotationResult = await createQuotationForRequest(requestId, {
-        paymentTerms: paymentTerms,
-        paymentMode: paymentMode,
-        discountAmount: 0,
-        taxRate: 0,
-        termsConditions: "Standard terms and conditions apply.",
-        createdBy: null, // System created
-      }, client); // Use same transaction
-      
-      console.log(`✓ Quotation ${quotationResult.quotationNumber} auto-created for request ${requestNumber}`);
-    } catch (quotError) {
-      console.error("✗ Failed to auto-create quotation:", quotError);
-      // Rollback entire transaction if quotation fails
-      throw quotError;
-    }
-
     await client.query("COMMIT");
-
 
     try {
       await createDefaultPayments(requestId);
       console.log("Default payments created successfully");
     } catch (paymentError) {
       console.error("Failed to create default payments:", paymentError);
+    }
+
+    try {
+      await createDefaultQuotation(requestId);
+      console.log("Default quotation created successfully");
+    } catch (quotationError) {
+      console.error("Failed to create default quotation:", quotationError);
     }
 
     try {
@@ -614,69 +565,75 @@ const getCustomerRequests = async (req, res) => {
     const customerId = req.user.id;
 
     const query = `
-      SELECT 
-        sr.request_id,
-        sr.request_number,
-        sr.request_date as created_at,
-        rs.status_name,
-        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          0
-        ) as subtotal,
+  SELECT 
+    sr.request_id,
+    sr.request_number,
+    sr.request_date as created_at,
+    rs.status_name,
+    CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+    
+    -- ✅ BEST: All subqueries wrapped in COALESCE
+    (
+      COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+      COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+      COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+    ) as subtotal,
 
-        COALESCE(
-          COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-            0
-          ) * COALESCE(sr.discount_percentage, 0) / 100,
-          0
-        ) as discount_amount,
+    -- Discount calculation
+    (
+      (
+        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+      ) * COALESCE(sr.discount_percentage, 0) / 100
+    ) as discount_amount,
 
-        COALESCE(
-          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-          0
-        ) - COALESCE(
-          COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-            0
-          ) * COALESCE(sr.discount_percentage, 0) / 100,
-          0
-        ) as estimated_cost,
-        
-        -- Add service status for frontend (FIXED to match admin/staff)
-        CASE 
-          WHEN rs.status_name = 'New' THEN 'Pending'
-          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-          WHEN rs.status_name = 'Completed' THEN 'Completed'
-          ELSE rs.status_name
-        END as service_status,
-        
-        -- Add payment status calculation
-        CASE 
-          WHEN sr.payment_status IS NULL THEN 'Pending'
-          ELSE sr.payment_status
-        END as payment_status,
-        
-        -- Add warranty status
-        CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
-          ELSE 'N/A'
-        END as warranty_status,
+    -- Estimated cost
+    (
+      (
+        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+      ) - (
+        (
+          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+        ) * COALESCE(sr.discount_percentage, 0) / 100
+      )
+    ) as estimated_cost,
+    
+    -- Service status mapping
+    CASE 
+      WHEN rs.status_name = 'New' THEN 'Pending'
+      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+      WHEN rs.status_name = 'Completed' THEN 'Completed'
+      ELSE rs.status_name
+    END as service_status,
+    
+    -- Payment status
+    CASE 
+      WHEN sr.payment_status IS NULL THEN 'Pending'
+      ELSE sr.payment_status
+    END as payment_status,
+    
+    -- ✅ FIXED WARRANTY: Check both levels
+    CASE 
+      WHEN rs.status_name = 'Completed' AND (
+        sr.warranty_start_date IS NOT NULL OR 
+        EXISTS (
+          SELECT 1 FROM service_request_items sri 
+          WHERE sri.request_id = sr.request_id 
+          AND sri.warranty_start_date IS NOT NULL
+        )
+      ) THEN 'Valid'
+      WHEN rs.status_name = 'Completed' THEN 'Pending'
+      ELSE 'N/A'
+    END as warranty_status,
         
         -- Add item counts for debugging
         (
@@ -726,12 +683,12 @@ const getCustomerRequests = async (req, res) => {
           ) items_summary
         ) as items_summary
         
-      FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-      WHERE sr.requested_by_user_id = $1
-      ORDER BY sr.request_date DESC
-    `;
+       FROM service_requests sr
+  JOIN request_statuses rs ON sr.status_id = rs.status_id
+  LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+  WHERE sr.requested_by_user_id = $1
+  ORDER BY sr.request_date DESC
+`;
 
     const result = await pool.query(query, [customerId]);
 
@@ -762,6 +719,11 @@ const getRequestDetails = async (req, res) => {
       queryParams.push(userId);
     }
 
+    if (userType === "staff") {
+      whereClause += " AND sr.assigned_to_staff_id = $2";
+      queryParams.push(userId);
+    }
+
     const requestQuery = `
   SELECT 
     sr.*, 
@@ -769,17 +731,17 @@ const getRequestDetails = async (req, res) => {
     CONCAT(u.first_name, ' ', u.last_name) as customer_name,
     c.company_name,
     CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    TO_CHAR(sr.request_date, 'Mon DD, YYYY - HH12:MI AM') as requested_at,
-   CASE 
-  WHEN rs.status_name = 'New' THEN 'Pending'
-  WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-  WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
-  WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-  WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-  WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-  WHEN rs.status_name = 'Completed' THEN 'Completed'
-  ELSE rs.status_name
-END as service_status,
+     sr.request_date as requested_at,
+    CASE 
+      WHEN rs.status_name = 'New' THEN 'Pending'
+      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+      WHEN rs.status_name = 'Quote Prepared' THEN 'Processing'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+      WHEN rs.status_name = 'Completed' THEN 'Completed'
+      ELSE rs.status_name
+    END as service_status,
     CASE 
       WHEN sr.payment_status IS NULL THEN 'Pending'
       ELSE sr.payment_status
@@ -790,7 +752,7 @@ END as service_status,
     END as estimated_duration,
     TO_CHAR(sr.service_start_date, 'YYYY-MM-DD') as service_start_date,
     TO_CHAR(sr.target_completion_date, 'Mon DD, YYYY') as estimated_end_date,
-    TO_CHAR(sr.payment_deadline, 'Mon DD, YYYY') as payment_deadline,
+        TO_CHAR(sr.payment_deadline, 'YYYY-MM-DD') as payment_deadline,  
     TO_CHAR(sr.request_acknowledged_date, 'Mon DD, YYYY') as request_acknowledged_date,
     TO_CHAR(sr.actual_completion_date, 'YYYY-MM-DD') as actual_completion_date,
     u.email as email,
@@ -915,7 +877,7 @@ END as service_status,
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
-    // ✅ FIXED: Calculate percentage from sum of payment amounts, not discounted total
+    // Ã¢Å“â€¦ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -998,6 +960,7 @@ END as service_status,
         request: {
           ...request,
           id: request.request_number,
+          service_end_date: request.actual_completion_date,
           totalCost: `₱${totalCostAfterDiscount.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -1006,7 +969,7 @@ END as service_status,
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation, // ← CHANGE LINE 818: from null to quotation
+        quotation: quotation, // Ã¢â€ Â CHANGE LINE 818: from null to quotation
       },
     });
   } catch (error) {
@@ -1023,8 +986,19 @@ const getAllRequests = async (req, res) => {
     const { status, page = 1, limit = 20, search } = req.query;
     const offset = (page - 1) * limit;
 
+    // Get user information from authenticated request
+    const userId = req.user.id;
+    const userType = req.user.userType;
+
     let whereClause = "1=1";
     let queryParams = [];
+
+    // ✅ STAFF FILTERING: Staff can only see requests assigned to them
+    if (userType === "staff") {
+      whereClause += " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
+      queryParams.push(userId);
+    }
+    // Admin can see all requests (no additional filter needed)
 
     if (status) {
       whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
@@ -1041,45 +1015,56 @@ const getAllRequests = async (req, res) => {
     }
 
     const query = `
-      SELECT 
-        sr.request_id, 
-        sr.request_number, 
-        rs.status_name as status,
-        -- FIXED: Calculate actual total cost from all item tables, then apply discount
-        (
-          COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
-            sr.estimated_cost
-          ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
-        ) as estimated_cost,
-        sr.request_date as created_at,
-        CONCAT(u.first_name, ' ', u.last_name) as customer_name,
-        c.company_name,
-        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-        sr.priority,
-        -- Add service status mapping for frontend
-        CASE 
-          WHEN rs.status_name = 'New' THEN 'Pending'
-          WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-          WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-          WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-          WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-          WHEN rs.status_name = 'Completed' THEN 'Completed'
-          ELSE rs.status_name
-        END as service_status,
-        -- Add payment status calculation
-        CASE 
-          WHEN sr.payment_status IS NULL THEN 'Pending'
-          ELSE sr.payment_status
-        END as payment_status,
-        -- Add warranty status
-        CASE 
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NOT NULL THEN 'Valid'
-          WHEN rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL THEN 'Pending'
-          ELSE 'N/A'
-        END as warranty_status,
+  SELECT 
+    sr.request_id, 
+    sr.request_number, 
+    rs.status_name as status,
+    
+    -- ✅ BEST: Calculate from items with all COALESCE, no fallback needed
+    (
+      (
+        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+      ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
+    ) as estimated_cost,
+    
+    sr.request_date as created_at,
+    CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+    c.company_name,
+    CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+    sr.priority,
+    
+    -- Service status mapping
+    CASE 
+      WHEN rs.status_name = 'New' THEN 'Pending'
+      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+      WHEN rs.status_name = 'Completed' THEN 'Completed'
+      ELSE rs.status_name
+    END as service_status,
+    
+    -- Payment status
+    CASE 
+      WHEN sr.payment_status IS NULL THEN 'Pending'
+      ELSE sr.payment_status
+    END as payment_status,
+    
+    -- ✅ FIXED WARRANTY: Check both request and item levels
+    CASE 
+      WHEN rs.status_name = 'Completed' AND (
+        sr.warranty_start_date IS NOT NULL OR 
+        EXISTS (
+          SELECT 1 FROM service_request_items sri 
+          WHERE sri.request_id = sr.request_id 
+          AND sri.warranty_start_date IS NOT NULL
+        )
+      ) THEN 'Valid'
+      WHEN rs.status_name = 'Completed' THEN 'Pending'
+      ELSE 'N/A'
+    END as warranty_status,
         -- Add item counts for debugging
         (
           SELECT COUNT(*)::int 
@@ -1126,15 +1111,15 @@ const getAllRequests = async (req, res) => {
             WHERE srr.request_id = sr.request_id
           ) items_summary
         ) as items_summary
-      FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      JOIN users u ON sr.requested_by_user_id = u.user_id
-      JOIN companies c ON sr.company_id = c.company_id
-      LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-      WHERE ${whereClause}
-      ORDER BY sr.request_date DESC
-      LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
-    `;
+        FROM service_requests sr
+  JOIN request_statuses rs ON sr.status_id = rs.status_id
+  JOIN users u ON sr.requested_by_user_id = u.user_id
+  JOIN companies c ON sr.company_id = c.company_id
+  LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+  WHERE ${whereClause}
+  ORDER BY sr.request_date DESC
+  LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
+`;
 
     queryParams.push(limit, offset);
 
@@ -1329,37 +1314,18 @@ const createQuotation = async (req, res) => {
     } = req.body;
     const adminId = req.user.id;
 
-    // Check if quotation already exists
-    const existingQuotationQuery = `
-      SELECT quotation_id, quotation_number 
-      FROM quotations 
-      WHERE request_id = $1
-      LIMIT 1
-    `;
-    const existingQuotation = await client.query(existingQuotationQuery, [requestId]);
-    
-    if (existingQuotation.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({
-        success: false,
-        message: "A quotation already exists for this service request",
-        data: {
-          quotationNumber: existingQuotation.rows[0].quotation_number
-        }
-      });
-    }
-
-    // Get request details to check status
     const requestQuery = `
-      SELECT sr.*, rs.status_name
+      SELECT sr.*, calculate_request_total(sr.request_id) as subtotal,
+             sr.requested_by_user_id, sr.request_number,
+             u.email as customer_email,
+             CONCAT(u.first_name, ' ', u.last_name) as customer_name
       FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
+      JOIN users u ON sr.requested_by_user_id = u.user_id
       WHERE sr.request_id = $1
     `;
     const requestResult = await client.query(requestQuery, [requestId]);
 
     if (requestResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Service request not found",
@@ -1367,19 +1333,50 @@ const createQuotation = async (req, res) => {
     }
 
     const request = requestResult.rows[0];
+    const subtotal = parseFloat(request.subtotal);
+    const discountedSubtotal = subtotal - parseFloat(discountAmount);
+    const taxAmount = discountedSubtotal * parseFloat(taxRate);
+    const totalAmount = discountedSubtotal + taxAmount;
 
-    // Use the helper function to create quotation
-    const result = await createQuotationForRequest(requestId, {
-      discountAmount,
+    const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
+      Date.now()
+    ).slice(-6)}`;
+
+    const insertQuotationQuery = `
+      INSERT INTO quotations 
+      (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
+       discount_amount, total_amount, payment_terms, payment_mode, 
+       valid_until, terms_conditions, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING quotation_id
+    `;
+
+    const quotationResult = await client.query(insertQuotationQuery, [
+      requestId,
+      quotationNumber,
+      subtotal,
       taxRate,
+      taxAmount,
+      discountAmount,
+      totalAmount,
       paymentTerms,
       paymentMode,
       validUntil,
       termsConditions,
-      createdBy: adminId,
-    }, client);
+      adminId,
+    ]);
 
-    // Update service request status to "Quote Prepared"
+    const quotationId = quotationResult.rows[0].quotation_id;
+
+    const copyItemsQuery = `
+      INSERT INTO quotation_items (quotation_id, service_id, item_description, quantity, unit_price, line_total, notes)
+      SELECT $1, sri.service_id, s.service_name, sri.quantity, sri.unit_price, sri.line_total, sri.notes
+      FROM service_request_items sri
+      JOIN services s ON sri.service_id = s.service_id
+      WHERE sri.request_id = $2
+    `;
+    await client.query(copyItemsQuery, [quotationId, requestId]);
+
     const quoteStatusResult = await client.query(
       "SELECT status_id FROM request_statuses WHERE status_name = $1",
       ["Quote Prepared"]
@@ -1397,21 +1394,40 @@ const createQuotation = async (req, res) => {
       );
     }
 
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "quotations",
+        record_id: quotationId,
+        action: "CREATE",
+        new_values: {
+          quotation_created: true,
+          request_number: request.request_number,
+          total_amount: totalAmount,
+          items_count: items.length,
+          valid_until: validUntil,
+        },
+        changed_by: req.user.email,
+        change_reason: `Quotation created for request #${request.request_number}`,
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Failed to log audit entry:", auditError);
+    }
+
     await client.query("COMMIT");
 
-    // Send notification to customer
     try {
       await createServiceRequestNotification(
         request.requested_by_user_id,
         request.request_number,
         requestId,
         "Quote Prepared",
-        `A quotation (${result.quotationNumber}) has been prepared for your service request #${
+        `A quotation (${quotationNumber}) has been prepared for your service request #${
           request.request_number
-        }. Total amount: ₱${result.totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
+        }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
 
-      console.log(`Quotation notification sent for request ${request.request_number}`);
+      console.log(`Quotation notification sent to ${request.customer_email}`);
     } catch (notifError) {
       console.error("Failed to send quotation notification:", notifError);
     }
@@ -1420,9 +1436,9 @@ const createQuotation = async (req, res) => {
       success: true,
       message: "Quotation created successfully",
       data: {
-        quotationId: result.quotationId,
-        quotationNumber: result.quotationNumber,
-        totalAmount: result.totalAmount,
+        quotationId: quotationId,
+        quotationNumber: quotationNumber,
+        totalAmount: totalAmount,
         discountAmount: discountAmount,
       },
     });
@@ -1432,13 +1448,11 @@ const createQuotation = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create quotation",
-      error: error.message,
     });
   } finally {
     client.release();
   }
 };
-
 
 const respondToQuotation = async (req, res) => {
   const client = await pool.connect();
@@ -2043,29 +2057,6 @@ const updateRequestStatus = async (req, res) => {
     if (newStatusId !== currentRequest.status_id) {
       updateFields.push(`status_id = $${paramCount++}`);
       updateValues.push(newStatusId);
-
-      // Update quotation status to "Sent" when service request status changes to "Quote Sent"
-      console.log(`📋 Status change detected. serviceStatus: "${serviceStatus}"`);
-      
-      if (serviceStatus === "Waiting for Approval") {
-        const backendStatus = statusMapping[serviceStatus] || serviceStatus;
-        console.log(`📋 Mapped to backend status: "${backendStatus}"`);
-        
-        if (backendStatus === "Quote Sent") {
-          console.log(`📋 Updating quotation to 'Sent' for request_id: ${requestId}`);
-          
-          const updateResult = await client.query(
-            `UPDATE quotations SET status = 'Sent' WHERE request_id = $1 AND status IS DISTINCT FROM 'Approved' RETURNING quotation_id, status`,
-            [requestId]
-          );
-          
-          if (updateResult.rows.length > 0) {
-            console.log(`✓ Quotation ${updateResult.rows[0].quotation_id} updated to 'Sent'`);
-          } else {
-            console.log(`⚠ No quotation updated for request_id: ${requestId}`);
-          }
-        }
-      }
     }
 
     if (paymentStatus) {
@@ -2918,6 +2909,7 @@ const updateServiceRequest = async (req, res) => {
       services,
       paymentBreakdown,
       discount,
+      paymentDeadline,
     } = req.body;
 
     const currentRequestQuery = `
@@ -2965,6 +2957,52 @@ const updateServiceRequest = async (req, res) => {
     ];
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+
+    // DEBUG LOGGING - Show mapping
+    console.log("=== STATUS MAPPING DEBUG ===");
+    console.log("Frontend Status (serviceStatus):", serviceStatus);
+    console.log("Backend Status (backendStatus):", backendStatus);
+    console.log("Assigned Staff:", assignedStaff);
+    console.log("============================");
+
+    // âœ… VALIDATION: Prevent "Under Review" (Assigned) or "Quote Sent" (Waiting for Approval) without assigned staff
+    // Check BOTH the frontend name and backend mapped name
+    const staffValue = (assignedStaff || "").trim();
+    const isNoStaff =
+      staffValue === "Not assigned" || staffValue === "" || !staffValue;
+
+    // Block "Assigned for Processing" without staff
+    if (
+      (serviceStatus === "Assigned" || backendStatus === "Under Review") &&
+      isNoStaff
+    ) {
+      console.error(
+        "âŒ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff"
+      );
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message:
+          "Cannot set status to 'Assigned for Processing' without assigning a staff member. Please assign a staff member first.",
+      });
+    }
+
+    // Block "Waiting for Approval" without staff
+    if (
+      (serviceStatus === "Waiting for Approval" ||
+        backendStatus === "Quote Sent") &&
+      isNoStaff
+    ) {
+      console.error(
+        "âŒ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff"
+      );
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        success: false,
+        message:
+          "Cannot set status to 'Waiting for Approval' without assigning a staff member. Please assign a staff member first.",
+      });
+    }
 
     if (serviceStatus && backendStatus !== currentStatusName) {
       const currentIndex = statusOrder.indexOf(currentStatusName);
@@ -3038,8 +3076,9 @@ const updateServiceRequest = async (req, res) => {
         request_acknowledged_date = $5,
         actual_completion_date = $6,
         discount_percentage = $7,
+        payment_deadline = $8,        
         updated_at = NOW()
-      WHERE request_id = $8
+      WHERE request_id = $9              
     `;
 
     await client.query(updateRequestQuery, [
@@ -3050,6 +3089,7 @@ const updateServiceRequest = async (req, res) => {
       requestAcknowledgedDate,
       actualCompletionDate,
       discountPercentage,
+      paymentDeadline || null,
       requestId,
     ]);
 
@@ -3110,7 +3150,7 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // ✅ FIXED: Recalculate payment breakdown amounts when discount changes
+    // Ã¢Å“â€¦ FIXED: Recalculate payment breakdown amounts when discount changes
     if (discount !== undefined) {
       // Get the current subtotal (before discount)
       const subtotalQuery = `
@@ -3214,30 +3254,6 @@ const updateServiceRequest = async (req, res) => {
       console.error("Failed to log audit entry:", auditError);
     }
 
-    // ✅ Update quotation status to "Sent" when service request status changes to "Quote Sent"
-    if (serviceStatus && backendStatus === "Quote Sent") {
-      console.log(`📋 Status changed to "Quote Sent" - updating quotation to 'Sent' for request ${requestId}`);
-      
-      try {
-        const updateResult = await client.query(
-          `UPDATE quotations 
-           SET status = 'Sent', updated_at = NOW() 
-           WHERE request_id = $1 AND status = 'Draft'
-           RETURNING quotation_id, quotation_number, status`,
-          [requestId]
-        );
-        
-        if (updateResult.rows.length > 0) {
-          console.log(`✓ Quotation ${updateResult.rows[0].quotation_number} updated from 'Draft' to 'Sent'`);
-        } else {
-          console.log(`⚠ No Draft quotation found to update for request_id: ${requestId}`);
-        }
-      } catch (quotError) {
-        console.error(`✗ Failed to update quotation status:`, quotError.message);
-        // Don't throw - allow the service request update to succeed even if quotation update fails
-      }
-    }
-
     await client.query("COMMIT");
 
     try {
@@ -3336,7 +3352,7 @@ const setServiceWarranty = async (req, res) => {
     const { requestId } = req.params;
     const {
       warrantyStartDate,
-      warrantyMonths = 6, // Default 6 months
+      warrantyMonths = 1, // Default 1 month
       applyToAllServices = true,
     } = req.body;
 
@@ -3550,16 +3566,18 @@ const approveServiceRequest = async (req, res) => {
     ]);
 
     if (requestResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
-        message:
-          "Service request not found or you don't have permission to approve it",
+        message: "Service request not found or you don't have permission to approve it",
       });
     }
 
     const request = requestResult.rows[0];
 
-    if (request.status_name !== "Quote Sent") {
+    // ✅ FIXED: Check for both "Quote Sent" AND "Waiting for Approval"
+    if (request.status_name !== "Quote Sent" && request.status_name !== "Waiting for Approval") {
+      await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
         message: `Service request cannot be approved. Current status: ${request.status_name}`,
@@ -3572,7 +3590,11 @@ const approveServiceRequest = async (req, res) => {
     );
 
     if (statusResult.rows.length === 0) {
-      throw new Error("Quote Approved status not found in database");
+      await client.query("ROLLBACK");
+      return res.status(500).json({
+        success: false,
+        message: "Quote Approved status not found in database",
+      });
     }
 
     const approvedStatusId = statusResult.rows[0].status_id;
@@ -3664,13 +3686,12 @@ const approveServiceRequest = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to approve service request",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
     client.release();
   }
 };
-
-
 
 module.exports = {
   approveServiceRequest,
@@ -3697,5 +3718,5 @@ module.exports = {
   updateServiceRequest,
   setServiceWarranty,
   updateIndividualServiceWarranty,
-  createQuotationForRequest
+  createDefaultQuotation,
 };

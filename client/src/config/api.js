@@ -215,11 +215,11 @@ export const serviceRequestsAPI = {
   },
 
   approveServiceRequest: (requestId, notes = null) => {
-    return fetchWithAuth(`/service-requests/${requestId}/approve`, {
-      method: "PUT",
-      body: JSON.stringify({ customerNotes: notes }),
-    });
-  },
+  return fetchWithAuth(`/service-requests/${requestId}/approve`, {
+    method: "POST",  // ✅ Change from PUT to POST
+    body: JSON.stringify({ customerNotes: notes }),
+  });
+},
 };
 
 export const authAPI = {
@@ -494,6 +494,35 @@ export const activityLogsAPI = {
   getActivityLogStats: (params) => {
     const queryString = new URLSearchParams(params).toString();
     return fetchWithAuth(`/activity-logs/stats?${queryString}`);
+  },
+};
+
+export const chatbotAPI = {
+  startSession: () => {
+    return fetchPublic("/chatbot/start-session", {
+      method: "POST",
+    });
+  },
+
+  sendMessage: (sessionId, message, messageType = "user") => {
+    return fetchPublic("/chatbot/send-message", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, message, messageType }),
+    });
+  },
+
+  getChatHistory: (sessionId, limit = 50) => {
+    return fetchPublic(`/chatbot/chat-history/${sessionId}?limit=${limit}`);
+  },
+
+  endSession: (sessionId) => {
+    return fetchPublic(`/chatbot/end-session/${sessionId}`, {
+      method: "POST",
+    });
+  },
+
+  getQuickActions: () => {
+    return fetchPublic("/chatbot/quick-actions");
   },
 };
 

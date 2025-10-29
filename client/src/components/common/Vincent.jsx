@@ -1,11 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import { AiFillMessage } from "react-icons/ai";
 import { IoSend } from "react-icons/io5";
+import { chatbotAPI } from "../../config/api";
 
 const Vincent = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([]); // Start with empty messages
+  const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
+  const [sessionId, setSessionId] = useState(null);
+  const [quickActions, setQuickActions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -16,12 +20,73 @@ const Vincent = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (e) => {
+  // Start chat session when chat opens
+  useEffect(() => {
+    const startSession = async () => {
+      if (isOpen && !sessionId) {
+        try {
+          const response = await chatbotAPI.startSession();
+          const data = await response.json();
+          
+          if (data.success) {
+            setSessionId(data.data.sessionId);
+            console.log("Chat session started:", data.data.sessionId);
+          }
+        } catch (error) {
+          console.error("Failed to start chat session:", error);
+        }
+      }
+    };
+
+    startSession();
+  }, [isOpen, sessionId]);
+
+  // Load quick actions
+  useEffect(() => {
+    const loadQuickActions = async () => {
+      try {
+        const response = await chatbotAPI.getQuickActions();
+        const data = await response.json();
+        
+        if (data.success) {
+          setQuickActions(data.data.map(action => action.action_text));
+        }
+      } catch (error) {
+        console.error("Failed to load quick actions:", error);
+        // Fallback to default quick actions
+        setQuickActions([
+          "Types of Services",
+          "Request a Service",
+          "Payment Options",
+          "Pricing Info",
+        ]);
+      }
+    };
+
+    loadQuickActions();
+  }, []);
+
+  // End session when chat closes
+  const handleCloseChat = async () => {
+    if (sessionId) {
+      try {
+        await chatbotAPI.endSession(sessionId);
+        console.log("Chat session ended");
+      } catch (error) {
+        console.error("Failed to end chat session:", error);
+      }
+    }
+    setIsOpen(false);
+    setSessionId(null);
+    setMessages([]);
+  };
+
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || !sessionId || isLoading) return;
 
     const userMessage = {
-      id: messages.length + 1,
+      id: Date.now(),
       text: inputMessage,
       sender: "user",
       timestamp: new Date(),
@@ -30,66 +95,87 @@ const Vincent = () => {
     setMessages((prev) => [...prev, userMessage]);
     const currentInput = inputMessage;
     setInputMessage("");
+    setIsLoading(true);
 
-    // Simulate bot response after a short delay
-    setTimeout(() => {
-      const botResponse = generateBotResponse(currentInput);
-      const botMessage = {
-        id: messages.length + 2,
-        text: botResponse,
+    try {
+      const response = await chatbotAPI.sendMessage(sessionId, currentInput);
+      const data = await response.json();
+
+      if (data.success) {
+        const botMessage = {
+          id: data.data.botMessage.id,
+          text: data.data.botMessage.text,
+          sender: "bot",
+          timestamp: new Date(data.data.botMessage.timestamp),
+        };
+        setMessages((prev) => [...prev, botMessage]);
+      } else {
+        throw new Error("Failed to get bot response");
+      }
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      
+      // Show error message to user
+      const errorMessage = {
+        id: Date.now(),
+        text: "I'm sorry, I'm having trouble connecting right now. Please try again.",
         sender: "bot",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, botMessage]);
-    }, 1000);
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleQuickAction = (action) => {
+  const handleQuickAction = async (action) => {
+    if (!sessionId || isLoading) return;
+
     const userMessage = {
-      id: messages.length + 1,
+      id: Date.now(),
       text: action,
       sender: "user",
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
 
-    // Simulate bot response after a short delay
-    setTimeout(() => {
-      const botResponse = generateBotResponse(action);
-      const botMessage = {
-        id: messages.length + 2,
-        text: botResponse,
+    try {
+      const response = await chatbotAPI.sendMessage(sessionId, action);
+      const data = await response.json();
+
+      if (data.success) {
+        const botMessage = {
+          id: data.data.botMessage.id,
+          text: data.data.botMessage.text,
+          sender: "bot",
+          timestamp: new Date(data.data.botMessage.timestamp),
+        };
+        setMessages((prev) => [...prev, botMessage]);
+      } else {
+        throw new Error("Failed to get bot response");
+      }
+    } catch (error) {
+      console.error("Failed to send quick action:", error);
+      
+      // Show error message to user
+      const errorMessage = {
+        id: Date.now(),
+        text: "I'm sorry, I'm having trouble connecting right now. Please try again.",
         sender: "bot",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, botMessage]);
-    }, 1000);
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-  const generateBotResponse = (userInput) => {
-    const responses = [
-      "Thank you for your inquiry! TRISHKAYE Enterprises offers comprehensive water treatment solutions. Would you like to know more about our specific services?",
-      "Great question! We provide chemical cleaning, descaling, and water treatment chemicals. What type of facility are you working with?",
-      "I'd be happy to help you with pricing information. For detailed quotes, I can connect you with our team through the service request system.",
-      "TRISHKAYE has been serving industrial clients since 2000. We work with companies like JMATERIALS CORPORATION and AMKOR TECHNOLOGY. How can we assist your business?",
-      "Our services include water testing, laboratory analysis, and pipeline disinfection. What specific water treatment needs do you have?",
-      "For immediate assistance, you can also contact our team directly or submit a service request through our system. Is there anything specific I can help clarify?",
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
-  };
-
-  const quickActions = [
-    "Types of Services",
-    "Request a Service",
-    "Payment Options",
-    "Pricing Info",
-  ];
 
   const handleBackdropClick = (e) => {
     // Close the chat if clicking on the backdrop (not the chat window)
     if (e.target === e.currentTarget) {
-      setIsOpen(false);
+      handleCloseChat();
     }
   };
 
@@ -138,7 +224,7 @@ const Vincent = () => {
                 </div>
               </div>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={handleCloseChat}
                 className="text-white hover:text-gray-200 transition-colors cursor-pointer"
               >
                 <svg
@@ -158,7 +244,7 @@ const Vincent = () => {
             </div>
 
             {/* Messages or Logo */}
-            <div className="flex-1 space-y-3 p-4 bg-gray-50">
+            <div className="flex-1 space-y-3 p-4 bg-gray-50 overflow-y-auto">
               {messages.length === 0 ? (
                 // Show logo in center when no messages
                 <div className="flex items-center justify-center h-full ">
@@ -172,26 +258,40 @@ const Vincent = () => {
                 </div>
               ) : (
                 // Show messages when conversation has started
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.sender === "user"
-                        ? "justify-end"
-                        : "justify-start"
-                    }`}
-                  >
+                <>
+                  {messages.map((message) => (
                     <div
-                      className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
+                      key={message.id}
+                      className={`flex ${
                         message.sender === "user"
-                          ? "bg-[#1B4781] text-gray-200 rounded-br-none"
-                          : "bg-[#1B4781] text-gray-200 rounded-bl-none"
+                          ? "justify-end"
+                          : "justify-start"
                       }`}
                     >
-                      {message.text}
+                      <div
+                        className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
+                          message.sender === "user"
+                            ? "bg-[#1B4781] text-gray-200 rounded-br-none"
+                            : "bg-[#1B4781] text-gray-200 rounded-bl-none"
+                        }`}
+                      >
+                        {message.text}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  {/* Typing indicator */}
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-[#1B4781] text-gray-200 rounded-lg rounded-bl-none px-4 py-3">
+                        <div className="flex space-x-2">
+                          <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -204,7 +304,8 @@ const Vincent = () => {
                     <button
                       key={index}
                       onClick={() => handleQuickAction(action)}
-                      className="bg-[#285F9B] text-white text-xs p-3 rounded-lg hover:scale-102 transition-colors text-start cursor-pointer"
+                      disabled={isLoading}
+                      className="bg-[#285F9B] text-white text-xs p-3 rounded-lg hover:scale-102 transition-colors text-start cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {action}
                     </button>
@@ -221,19 +322,24 @@ const Vincent = () => {
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !isLoading) {
                       handleSendMessage(e);
                     }
                   }}
-                  placeholder="Do you supply chemicals only without the service?"
-                  className="w-full border border-gray-500 rounded-full px-4 py-3 pr-12 text-sm focus:outline-none focus:border-[#1B4781]"
+                  placeholder={isLoading ? "Waiting for response..." : "Do you supply chemicals only without the service?"}
+                  disabled={isLoading}
+                  className="w-full border border-gray-500 rounded-full px-4 py-3 pr-12 text-sm focus:outline-none focus:border-[#1B4781] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={!inputMessage.trim()}
+                  disabled={!inputMessage.trim() || isLoading}
                   className="absolute right-2 top-1/2 transform -translate-y-1/2 text-[#1B4781] p-2 rounded-full cursor-pointer hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 >
-                  <IoSend size={20}/>
+                  {isLoading ? (
+                    <div className="animate-spin h-5 w-5 border-2 border-[#1B4781] border-t-transparent rounded-full"></div>
+                  ) : (
+                    <IoSend size={20}/>
+                  )}
                 </button>
               </div>
             </div>

@@ -5,6 +5,7 @@ import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
 import { serviceRequestsAPI } from "../../config/api";
+import { formatPaymentDate, formatDateTime } from "../../utils/dateUtils";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -29,27 +30,17 @@ const CustomerServiceRequestDetails = () => {
     return modeMap[mode] || mode;
   };
 
-  // Format date to match Service Tracker format
-  const formatDateTime = (dateString) => {
-    if (!dateString || dateString === '-') return '-';
-    try {
-      const date = new Date(dateString);
-      // Check if date is valid
-      if (isNaN(date.getTime())) return dateString;
-      
-      // Format: "Mon DD, YYYY, HH:MM AM/PM" - matches ServiceTracker
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return dateString;
-    }
+  // Helper function to calculate subtotal (before discount) from services
+  const calculateSubtotal = () => {
+    if (!requestData || !requestData.services) return 0;
+    
+    return requestData.services.reduce((sum, service) => {
+      // Remove currency symbol and parse the number
+      const price = parseFloat(
+        service.totalPrice.replace(/[₱,]/g, "").trim()
+      );
+      return sum + (isNaN(price) ? 0 : price);
+    }, 0);
   };
 
   // Payment proof modal states
@@ -114,6 +105,7 @@ const CustomerServiceRequestDetails = () => {
           paymentHistory: requestDetails.paymentHistory || [],
           estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
           totalCost: requestDetails.totalCost,
+          discountPercentage: requestDetails.discount_percentage || 0,
           paymentMode: requestDetails.payment_mode || "-",
           paymentTerms: requestDetails.payment_terms || "-",
           paymentDeadline: requestDetails.payment_deadline || "-",
@@ -158,43 +150,57 @@ const CustomerServiceRequestDetails = () => {
     });
   };
 
-  // ✅ UPDATED: Approve quotation using the correct endpoint
+  // ✅ UPDATED: Approve service request directly (quotation auto-created on submit)
   const handleApproveQuotation = async () => {
-    setApprovalLoading(true);
-    setApprovalError("");
+  setApprovalLoading(true);
+  setApprovalError("");
 
-    try {
-      // Check if quotation exists
-      if (!requestData.quotation || !requestData.quotation.quotation_id) {
-        setApprovalError("No quotation found for this request");
-        setApprovalLoading(false);
-        return;
+  try {
+    const token = localStorage.getItem("h2quote_token");
+    
+    console.log('🚀 Sending approve request:', requestData.requestId); // ADD THIS
+    
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/service-requests/${requestData.requestId}/approve`,
+      {
+        method: "POST",  // Make sure this is POST
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          customerNotes: "Customer approved the service request"
+        }),
       }
+    );
 
-      // ✅ CORRECT: Call the approveQuotation endpoint (uses existing API method)
-      const response = await serviceRequestsAPI.approveQuotation(
-        requestData.quotation.quotation_id,
-        true, // approved
-        "Customer approved the quotation" // customerNotes
-      );
+    console.log('📡 Response status:', response.status); // ADD THIS
+    console.log('📡 Response ok:', response.ok); // ADD THIS
+
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server response:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (data.success) {
         setApprovalSuccess(true);
         setApprovalError("");
 
-        // Wait a moment to show success message, then refresh
         setTimeout(() => {
           setShowApprovalModal(false);
-          fetchRequestDetails(); // Refresh the data to show updated status
+          fetchRequestDetails();
         }, 1500);
       } else {
-        setApprovalError(data.message || "Failed to approve quotation");
+        setApprovalError(data.message || "Failed to approve service request");
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError("An error occurred while approving the quotation");
+      setApprovalError(error.message || "An error occurred while approving the service request");
     } finally {
       setApprovalLoading(false);
     }
@@ -367,10 +373,12 @@ const CustomerServiceRequestDetails = () => {
           <StatusTracker />
         </div>
 
-        {/* Approval Notification Banner */}
-        {requestData.quotation && 
-         requestData.quotation.status === "Sent" && 
-         (requestData.serviceStatus === "Waiting for Approval" || requestData.serviceStatus === "Processing") && (
+        {/* DEBUG: Remove after testing */}
+        {console.log('Service Status:', requestData.serviceStatus)}
+        {console.log('Status Name (backend):', requestData.statusName)}
+
+        {/* Approval/Messaging Banner - Shows when status is "Waiting for Approval" */}
+        {requestData.serviceStatus === "Waiting for Approval" && (
           <div className="mx-6 mb-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <div className="flex items-start gap-3">
@@ -387,6 +395,16 @@ const CustomerServiceRequestDetails = () => {
                     A quotation for your service request has been prepared.
                     Please review the details and approve to proceed.
                   </p>
+                  {requestData.quotation && (
+                    <p className="text-xs text-gray-600 mb-4">
+                      <strong>Quotation #:</strong> {requestData.quotation.quotation_number}
+                      {requestData.quotation.valid_until && (
+                        <span className="ml-3">
+                          <strong>Valid Until:</strong> {requestData.quotation.valid_until}
+                        </span>
+                      )}
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
                       onClick={handleMessageTrishkaye}
@@ -519,10 +537,40 @@ const CustomerServiceRequestDetails = () => {
           </div>
         </div>
 
+        {/* Discount Display - Only show if discount exists */}
+        {requestData.discountPercentage > 0 && (
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-500">
+                Availed Discounts
+              </h2>
+              <div className="text-right">
+                <p className="text-sm text-gray-500">
+                  Subtotal: ₱{calculateSubtotal().toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p className="text-xs text-green-600 mt-1">
+                  {requestData.discountPercentage}% discount applied
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-500">Total Cost</h2>
             <div className="text-right">
+              {requestData.discountPercentage > 0 && (
+                <p className="text-sm text-gray-500 line-through mb-1">
+                  ₱{calculateSubtotal().toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              )}
               <p className="text-2xl font-bold text-[#0260A0]">
                 {requestData.totalCost}
               </p>
@@ -633,7 +681,7 @@ const CustomerServiceRequestDetails = () => {
                       )}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
-                      {formatDateTime(payment.paidOn)}
+                      {formatPaymentDate(payment.paidOn)}
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-center">
                       <span className="text-xs xl:text-sm text-gray-800">

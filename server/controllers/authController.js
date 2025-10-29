@@ -5,7 +5,11 @@ const { createClient } = require("@supabase/supabase-js");
 const pool = require("../config/database");
 const fs = require("fs");
 const path = require("path");
-const { sendUserWelcomeEmail, sendAdminNotificationEmail, sendPasswordResetEmail } = require('../emailServices/emailService');
+const {
+  sendUserWelcomeEmail,
+  sendAdminNotificationEmail,
+  sendPasswordResetEmail,
+} = require("../emailServices/emailService");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -47,63 +51,78 @@ const signup = async (req, res) => {
       });
     }
 
-    console.log('✅ Verification file uploaded to Supabase at:', req.file.path);
+    console.log("✅ Verification file uploaded to Supabase at:", req.file.path);
 
     // ⭐ UPDATED: Check if email exists and handle rejected/suspended accounts
-    const existingUserQuery = "SELECT user_id, status, company_id, verification_file_path FROM users WHERE email = $1";
+    const existingUserQuery =
+      "SELECT user_id, status, company_id, verification_file_path FROM users WHERE email = $1";
     const existingUsers = await client.query(existingUserQuery, [email]);
 
     if (existingUsers.rows.length > 0) {
       const existingUser = existingUsers.rows[0];
-      
+
       // If account is Suspended (rejected), allow re-registration by deleting old record
-      if (existingUser.status === 'Suspended') {
+      if (existingUser.status === "Suspended") {
         console.log(`🔄 Deleting rejected account for email: ${email}`);
-        
+
         // Delete old user record (will cascade delete related records)
-        await client.query("DELETE FROM users WHERE user_id = $1", [existingUser.user_id]);
-        
+        await client.query("DELETE FROM users WHERE user_id = $1", [
+          existingUser.user_id,
+        ]);
+
         // Optionally delete old company if it has no other users
-        const companyUsersQuery = "SELECT COUNT(*) FROM users WHERE company_id = $1";
-        const companyUsers = await client.query(companyUsersQuery, [existingUser.company_id]);
-        
+        const companyUsersQuery =
+          "SELECT COUNT(*) FROM users WHERE company_id = $1";
+        const companyUsers = await client.query(companyUsersQuery, [
+          existingUser.company_id,
+        ]);
+
         if (parseInt(companyUsers.rows[0].count) === 0) {
-          await client.query("DELETE FROM companies WHERE company_id = $1", [existingUser.company_id]);
-          console.log(`✅ Deleted orphaned company (ID: ${existingUser.company_id})`);
+          await client.query("DELETE FROM companies WHERE company_id = $1", [
+            existingUser.company_id,
+          ]);
+          console.log(
+            `✅ Deleted orphaned company (ID: ${existingUser.company_id})`
+          );
         }
-        
+
         // Delete old verification file from Supabase if it exists
         if (existingUser.verification_file_path) {
           try {
-            const fileName = existingUser.verification_file_path.split('/').pop();
+            const fileName = existingUser.verification_file_path
+              .split("/")
+              .pop();
             const { error: deleteError } = await supabase.storage
-              .from('verification-documents')
+              .from("verification-documents")
               .remove([fileName]);
-            
+
             if (!deleteError) {
               console.log(`✅ Deleted old verification file: ${fileName}`);
             }
           } catch (fileError) {
-            console.error('⚠️  Warning: Could not delete old verification file:', fileError.message);
+            console.error(
+              "⚠️  Warning: Could not delete old verification file:",
+              fileError.message
+            );
             // Continue even if file deletion fails
           }
         }
-        
+
         console.log(`✅ Old rejected account cleaned up for: ${email}`);
         // Continue with new registration below
-      } 
+      }
       // If account is Active or Inactive (pending), don't allow duplicate
       else {
         await client.query("ROLLBACK");
         return res.status(409).json({
           success: false,
-          message: existingUser.status === 'Active' 
-            ? "Email already registered. Please login instead." 
-            : "Email already registered. Your account is pending verification.",
+          message:
+            existingUser.status === "Active"
+              ? "Email already registered. Please login instead."
+              : "Email already registered. Your account is pending verification.",
         });
       }
     }
-   
 
     const filePath = req.file.path;
 
@@ -166,30 +185,39 @@ const signup = async (req, res) => {
 
     // ✅ COMMIT FIRST - don't let email failures block signup
     await client.query("COMMIT");
-    
-    console.log('✅ User created successfully with ID:', userId);
+
+    console.log("✅ User created successfully with ID:", userId);
 
     // ✅ SEND EMAILS ASYNCHRONOUSLY (after commit)
     setImmediate(async () => {
       try {
         await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
-        console.log('✅ Welcome email sent to:', email);
+        console.log("✅ Welcome email sent to:", email);
       } catch (emailError) {
-        console.error('❌ Failed to send welcome email:', emailError.message);
+        console.error("❌ Failed to send welcome email:", emailError.message);
       }
 
       try {
-        await sendAdminNotificationEmail(customerName, companyName, email, contactNo);
-        console.log('✅ Admin notification email sent');
+        await sendAdminNotificationEmail(
+          customerName,
+          companyName,
+          email,
+          contactNo
+        );
+        console.log("✅ Admin notification email sent");
       } catch (emailError) {
-        console.error('❌ Failed to send admin notification:', emailError.message);
+        console.error(
+          "❌ Failed to send admin notification:",
+          emailError.message
+        );
       }
     });
 
     // ✅ RESPOND IMMEDIATELY (don't wait for emails)
     res.status(201).json({
       success: true,
-      message: "Your account has been created successfully!\n\nYour account is currently pending admin verification.\n\nYou will receive an email notification once approved.",
+      message:
+        "Your account has been created successfully!\n\nYour account is currently pending admin verification.\n\nYou will receive an email notification once approved.",
       data: {
         userId: userId,
         companyName: companyName,
@@ -298,17 +326,16 @@ const login = async (req, res) => {
     }
 
     const tokenPayload = {
+      id: user.user_id, // ✅ ADD THIS
       userId: user.user_id,
       email: user.email,
       userType: user.user_type,
       companyId: user.company_id,
     };
 
-    const token = jwt.sign(
-      tokenPayload,
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+      expiresIn: "24h",
+    });
 
     let role;
     switch (user.user_type) {
@@ -319,7 +346,7 @@ const login = async (req, res) => {
         role = "staff";
         break;
       case "client":
-        role = "customer"; 
+        role = "customer";
         break;
       default:
         role = "customer";
@@ -332,7 +359,7 @@ const login = async (req, res) => {
       firstName: user.first_name,
       lastName: user.last_name,
       userType: user.user_type,
-      role: role, 
+      role: role,
       department: user.department,
       companyId: user.company_id,
       companyName: user.company_name,
@@ -474,7 +501,8 @@ const forgotPassword = async (req, res) => {
       .eq("email", email)
       .single();
 
-    const successMessage = "If an account exists with this email, a password reset link has been sent.";
+    const successMessage =
+      "If an account exists with this email, a password reset link has been sent.";
 
     if (error || !user) {
       return res.json({
@@ -483,7 +511,7 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    if (user.status !== 'Active') {
+    if (user.status !== "Active") {
       return res.json({
         success: true,
         message: successMessage,
@@ -502,7 +530,7 @@ const forgotPassword = async (req, res) => {
       .eq("user_id", user.user_id);
 
     if (updateError) {
-      console.error('Failed to save reset token:', updateError);
+      console.error("Failed to save reset token:", updateError);
       return res.json({
         success: true,
         message: successMessage,
@@ -513,8 +541,7 @@ const forgotPassword = async (req, res) => {
     try {
       await sendPasswordResetEmail(email, userName, resetToken);
     } catch (emailError) {
-      console.error('Failed to send password reset email:', emailError);
-     
+      console.error("Failed to send password reset email:", emailError);
     }
 
     res.json({
@@ -548,11 +575,13 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
     if (!passwordRegex.test(newPassword)) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+        message:
+          "Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character",
       });
     }
 
@@ -572,15 +601,16 @@ const resetPassword = async (req, res) => {
 
     const now = new Date();
     const tokenExpiry = new Date(user.reset_token_expiry);
-    
+
     if (now > tokenExpiry) {
       return res.status(400).json({
         success: false,
-        message: "Reset token has expired. Please request a new password reset.",
+        message:
+          "Reset token has expired. Please request a new password reset.",
       });
     }
 
-    if (user.status !== 'Active') {
+    if (user.status !== "Active") {
       return res.status(400).json({
         success: false,
         message: "Account is not active. Please contact support.",
@@ -620,7 +650,8 @@ const resetPassword = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Password has been reset successfully. You can now log in with your new password.",
+      message:
+        "Password has been reset successfully. You can now log in with your new password.",
     });
   } catch (error) {
     console.error("Reset password error:", error);
@@ -658,7 +689,7 @@ const validateResetToken = async (req, res) => {
 
     const now = new Date();
     const tokenExpiry = new Date(user.reset_token_expiry);
-    
+
     if (now > tokenExpiry) {
       return res.status(400).json({
         success: false,
