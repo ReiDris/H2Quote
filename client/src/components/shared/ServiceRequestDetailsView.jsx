@@ -132,6 +132,45 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return;
     }
 
+    // ✅ NEW: Check if trying to set to "Ongoing" without settled partial payments
+    if (newStatus === "Ongoing" && serviceStatus === "Approved") {
+      // Check if there are any pending partial payments (excluding Completion Balance)
+      const hasPendingPartialPayments = paymentBreakdown.some(
+        (payment) =>
+          payment.paymentStatus === "Pending" &&
+          payment.phase !== "Completion Balance"
+      );
+
+      if (hasPendingPartialPayments) {
+        setStatusRestrictionMessage(
+          <div className="space-y-3">
+            <p className="font-semibold text-gray-900">
+              Cannot set status to Service Ongoing
+            </p>
+            <p className="text-gray-700 leading-relaxed">
+              The customer must settle all required partial payments before the
+              service can begin.
+            </p>
+            <p className="text-gray-700 leading-relaxed">
+              Please wait for the customer to upload proof of payment and verify
+              it first.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+              <p className="text-sm text-blue-800">
+                <span className="font-semibold">Note:</span> Only the Down
+                Payment needs to be settled. The Completion Balance will be
+                collected after service completion.
+              </p>
+            </div>
+          </div>
+        );
+        setShowStatusRestrictionModal(true);
+        // Keep the current status unchanged
+        setServiceStatus(serviceStatus);
+        return;
+      }
+    }
+
     // Check if trying to set to "Completed" without being "Ongoing"
     if (newStatus === "Completed" && serviceStatus !== "Ongoing") {
       setStatusRestrictionMessage(
@@ -556,6 +595,43 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         );
         setShowStatusRestrictionModal(true);
         return;
+      }
+
+      // ✅ NEW: Validate payment before allowing Service Ongoing status
+      if (serviceStatus === "Ongoing") {
+        // Check if there are any pending partial payments (excluding Completion Balance)
+        const hasPendingPartialPayments = paymentBreakdown.some(
+          (payment) =>
+            payment.paymentStatus === "Pending" &&
+            payment.phase !== "Completion Balance"
+        );
+
+        if (hasPendingPartialPayments) {
+          setStatusRestrictionMessage(
+            <div className="space-y-3">
+              <p className="font-semibold text-gray-900">
+                Cannot set status to Service Ongoing
+              </p>
+              <p className="text-gray-700 leading-relaxed">
+                The customer must settle all required partial payments before
+                the service can begin.
+              </p>
+              <p className="text-gray-700 leading-relaxed">
+                Please wait for the customer to upload proof of payment and
+                verify it first.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Note:</span> Only the Down
+                  Payment needs to be settled. The Completion Balance will be
+                  collected after service completion.
+                </p>
+              </div>
+            </div>
+          );
+          setShowStatusRestrictionModal(true);
+          return;
+        }
       }
 
       // ✅ NEW: Validate warranty periods for services when status is Completed
@@ -1245,13 +1321,53 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                     <select
                       value={payment.paymentStatus}
-                      onChange={(e) =>
-                        handlePaymentStatusChange(index, e.target.value)
-                      }
+                      onChange={(e) => {
+                        // Prevent selecting "Paid" if no proof of payment uploaded
+                        if (
+                          e.target.value === "Paid" &&
+                          payment.proofOfPayment === "-"
+                        ) {
+                          setStatusRestrictionMessage(
+                            <div className="space-y-3">
+                              <p className="font-semibold text-gray-900">
+                                Cannot Mark Payment as Paid
+                              </p>
+                              <p className="text-gray-700 leading-relaxed">
+                                The customer has not uploaded proof of payment
+                                yet. Please wait for the customer to upload
+                                their payment proof before marking this as
+                                "Paid".
+                              </p>
+                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+                                <p className="text-sm text-amber-800">
+                                  <span className="font-semibold">Tip:</span>{" "}
+                                  Once the customer uploads proof of payment,
+                                  you'll see a "View" button in the "Proof of
+                                  Payment" column.
+                                </p>
+                              </div>
+                            </div>
+                          );
+                          setShowStatusRestrictionModal(true);
+                          return; // Don't change the value
+                        }
+                        handlePaymentStatusChange(index, e.target.value);
+                      }}
                       className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer"
                     >
                       <option value="Pending">Pending</option>
-                      <option value="Paid">Paid</option>
+                      <option
+                        value="Paid"
+                        disabled={payment.proofOfPayment === "-"}
+                        className={
+                          payment.proofOfPayment === "-" ? "text-gray-400" : ""
+                        }
+                      >
+                        Paid{" "}
+                        {payment.proofOfPayment === "-"
+                          ? "(No proof uploaded)"
+                          : ""}
+                      </option>
                       <option value="Overdue">Overdue</option>
                     </select>
                   </td>
