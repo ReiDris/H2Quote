@@ -381,9 +381,86 @@ const CustomerServiceRequestDetails = () => {
           <StatusTracker />
         </div>
 
-        {/* DEBUG: Remove after testing */}
-        {console.log("Service Status:", requestData.serviceStatus)}
-        {console.log("Status Name (backend):", requestData.statusName)}
+        {/* Payment Notice - Show only when Approved and partial payments pending */}
+        {requestData.serviceStatus === "Approved" &&
+          (() => {
+            // Check if there are any pending partial payments (excluding Completion Balance)
+            const hasPendingPartialPayments = requestData.paymentHistory.some(
+              (payment) =>
+                payment.paymentStatus === "Pending" &&
+                payment.phase !== "Completion Balance"
+            );
+
+            if (hasPendingPartialPayments) {
+              return (
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded-r-lg p-5 mb-6 shadow-sm">
+                  <div className="flex items-start gap-4">
+                    {/* Icon */}
+                    <div className="flex-shrink-0">
+                      <svg
+                        className="w-7 h-7 text-blue-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1">
+                      <h3 className="text-blue-900 font-bold text-base mb-3">
+                        Payment Required Before Service Begins
+                      </h3>
+
+                      <div className="space-y-2 text-sm text-blue-800">
+                        <p className="leading-relaxed">
+                          Your service request has been{" "}
+                          <span className="font-semibold">approved</span>!
+                          However, the service will not begin until you settle
+                          the required partial payment(s).
+                        </p>
+
+                        <p className="leading-relaxed">
+                          Please upload your proof of payment in the{" "}
+                          <span className="font-semibold bg-blue-100 px-2 py-0.5 rounded">
+                            Payment History
+                          </span>{" "}
+                          section below. Once payment is confirmed, TRISHKAYE
+                          will proceed with your service.
+                        </p>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-blue-200">
+                        <p className="text-blue-900 text-xs font-semibold flex items-center gap-2">
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          Status: Waiting for Payment Confirmation
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
         {/* Approval/Messaging Banner - Shows when status is "Waiting for Approval" */}
         {requestData.serviceStatus === "Waiting for Approval" && (
