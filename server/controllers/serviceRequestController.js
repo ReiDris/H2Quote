@@ -999,7 +999,8 @@ const getAllRequests = async (req, res) => {
 
     // ✅ STAFF FILTERING: Staff can only see requests assigned to them
     if (userType === "staff") {
-      whereClause += " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
+      whereClause +=
+        " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
       queryParams.push(userId);
     }
     // Admin can see all requests (no additional filter needed)
@@ -2212,6 +2213,17 @@ const addChemicalsToRequest = async (req, res) => {
     const { requestId } = req.params;
     const { chemicals, adminNotes } = req.body;
 
+    // Fetch user's name
+    const userQuery = `
+      SELECT first_name, last_name 
+      FROM users 
+      WHERE user_id = $1
+    `;
+    const userResult = await client.query(userQuery, [req.user.id]);
+    const userName = userResult.rows[0]
+      ? `${userResult.rows[0].first_name} ${userResult.rows[0].last_name}`
+      : req.user.email;
+
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -2276,7 +2288,7 @@ const addChemicalsToRequest = async (req, res) => {
         chemical.quantity,
         chemicalData.price,
         itemTotal,
-        adminNotes || `Added by ${req.user.email}`,
+        adminNotes || `Added by ${userName}`,
       ]);
 
       addedChemicals.push({
@@ -2358,6 +2370,17 @@ const addRefrigerantsToRequest = async (req, res) => {
     const { requestId } = req.params;
     const { refrigerants, adminNotes } = req.body;
 
+    // Fetch user's name
+    const userQuery = `
+      SELECT first_name, last_name 
+      FROM users 
+      WHERE user_id = $1
+    `;
+    const userResult = await client.query(userQuery, [req.user.id]);
+    const userName = userResult.rows[0]
+      ? `${userResult.rows[0].first_name} ${userResult.rows[0].last_name}`
+      : req.user.email;
+
     const requestQuery = `
       SELECT sr.*, rs.status_name 
       FROM service_requests sr
@@ -2424,7 +2447,7 @@ const addRefrigerantsToRequest = async (req, res) => {
         refrigerant.quantity,
         refrigerantData.price,
         itemTotal,
-        adminNotes || `Added by ${req.user.email}`,
+        adminNotes || `Added by ${userName}`,
       ]);
 
       addedRefrigerants.push({
@@ -3573,14 +3596,18 @@ const approveServiceRequest = async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
-        message: "Service request not found or you don't have permission to approve it",
+        message:
+          "Service request not found or you don't have permission to approve it",
       });
     }
 
     const request = requestResult.rows[0];
 
     // ✅ FIXED: Check for both "Quote Sent" AND "Waiting for Approval"
-    if (request.status_name !== "Quote Sent" && request.status_name !== "Waiting for Approval") {
+    if (
+      request.status_name !== "Quote Sent" &&
+      request.status_name !== "Waiting for Approval"
+    ) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,

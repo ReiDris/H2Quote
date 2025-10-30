@@ -8,19 +8,19 @@ const supabase = createClient(
 );
 
 const getInboxMessages = async (req, res) => {
+  const userId = req.user.id; // Move outside try block
+  const userType = req.user.userType; // Move outside try block
+
   try {
-    const userId = req.user.id;
-    const userType = req.user.userType;
     const { type = "all", page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    // For admin/staff: Show ALL original messages (not replies) from the system
-    // For customers: Show only messages they are involved in
     let whereClause;
     let queryParams;
+    let countQueryParams;
 
-    if (userType === "admin" || userType === "staff") {
-      // Admin/Staff see all ORIGINAL messages (not replies) in the system
+    if (userType === "admin") {
+      // Admin sees ALL original messages (not replies) in the system
       whereClause = `
         NOT EXISTS (
           SELECT 1 FROM message_replies mr 
@@ -28,6 +28,24 @@ const getInboxMessages = async (req, res) => {
         )
       `;
       queryParams = [];
+      countQueryParams = [];
+    } else if (userType === "staff") {
+      // Staff only see messages related to service requests assigned to them
+      whereClause = `
+        NOT EXISTS (
+          SELECT 1 FROM message_replies mr 
+          WHERE mr.reply_message_id = m.message_id
+        )
+        AND (
+          m.related_request_id IN (
+            SELECT request_id FROM service_requests WHERE assigned_to_staff_id = $1
+          )
+          OR m.sender_id = $1
+          OR m.recipient_id = $1
+        )
+      `;
+      queryParams = [userId];
+      countQueryParams = [userId];
     } else {
       // Customers see messages where they are EITHER sender OR recipient
       whereClause = `
@@ -42,16 +60,27 @@ const getInboxMessages = async (req, res) => {
         )
       `;
       queryParams = [userId];
+      countQueryParams = [userId];
     }
 
     if (type !== "all") {
       const paramIndex = queryParams.length + 1;
       whereClause += ` AND m.message_type = $${paramIndex}`;
       queryParams.push(type);
+      countQueryParams.push(type);
     }
 
-    const userIdParam =
-      userType === "admin" || userType === "staff" ? queryParams.length + 1 : 1;
+    // Calculate pagination parameter positions
+    const limitParamIndex = queryParams.length + 1;
+    const offsetParamIndex = queryParams.length + 2;
+
+    // For admin, we need to add userId for the read status check
+    let readStatusUserParam;
+    if (userType === "admin") {
+      readStatusUserParam = limitParamIndex; // Will be added before limit/offset
+    } else {
+      readStatusUserParam = 1; // For customers and staff, userId is already param $1
+    }
 
     const query = `
       WITH message_stats AS (
@@ -66,12 +95,12 @@ const getInboxMessages = async (req, res) => {
       SELECT 
         m.message_id as id,
         ${
-          userType === "admin" || userType === "staff"
+          userType === "admin"
             ? `sender.first_name || ' ' || sender.last_name`
             : `CASE 
-              WHEN m.sender_id = $1 THEN recipient.first_name || ' ' || recipient.last_name
-              ELSE sender.first_name || ' ' || sender.last_name
-            END`
+                WHEN m.sender_id = $1 THEN recipient.first_name || ' ' || recipient.last_name
+                ELSE sender.first_name || ' ' || sender.last_name
+              END`
         } as sender,
         m.subject,
         SUBSTRING(m.content, 1, 100) || CASE WHEN LENGTH(m.content) > 100 THEN '...' ELSE '' END as preview,
@@ -82,12 +111,12 @@ const getInboxMessages = async (req, res) => {
         m.message_type,
         m.related_request_id as "requestId",
         ${
-          userType === "admin" || userType === "staff"
+          userType === "admin"
             ? `sender_company.company_name`
             : `CASE 
-              WHEN m.sender_id = $1 THEN recipient_company.company_name
-              ELSE sender_company.company_name
-            END`
+                WHEN m.sender_id = $1 THEN recipient_company.company_name
+                ELSE sender_company.company_name
+              END`
         } as "senderCompany",
         COALESCE(ms.reply_count, 0) as reply_count,
         COALESCE(ms.has_replies, false) as has_replies
@@ -97,18 +126,26 @@ const getInboxMessages = async (req, res) => {
       LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
       LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
       LEFT JOIN message_stats ms ON m.message_id = ms.message_id
-      LEFT JOIN message_read_status mrs ON m.message_id = mrs.message_id AND mrs.user_id = $${userIdParam}
+      LEFT JOIN message_read_status mrs ON m.message_id = mrs.message_id AND mrs.user_id = $${readStatusUserParam}
       WHERE ${whereClause}
       ORDER BY m.sent_at DESC
-      LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
+      LIMIT $${limitParamIndex + (userType === "admin" ? 1 : 0)} OFFSET $${
+      offsetParamIndex + (userType === "admin" ? 1 : 0)
+    }
     `;
 
-    // Add userId to queryParams for admin/staff
-    if (userType === "admin" || userType === "staff") {
+    // Add userId to queryParams for admin (for the read status check)
+    if (userType === "admin") {
       queryParams.push(userId);
     }
 
+    // Add pagination params
     queryParams.push(limit, offset);
+
+    console.log("User type:", userType);
+    console.log("Query params:", queryParams);
+    console.log("Count query params:", countQueryParams);
+
     const result = await pool.query(query, queryParams);
 
     // Count query
@@ -116,7 +153,8 @@ const getInboxMessages = async (req, res) => {
       SELECT COUNT(*) FROM messages m
       WHERE ${whereClause}
     `;
-    const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
+
+    const countResult = await pool.query(countQuery, countQueryParams);
     const totalCount = parseInt(countResult.rows[0].count);
 
     const messages = result.rows.map((msg) => ({
@@ -146,9 +184,15 @@ const getInboxMessages = async (req, res) => {
     });
   } catch (error) {
     console.error("Get inbox messages error:", error);
+    console.error("Error details:", {
+      message: error.message,
+      userType: userType,
+      userId: userId,
+    });
     res.status(500).json({
       success: false,
       message: "Failed to fetch messages",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -756,6 +800,19 @@ const replyToMessage = async (req, res) => {
     await client.query(
       `INSERT INTO message_replies (original_message_id, reply_message_id) VALUES ($1, $2)`,
       [messageId, replyId]
+    );
+
+    // Remove read status for ALL users except the sender
+    // This makes the thread unread for everyone when there's a new reply
+    await client.query(
+      `DELETE FROM message_read_status 
+       WHERE message_id = $1 
+       AND user_id != $2`,
+      [messageId, senderId]
+    );
+
+    console.log(
+      `🔔 Marked message ${messageId} as unread for all users except sender ${senderId}`
     );
 
     try {
