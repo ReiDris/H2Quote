@@ -19,55 +19,69 @@ const Header = () => {
   const notificationRef = useRef(null);
 
   // Fetch notifications from API
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
+  // Fetch notifications from API
+const fetchNotifications = async () => {
+  try {
+    setLoading(true);
 
-      const response = await notificationsAPI.getNotifications(activeFilter === "unread");
+    const response = await notificationsAPI.getNotifications(activeFilter === "unread");
 
-      const data = await response.json();
-
-      if (data.success) {
-        setNotifications(data.data.notifications);
-        setUnreadCount(data.data.unreadCount);
-      }
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error('Failed to fetch notifications');
     }
-  };
 
-  // Mark notification as read
-  const markAsRead = async (notificationId) => {
-    try {
-      await notificationsAPI.markAsRead(notificationId);
-      fetchNotifications();
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
-    }
-  };
+    const data = await response.json();
 
-  // Mark all as read
-  const markAllAsRead = async () => {
-    try {
-      await notificationsAPI.markAllAsRead();
-      fetchNotifications();
-    } catch (error) {
-      console.error("Error marking all as read:", error);
+    if (data.success) {
+      setNotifications(data.data.notifications);
+      setUnreadCount(data.data.unreadCount);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    // Keep existing notifications on error instead of clearing
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // Clear read notifications
-  const clearReadNotifications = async () => {
-    try {
-      await notificationsAPI.clearReadNotifications();
-      fetchNotifications();
-    } catch (error) {
-      console.error("Error clearing read notifications:", error);
+// Mark notification as read
+const markAsRead = async (notificationId) => {
+  try {
+    const response = await notificationsAPI.markAsRead(notificationId);
+    if (!response.ok) {
+      throw new Error('Failed to mark notification as read');
     }
-  };
+    await fetchNotifications();
+  } catch (error) {
+    console.error("Error marking notification as read:", error);
+  }
+};
+
+// Mark all as read
+const markAllAsRead = async () => {
+  try {
+    const response = await notificationsAPI.markAllAsRead();
+    if (!response.ok) {
+      throw new Error('Failed to mark all as read');
+    }
+    await fetchNotifications();
+  } catch (error) {
+    console.error("Error marking all as read:", error);
+  }
+};
+
+// Clear read notifications
+const clearReadNotifications = async () => {
+  try {
+    const response = await notificationsAPI.clearReadNotifications();
+    if (!response.ok) {
+      throw new Error('Failed to clear read notifications');
+    }
+    await fetchNotifications();
+  } catch (error) {
+    console.error("Error clearing read notifications:", error);
+  }
+};
 
   const getTimeAgo = (timestamp) => {
     const now = new Date();

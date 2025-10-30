@@ -302,7 +302,7 @@ const ServiceRequestModal = ({ onClose }) => {
                     <select
                       value={paymentMode}
                       onChange={(e) => setPaymentMode(e.target.value)}
-                      className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-400 text-sm"
+                      className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-800 text-sm"
                       required
                       disabled={isSubmitting}
                     >
@@ -321,7 +321,7 @@ const ServiceRequestModal = ({ onClose }) => {
                     <select
                       value={paymentTerms}
                       onChange={(e) => setPaymentTerms(e.target.value)}
-                      className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-400 text-sm"
+                      className="w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90C2] focus:border-transparent text-gray-800 text-sm"
                       required
                       disabled={isSubmitting}
                     >
