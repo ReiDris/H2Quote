@@ -30,15 +30,19 @@ const CustomerServiceRequestDetails = () => {
     return modeMap[mode] || mode;
   };
 
+  const formatPaymentTerms = (terms) => {
+    if (terms === "Down") return "Down Payment";
+    if (terms === "Full") return "Full Payment";
+    return terms;
+  };
+
   // Helper function to calculate subtotal (before discount) from services
   const calculateSubtotal = () => {
     if (!requestData || !requestData.services) return 0;
-    
+
     return requestData.services.reduce((sum, service) => {
       // Remove currency symbol and parse the number
-      const price = parseFloat(
-        service.totalPrice.replace(/[₱,]/g, "").trim()
-      );
+      const price = parseFloat(service.totalPrice.replace(/[₱,]/g, "").trim());
       return sum + (isNaN(price) ? 0 : price);
     }, 0);
   };
@@ -90,7 +94,8 @@ const CustomerServiceRequestDetails = () => {
           id: requestDetails.request_number,
           requestId: requestDetails.request_id,
           requestedAt: requestDetails.requested_at,
-          requestAcknowledgedDate: requestDetails.request_acknowledged_date || "-",
+          requestAcknowledgedDate:
+            requestDetails.request_acknowledged_date || "-",
           serviceStatus: requestDetails.service_status,
           paymentStatus: requestDetails.payment_status,
           warrantyStatus: requestDetails.warranty_status,
@@ -152,31 +157,32 @@ const CustomerServiceRequestDetails = () => {
 
   // ✅ UPDATED: Approve service request directly (quotation auto-created on submit)
   const handleApproveQuotation = async () => {
-  setApprovalLoading(true);
-  setApprovalError("");
+    setApprovalLoading(true);
+    setApprovalError("");
 
-  try {
-    const token = localStorage.getItem("h2quote_token");
-    
-    console.log('🚀 Sending approve request:', requestData.requestId); // ADD THIS
-    
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/service-requests/${requestData.requestId}/approve`,
-      {
-        method: "POST",  // Make sure this is POST
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          customerNotes: "Customer approved the service request"
-        }),
-      }
-    );
+    try {
+      const token = localStorage.getItem("h2quote_token");
 
-    console.log('📡 Response status:', response.status); // ADD THIS
-    console.log('📡 Response ok:', response.ok); // ADD THIS
+      console.log("🚀 Sending approve request:", requestData.requestId); // ADD THIS
 
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/service-requests/${
+          requestData.requestId
+        }/approve`,
+        {
+          method: "POST", // Make sure this is POST
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            customerNotes: "Customer approved the service request",
+          }),
+        }
+      );
+
+      console.log("📡 Response status:", response.status); // ADD THIS
+      console.log("📡 Response ok:", response.ok); // ADD THIS
 
       // Check if response is ok before parsing JSON
       if (!response.ok) {
@@ -200,7 +206,9 @@ const CustomerServiceRequestDetails = () => {
       }
     } catch (error) {
       console.error("Approval error:", error);
-      setApprovalError(error.message || "An error occurred while approving the service request");
+      setApprovalError(
+        error.message || "An error occurred while approving the service request"
+      );
     } finally {
       setApprovalLoading(false);
     }
@@ -374,8 +382,8 @@ const CustomerServiceRequestDetails = () => {
         </div>
 
         {/* DEBUG: Remove after testing */}
-        {console.log('Service Status:', requestData.serviceStatus)}
-        {console.log('Status Name (backend):', requestData.statusName)}
+        {console.log("Service Status:", requestData.serviceStatus)}
+        {console.log("Status Name (backend):", requestData.statusName)}
 
         {/* Approval/Messaging Banner - Shows when status is "Waiting for Approval" */}
         {requestData.serviceStatus === "Waiting for Approval" && (
@@ -397,10 +405,12 @@ const CustomerServiceRequestDetails = () => {
                   </p>
                   {requestData.quotation && (
                     <p className="text-xs text-gray-600 mb-4">
-                      <strong>Quotation #:</strong> {requestData.quotation.quotation_number}
+                      <strong>Quotation #:</strong>{" "}
+                      {requestData.quotation.quotation_number}
                       {requestData.quotation.valid_until && (
                         <span className="ml-3">
-                          <strong>Valid Until:</strong> {requestData.quotation.valid_until}
+                          <strong>Valid Until:</strong>{" "}
+                          {requestData.quotation.valid_until}
                         </span>
                       )}
                     </p>
@@ -546,7 +556,8 @@ const CustomerServiceRequestDetails = () => {
               </h2>
               <div className="text-right">
                 <p className="text-sm text-gray-500">
-                  Subtotal: ₱{calculateSubtotal().toLocaleString("en-US", {
+                  Subtotal: ₱
+                  {calculateSubtotal().toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -565,7 +576,8 @@ const CustomerServiceRequestDetails = () => {
             <div className="text-right">
               {requestData.discountPercentage > 0 && (
                 <p className="text-sm text-gray-500 line-through mb-1">
-                  ₱{calculateSubtotal().toLocaleString("en-US", {
+                  ₱
+                  {calculateSubtotal().toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -604,7 +616,7 @@ const CustomerServiceRequestDetails = () => {
                 Payment Terms:
               </label>
               <span className="text-sm text-gray-800">
-                {requestData.paymentTerms}
+                {formatPaymentTerms(requestData.paymentTerms)}
               </span>
             </div>
             <div>

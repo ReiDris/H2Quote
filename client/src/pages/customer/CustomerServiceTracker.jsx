@@ -211,7 +211,7 @@ const CustomerServiceTracker = () => {
 
   return (
     <CustomerLayout>
-      <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
+      <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden mb-15">
         {/* Search and Filter Section */}
         <div className="flex-shrink-0 mb-4 flex items-center justify-between gap-4">
           <div className="relative flex-1">
