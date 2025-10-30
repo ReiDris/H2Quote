@@ -113,7 +113,7 @@ const CustomerMessages = () => {
 
   return (
     <CustomerLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 mb-20">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-semibold text-gray-800 mb-2">
@@ -174,19 +174,6 @@ const CustomerMessages = () => {
                   }`}
                   onClick={() => handleMessageClick(message.id, message.isRead)}
                 >
-                  {/* Checkbox */}
-                  <div className="flex items-center mr-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedMessages.includes(message.id)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleCheckboxChange(message.id);
-                      }}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                  </div>
-
                   {/* Message Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
@@ -215,58 +202,72 @@ const CustomerMessages = () => {
               ))}
             </div>
           )}
-        </div>
 
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm rounded-lg">
-            {/* Previous Button */}
-            <button
-              onClick={() =>
-                setPagination((prev) => ({
-                  ...prev,
-                  page: Math.max(prev.page - 1, 1),
-                }))
-              }
-              disabled={pagination.page === 1}
-              className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
-                pagination.page === 1
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
-              }`}
-            >
-              <LucideArrowLeft className="w-4 mr-2" />
-              Previous
-            </button>
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm rounded-lg">
+              {/* Previous Button */}
+              <button
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    page: Math.max(prev.page - 1, 1),
+                  }))
+                }
+                disabled={pagination.page === 1}
+                className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
+                  pagination.page === 1
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
+              >
+                <LucideArrowLeft className="w-4 mr-2" />
+                Previous
+              </button>
 
-            {/* Page Numbers - Centered */}
-            <div className="flex items-center space-x-3">
-              <span className="text-gray-600">
-                Page {pagination.page} of {pagination.totalPages} (
-                {pagination.totalCount} total)
-              </span>
+              {/* Page Numbers - Clickable */}
+              <div className="flex items-center space-x-2">
+                {[...Array(pagination.totalPages)].map((_, index) => {
+                  const pageNumber = index + 1;
+                  return (
+                    <button
+                      key={pageNumber}
+                      onClick={() =>
+                        setPagination((prev) => ({ ...prev, page: pageNumber }))
+                      }
+                      className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                        pagination.page === pageNumber
+                          ? "bg-gray-200 text-gray-600"
+                        : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {pageNumber}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    page: Math.min(prev.page + 1, pagination.totalPages),
+                  }))
+                }
+                disabled={pagination.page === pagination.totalPages}
+                className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
+                  pagination.page === pagination.totalPages
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
+              >
+                Next
+                <LucideArrowRight className="w-4 ms-2" />
+              </button>
             </div>
-
-            {/* Next Button */}
-            <button
-              onClick={() =>
-                setPagination((prev) => ({
-                  ...prev,
-                  page: Math.min(prev.page + 1, pagination.totalPages),
-                }))
-              }
-              disabled={pagination.page === pagination.totalPages}
-              className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
-                pagination.page === pagination.totalPages
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
-              }`}
-            >
-              Next
-              <LucideArrowRight className="w-4 ms-2" />
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </CustomerLayout>
   );
