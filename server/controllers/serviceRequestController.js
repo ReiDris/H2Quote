@@ -3177,15 +3177,16 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // Ã¢Å“â€¦ FIXED: Recalculate payment breakdown amounts when discount changes
-    if (discount !== undefined) {
+    // ✅ FIXED: Always recalculate payment breakdown amounts to ensure they're correct
+    // This handles cases where: discount changes, items added/removed, or initial creation had issues
+    {
       // Get the current subtotal (before discount)
       const subtotalQuery = `
         SELECT 
           COALESCE(
-            (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = $1) +
-            (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = $1) +
-            (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = $1),
+            COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = $1), 0) +
+            COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = $1), 0) +
+            COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = $1), 0),
             0
           ) as subtotal,
           sr.payment_terms,

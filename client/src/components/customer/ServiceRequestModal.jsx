@@ -123,7 +123,7 @@ const ServiceRequestModal = ({ onClose }) => {
         setPreferredSchedule("");
         setSpecialRequirements("");
       } else {
-        setError(data.message || "Failed to create service request");
+        setError(data.message || "Failed to create service request, please recheck input fields before submitting.");
       }
     } catch (error) {
       console.error("Error submitting request:", error);
