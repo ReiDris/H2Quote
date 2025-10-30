@@ -430,6 +430,57 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
   };
 
+  const calculateFullPaymentStatus = () => {
+    if (!paymentBreakdown || paymentBreakdown.length === 0) {
+      return "Pending";
+    }
+
+    // Check if any payment is marked as Overdue
+    const hasOverdue = paymentBreakdown.some(
+      (payment) => payment.paymentStatus === "Overdue"
+    );
+
+    if (hasOverdue) {
+      return "Overdue";
+    }
+
+    // Check if payment deadline has passed and there are still pending payments
+    if (paymentDeadline) {
+      const deadline = new Date(paymentDeadline);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+
+      const hasPendingPayments = paymentBreakdown.some(
+        (payment) => payment.paymentStatus === "Pending"
+      );
+
+      if (deadline < today && hasPendingPayments) {
+        return "Overdue";
+      }
+    }
+
+    // Check if all payments are paid
+    const allPaid = paymentBreakdown.every(
+      (payment) => payment.paymentStatus === "Paid"
+    );
+
+    if (allPaid) {
+      return "Paid";
+    }
+
+    // Check if at least one payment is paid (partial payment)
+    const somePaid = paymentBreakdown.some(
+      (payment) => payment.paymentStatus === "Paid"
+    );
+
+    if (somePaid) {
+      return "Partial";
+    }
+
+    // Default to Pending
+    return "Pending";
+  };
+
   useEffect(() => {
     if (requestNumber) {
       fetchRequestDetails();
@@ -438,6 +489,14 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       }
     }
   }, [requestNumber, canAssignStaff]);
+
+  // Auto-calculate Full Payment Status based on payment breakdown
+  useEffect(() => {
+    if (paymentBreakdown && paymentBreakdown.length > 0) {
+      const calculatedStatus = calculateFullPaymentStatus();
+      setPaymentStatus(calculatedStatus);
+    }
+  }, [paymentBreakdown, paymentDeadline]);
 
   // Recalculate payment breakdown when discount changes
   useEffect(() => {
@@ -846,7 +905,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                   request, including all added services and the final quotation.
                   You may now proceed with the next steps.
                 </p>
-                <div className="flex items-center gap-2 text-sm text-gray-600 bg-white rounded px-3 py-2 inline-flex">
+                <div className="items-center gap-2 text-sm text-gray-600 bg-white rounded px-3 py-2 inline-flex">
                   <span className="font-medium">Status:</span>
                   <span className="text-green-700 font-semibold">
                     Ready to Begin Service
@@ -1220,16 +1279,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
               Full Payment Status:
             </label>
             <div className="mt-1">
-              <select
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-50 cursor-pointer"
-              >
-                <option value="Pending">Pending</option>
-                <option value="Partial">Partial</option>
-                <option value="Paid">Paid</option>
-                <option value="Overdue">Overdue</option>
-              </select>
+              {getStatusBadge(paymentStatus, "paymentStatus")}
             </div>
           </div>
           <div>
