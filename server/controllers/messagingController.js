@@ -498,6 +498,17 @@ const sendMessage = async (req, res) => {
     await client.query("COMMIT");
 
     try {
+      // Get sender's name
+      const senderQuery = await pool.query(
+        "SELECT first_name, last_name FROM users WHERE user_id = $1",
+        [senderId]
+      );
+
+      const senderName =
+        senderQuery.rows.length > 0
+          ? `${senderQuery.rows[0].first_name} ${senderQuery.rows[0].last_name}`
+          : req.user.email;
+
       const contentPreview =
         content.length > 100 ? content.substring(0, 100) + "..." : content;
 
@@ -505,7 +516,7 @@ const sendMessage = async (req, res) => {
         recipientId,
         "New Message",
         subject,
-        `You have received a new message from ${req.user.email}. ${contentPreview}`,
+        `You have received a new message from ${senderName}. ${contentPreview}`,
         recipientEmail
       );
 
@@ -542,6 +553,7 @@ const createServiceRequestMessage = async (req, res) => {
   const client = await pool.connect();
 
   try {
+    console.log("⚡ createServiceRequestMessage called!"); // ADD THIS LINE
     await client.query("BEGIN");
 
     const requestId = req.params.requestId;
@@ -656,22 +668,77 @@ const createServiceRequestMessage = async (req, res) => {
     await client.query("COMMIT");
 
     try {
+      console.log(
+        "🔔 Starting notification process for service request message"
+      );
+
+      // Get sender's name
+      const senderQuery = await pool.query(
+        "SELECT first_name, last_name FROM users WHERE user_id = $1",
+        [senderId]
+      );
+
+      const senderName =
+        senderQuery.rows.length > 0
+          ? `${senderQuery.rows[0].first_name} ${senderQuery.rows[0].last_name}`
+          : "Unknown User";
+
+      console.log("📧 Sender name:", senderName);
+
       const contentPreview =
         content.length > 100 ? content.substring(0, 100) + "..." : content;
 
-      await createNotification(
-        recipientId,
-        "New Service Request Message",
-        subject,
-        `New message regarding service request #${requestId}. ${contentPreview}`,
-        recipientEmail
-      );
+      // Notify all admins
+      const allAdminsQuery = `
+        SELECT user_id, email FROM users 
+        WHERE user_type = 'admin' AND status = 'Active'
+      `;
+      const allAdminsResult = await pool.query(allAdminsQuery);
+
+      console.log(`📢 Found ${allAdminsResult.rows.length} admins to notify`);
+
+      for (const admin of allAdminsResult.rows) {
+        console.log(`🔔 Notifying admin: ${admin.email}`);
+        await createNotification(
+          admin.user_id,
+          "Service Request", // ✅ Use this valid type
+          subject,
+          `New message from ${senderName}. ${contentPreview}`,
+          admin.email
+        );
+      }
+
+      // Notify assigned staff if exists
+      const assignedStaffQuery = `
+        SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
+        FROM service_requests sr
+        JOIN users u ON sr.assigned_to_staff_id = u.user_id
+        WHERE sr.request_id = $1 AND sr.assigned_to_staff_id IS NOT NULL AND u.status = 'Active'
+      `;
+      const assignedStaffResult = await pool.query(assignedStaffQuery, [
+        requestId,
+      ]);
 
       console.log(
-        `✅ Service request message notification sent to ${recipientEmail}`
+        `📢 Found ${assignedStaffResult.rows.length} assigned staff to notify`
       );
+
+      if (assignedStaffResult.rows.length > 0) {
+        const assignedStaff = assignedStaffResult.rows[0];
+        console.log(`🔔 Notifying assigned staff: ${assignedStaff.email}`);
+        await createNotification(
+          assignedStaff.assigned_to_staff_id,
+          "Service Request", // ✅ Use this valid type
+          subject,
+          `New message from ${senderName}. ${contentPreview}`,
+          assignedStaff.email
+        );
+      }
+
+      console.log(`✅ Service request message notifications sent successfully`);
     } catch (notifError) {
       console.error("❌ Failed to send notification:", notifError);
+      console.error("❌ Full error details:", notifError.stack);
     }
 
     res.status(201).json({
@@ -838,6 +905,17 @@ const replyToMessage = async (req, res) => {
     await client.query("COMMIT");
 
     try {
+      // Get sender's name
+      const senderQuery = await pool.query(
+        "SELECT first_name, last_name FROM users WHERE user_id = $1",
+        [senderId]
+      );
+
+      const senderName =
+        senderQuery.rows.length > 0
+          ? `${senderQuery.rows[0].first_name} ${senderQuery.rows[0].last_name}`
+          : req.user.email;
+
       const recipientName = `${recipientFirstName} ${recipientLastName}`.trim();
       const contentPreview =
         content.length > 100 ? content.substring(0, 100) + "..." : content;
@@ -846,7 +924,7 @@ const replyToMessage = async (req, res) => {
         recipientId,
         "New Message",
         `Reply to: ${original.subject}`,
-        `You have received a reply from ${req.user.email}. ${contentPreview}`,
+        `You have received a reply from ${senderName}. ${contentPreview}`,
         recipientEmail
       );
 

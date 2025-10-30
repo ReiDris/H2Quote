@@ -508,32 +508,42 @@ const createServiceRequest = async (req, res) => {
     }
 
     try {
-      const staffQuery = `
-        SELECT user_id, email, first_name, last_name 
-        FROM users 
-        WHERE user_type IN ('admin', 'staff') AND status = 'Active'
-      `;
-      const staffResult = await pool.query(staffQuery);
-
-      console.log(
-        `Creating notifications for ${staffResult.rows.length} admin/staff users`
+      // Get customer name for the notification
+      const customerQuery = await pool.query(
+        "SELECT first_name, last_name FROM users WHERE user_id = $1",
+        [req.user.id]
       );
 
-      for (const staff of staffResult.rows) {
+      const customerName =
+        customerQuery.rows.length > 0
+          ? `${customerQuery.rows[0].first_name} ${customerQuery.rows[0].last_name}`
+          : req.user.email;
+
+      // Only notify admins for new requests (staff will be notified when assigned)
+      const adminQuery = `
+        SELECT user_id, email, first_name, last_name 
+        FROM users 
+        WHERE user_type = 'admin' AND status = 'Active'
+      `;
+      const adminResult = await pool.query(adminQuery);
+
+      console.log(
+        `Creating notifications for ${adminResult.rows.length} admin users`
+      );
+
+      for (const admin of adminResult.rows) {
         await createNotification(
-          staff.user_id,
+          admin.user_id,
           "Service Request",
           `New Service Request - ${requestNumber}`,
-          `A new service request #${requestNumber} has been submitted by ${
-            req.user.email
-          }. Total cost: ₱${totalCost.toLocaleString()}`,
-          staff.email
+          `A new service request #${requestNumber} has been submitted by ${customerName}. Total cost: ₱${totalCost.toLocaleString()}`,
+          admin.email
         );
       }
 
-      console.log("Admin/staff notifications sent successfully");
+      console.log("Admin notifications sent successfully");
     } catch (notifError) {
-      console.error("Failed to create admin/staff notifications:", notifError);
+      console.error("Failed to create admin notifications:", notifError);
     }
 
     res.status(201).json({
@@ -1575,15 +1585,16 @@ const respondToQuotation = async (req, res) => {
     }
 
     try {
-      const staffQuery = `
+      // Notify all admins
+      const adminQuery = `
         SELECT user_id, email FROM users 
-        WHERE user_type IN ('admin', 'staff') AND status = 'Active'
+        WHERE user_type = 'admin' AND status = 'Active'
       `;
-      const staffResult = await pool.query(staffQuery);
+      const adminResult = await pool.query(adminQuery);
 
-      for (const staff of staffResult.rows) {
+      for (const admin of adminResult.rows) {
         await createNotification(
-          staff.user_id,
+          admin.user_id,
           "Quotation Response",
           `Quotation ${approved ? "Approved" : "Rejected"} - ${
             quotation.request_number
@@ -1593,11 +1604,43 @@ const respondToQuotation = async (req, res) => {
           } the quotation for service request #${quotation.request_number}. ${
             customerNotes ? `Note: ${customerNotes}` : ""
           }`,
-          staff.email
+          admin.email
         );
       }
 
-      console.log(`Admin/staff notifications sent about quotation response`);
+      // Notify assigned staff member only
+      const assignedStaffQuery = `
+        SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
+        FROM service_requests sr
+        JOIN users u ON sr.assigned_to_staff_id = u.user_id
+        WHERE sr.request_id = $1 AND sr.assigned_to_staff_id IS NOT NULL AND u.status = 'Active'
+      `;
+      const assignedStaffResult = await pool.query(assignedStaffQuery, [
+        quotation.request_id,
+      ]);
+
+      if (assignedStaffResult.rows.length > 0) {
+        const assignedStaff = assignedStaffResult.rows[0];
+        await createNotification(
+          assignedStaff.assigned_to_staff_id,
+          "Quotation Response",
+          `Quotation ${approved ? "Approved" : "Rejected"} - ${
+            quotation.request_number
+          }`,
+          `Customer ${quotation.customer_name} has ${
+            approved ? "approved" : "rejected"
+          } the quotation for service request #${
+            quotation.request_number
+          } (assigned to you). ${
+            customerNotes ? `Note: ${customerNotes}` : ""
+          }`,
+          assignedStaff.email
+        );
+      }
+
+      console.log(
+        `Admin and assigned staff notifications sent about quotation response`
+      );
     } catch (notifError) {
       console.error("Failed to notify staff:", notifError);
     }
@@ -3285,21 +3328,46 @@ const updateServiceRequest = async (req, res) => {
     await client.query("COMMIT");
 
     try {
-      if (backendStatus !== currentStatusName) {
-        let notificationMessage = `Your service request #${currentRequest.request_number} status has been updated to ${serviceStatus}.`;
+      if (
+        backendStatus !== currentStatusName &&
+        backendStatus !== "Assigned" &&
+        serviceStatus !== "Assigned"
+      ) {
+        let notificationMessage = "";
 
-        if (assignedStaffId && staffName) {
-          notificationMessage += ` Assigned to: ${staffName}.`;
-        }
-
-        if (backendStatus === "In Progress" && serviceStartDate) {
-          notificationMessage += ` Service will begin on ${new Date(
-            serviceStartDate
-          ).toLocaleDateString()}.`;
-        }
-
-        if (backendStatus === "Completed") {
-          notificationMessage += ` Thank you for choosing our services!`;
+        // Create user-friendly messages based on status
+        if (backendStatus === "Quote Sent") {
+          notificationMessage = `Your quotation for service request #${currentRequest.request_number} is ready for review.`;
+        } else if (backendStatus === "Quote Approved") {
+          notificationMessage = `Great news! Your service request #${currentRequest.request_number} has been approved. We'll begin work shortly.`;
+        } else if (backendStatus === "Waiting for Approval") {
+          notificationMessage = `Your service request #${currentRequest.request_number} is waiting for your approval.`;
+          if (assignedStaffId && staffName) {
+            notificationMessage += ` ${staffName} will be handling your service.`;
+          }
+        } else if (
+          backendStatus === "In Progress" ||
+          backendStatus === "Ongoing"
+        ) {
+          notificationMessage = `Your service request #${currentRequest.request_number} is now in progress.`;
+          if (serviceStartDate) {
+            notificationMessage += ` Service started on ${new Date(
+              serviceStartDate
+            ).toLocaleDateString()}.`;
+          }
+          if (assignedStaffId && staffName) {
+            notificationMessage += ` ${staffName} is working on it.`;
+          }
+        } else if (backendStatus === "Completed") {
+          notificationMessage = `Your service request #${currentRequest.request_number} has been completed. Thank you for choosing TRISHKAYE!`;
+        } else if (backendStatus === "Cancelled") {
+          notificationMessage = `Service request #${currentRequest.request_number} has been cancelled.`;
+        } else {
+          // Default fallback for any other status
+          notificationMessage = `Service request #${currentRequest.request_number} has been updated to ${serviceStatus}.`;
+          if (assignedStaffId && staffName) {
+            notificationMessage += ` Assigned to: ${staffName}.`;
+          }
         }
 
         await createServiceRequestNotification(
@@ -3320,6 +3388,7 @@ const updateServiceRequest = async (req, res) => {
         assignedStaffId !== currentRequest.assigned_to_staff_id &&
         staffName
       ) {
+        // Notify customer about staff assignment
         await createServiceRequestNotification(
           currentRequest.requested_by_user_id,
           currentRequest.request_number,
@@ -3331,6 +3400,40 @@ const updateServiceRequest = async (req, res) => {
         console.log(
           `Staff assignment notification sent to ${currentRequest.customer_email}`
         );
+
+        // NEW: Notify the assigned staff member
+        const staffEmailQuery = await pool.query(
+          "SELECT email, first_name FROM users WHERE user_id = $1",
+          [assignedStaffId]
+        );
+
+        if (staffEmailQuery.rows.length > 0) {
+          const staffEmail = staffEmailQuery.rows[0].email;
+          const staffFirstName = staffEmailQuery.rows[0].first_name;
+
+          // Get customer name for the notification
+          const customerNameQuery = await pool.query(
+            "SELECT first_name, last_name FROM users WHERE user_id = $1",
+            [currentRequest.requested_by_user_id]
+          );
+
+          const customerName =
+            customerNameQuery.rows.length > 0
+              ? `${customerNameQuery.rows[0].first_name} ${customerNameQuery.rows[0].last_name}`
+              : currentRequest.customer_email;
+
+          await createServiceRequestNotification(
+            assignedStaffId,
+            currentRequest.request_number,
+            requestId,
+            "Service Request Assignment",
+            `You have been assigned to service request #${currentRequest.request_number}. Customer: ${customerName}. Please review the request details and contact the customer to schedule the service.`
+          );
+
+          console.log(
+            `Assignment notification sent to staff member: ${staffEmail}`
+          );
+        }
       }
 
       if (paymentBreakdown && paymentBreakdown.length > 0) {
@@ -3573,6 +3676,7 @@ const approveServiceRequest = async (req, res) => {
   const client = await pool.connect();
 
   try {
+    console.log("🎯 approveServiceRequest called by user:", req.user.id); // ADD THIS
     await client.query("BEGIN");
 
     const { requestId } = req.params;
@@ -3676,29 +3780,65 @@ const approveServiceRequest = async (req, res) => {
     }
 
     try {
-      const staffQuery = `
-        SELECT user_id, email FROM users 
-        WHERE user_type IN ('admin', 'staff') AND status = 'Active'
-      `;
-      const staffResult = await pool.query(staffQuery);
+      console.log("📢 Starting admin/staff notification for approval"); // ADD THIS
 
-      for (const staff of staffResult.rows) {
+      // Notify all admins
+      const adminQuery = `
+    SELECT user_id, email FROM users 
+    WHERE user_type = 'admin' AND status = 'Active'
+  `;
+      const adminResult = await pool.query(adminQuery);
+
+      console.log(`📢 Found ${adminResult.rows.length} admins to notify`); // ADD THIS
+
+      for (const admin of adminResult.rows) {
+        console.log(`🔔 Notifying admin: ${admin.email}`); // ADD THIS
         await createNotification(
-          staff.user_id,
-          "Service Request Approved",
+          admin.user_id,
+          "Quote Approved", // ✅ Valid type
           `Approved - ${request.request_number}`,
           `Customer ${request.customer_name} has approved service request #${
             request.request_number
-          }. ${
-            customerNotes
-              ? `Note: ${customerNotes}`
-              : "You can now proceed with the service."
+          }${
+            customerNotes &&
+            customerNotes !== "Customer approved the service request"
+              ? `. Note: ${customerNotes}`
+              : ". You can now proceed with the service."
           }`,
-          staff.email
+          admin.email
         );
       }
 
-      console.log(`Admin/staff notifications sent about approval`);
+      // Notify assigned staff member only
+      const assignedStaffQuery = `
+        SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
+        FROM service_requests sr
+        JOIN users u ON sr.assigned_to_staff_id = u.user_id
+        WHERE sr.request_id = $1 AND sr.assigned_to_staff_id IS NOT NULL AND u.status = 'Active'
+      `;
+      const assignedStaffResult = await pool.query(assignedStaffQuery, [
+        requestId,
+      ]);
+
+      if (assignedStaffResult.rows.length > 0) {
+        const assignedStaff = assignedStaffResult.rows[0];
+        await createNotification(
+          assignedStaff.assigned_to_staff_id,
+          "Quote Approved",
+          `Approved - ${request.request_number}`,
+          `Customer ${request.customer_name} has approved service request #${
+            request.request_number
+          }${
+            customerNotes &&
+            customerNotes !== "Customer approved the service request"
+              ? `. Note: ${customerNotes}`
+              : ". You can now proceed with the service."
+          }`,
+          assignedStaff.email
+        );
+      }
+
+      console.log(`Admin and assigned staff notifications sent about approval`);
     } catch (notifError) {
       console.error("Failed to notify staff:", notifError);
     }
