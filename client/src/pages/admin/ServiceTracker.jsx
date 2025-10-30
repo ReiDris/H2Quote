@@ -48,7 +48,7 @@ const ServiceTracker = () => {
 
       if (data.success) {
         console.log("Fetched service requests:", data.data.requests);
-        
+
         // ✅ NO FRONTEND FILTERING - Backend now handles staff filtering
         setServiceRequests(data.data.requests);
         setTotalCount(data.data.pagination.totalCount);
@@ -257,19 +257,19 @@ const ServiceTracker = () => {
                       <td className="px-2 py-4 text-sm text-gray-800 whitespace-nowrap">
                         {formatDateTime(item.created_at)}
                       </td>
-                      <td 
+                      <td
                         className="px-2 py-4 text-sm text-gray-800 truncate max-w-[7rem]"
                         title={item.customer_name}
                       >
                         {item.customer_name}
                       </td>
-                      <td 
+                      <td
                         className="px-2 py-4 text-sm text-gray-800 truncate max-w-[8rem]"
                         title={item.company_name}
                       >
                         {item.company_name}
                       </td>
-                      <td 
+                      <td
                         className="px-2 py-4 text-sm text-gray-800 truncate max-w-[10rem]"
                         title={formatItemsSummary(item)}
                       >
@@ -285,7 +285,7 @@ const ServiceTracker = () => {
                           }
                         )}
                       </td>
-                      <td 
+                      <td
                         className="px-2 py-4 text-sm text-gray-800 truncate max-w-[7rem]"
                         title={item.assigned_staff_name || "-"}
                       >
@@ -348,9 +348,47 @@ const ServiceTracker = () => {
 
               {/* Page Numbers - Centered */}
               <div className="flex items-center space-x-3">
-                <span className="text-gray-600">
-                  Page {currentPage} of {totalPages} ({totalCount} total)
-                </span>
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                        currentPage === pageNum
+                          ? "bg-gray-200 text-gray-600"
+                          : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+
+                {/* Ellipsis if needed */}
+                {totalPages > 5 && currentPage < totalPages - 2 && (
+                  <>
+                    <span className="px-2 py-2 text-base text-gray-400">
+                      ...
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Next Button */}
