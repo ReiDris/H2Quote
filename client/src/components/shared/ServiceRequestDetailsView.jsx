@@ -1403,7 +1403,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                         }
                         handlePaymentStatusChange(index, e.target.value);
                       }}
-                      className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer"
+                      className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer w-48"
                     >
                       <option value="Pending">Pending</option>
                       <option
