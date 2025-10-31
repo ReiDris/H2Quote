@@ -32,7 +32,7 @@ const notificationRoutes = require('./routes/notifications');
 const clientRoutes = require('./routes/clients');
 const userRoutes = require('./routes/users');
 const activityLogRoutes = require('./routes/activityLog'); 
-const { schedulePaymentReminders } = require('./paymentScheduler');
+const { schedulePaymentNotifications } = require('./paymentNotificationScheduler');
 
 // Register routes
 app.use('/api/auth', authRoutes);
@@ -70,7 +70,8 @@ app.listen(PORT, () => {
     console.log(`Environment: ${process.env.NODE_ENV || 'production'}`);
     console.log('Server running');
 
-    schedulePaymentReminders
+    // ✅ FIXED: Initialize payment notification scheduler
+    schedulePaymentNotifications();
 });
 
 module.exports = app;

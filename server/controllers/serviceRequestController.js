@@ -4,6 +4,7 @@ const { createNotification } = require("./notificationController");
 const {
   createServiceRequestNotification,
 } = require("./notificationController");
+const { notifyPaymentDeadlineSet } = require("../paymentNotificationScheduler");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -20,20 +21,12 @@ const createDefaultPayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        CASE 
-  WHEN EXISTS (
-    SELECT 1 FROM service_request_items WHERE request_id = sr.request_id
-    UNION ALL
-    SELECT 1 FROM service_request_chemicals WHERE request_id = sr.request_id
-    UNION ALL
-    SELECT 1 FROM service_request_refrigerants WHERE request_id = sr.request_id
-  ) THEN 
-    COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-    COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-    COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-  ELSE 
-    sr.estimated_cost
-END as subtotal
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          sr.estimated_cost
+        ) as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
     `;
@@ -48,14 +41,22 @@ END as subtotal
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
+    // ✅ NEW: Track payments for notification
+    const paymentsToNotify = [];
+
     if (payment_terms === "Full" || !downpayment_percentage) {
-      await client.query(
+      // ✅ CHANGED: Add RETURNING clause
+      const insertResult = await client.query(
         `
        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
 VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
+RETURNING payment_phase, amount, due_date
       `,
         [requestId, estimated_cost]
       );
+
+      // ✅ NEW: Store payment info for notification
+      paymentsToNotify.push(insertResult.rows[0]);
     } else {
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
@@ -63,19 +64,44 @@ VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
       );
       const remainingAmount = estimated_cost - downpaymentAmount;
 
-      await client.query(
+      // ✅ CHANGED: Add RETURNING clause
+      const insertResult = await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
 VALUES 
   ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
   ($1, 'Completion Balance', $3, 'Pending', NULL)
-  -- Completion Balance due_date is set automatically when service is completed (via DB trigger)
+RETURNING payment_phase, amount, due_date
       `,
         [requestId, downpaymentAmount, remainingAmount]
+      );
+
+      // ✅ NEW: Store payments with due dates for notification
+      paymentsToNotify.push(
+        ...insertResult.rows.filter((p) => p.due_date !== null)
       );
     }
 
     await client.query("COMMIT");
+
+    // ✅ NEW: Send notifications for payments with due dates (Bug #3 & #7)
+    // Send notifications AFTER successful commit
+    for (const payment of paymentsToNotify) {
+      try {
+        await notifyPaymentDeadlineSet(
+          requestId,
+          payment.payment_phase,
+          payment.due_date,
+          payment.amount
+        );
+      } catch (notifError) {
+        console.error(
+          `Failed to send payment deadline notification:`,
+          notifError
+        );
+        // Don't throw - payment was created successfully, notification is secondary
+      }
+    }
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -83,6 +109,7 @@ VALUES
     client.release();
   }
 };
+
 const createDefaultQuotation = async (requestId) => {
   const client = await pool.connect();
   try {
@@ -193,21 +220,12 @@ const recreatePayments = async (requestId) => {
         sr.downpayment_percentage, 
         sr.payment_terms,
         sr.discount_percentage,
-        CASE 
-  WHEN EXISTS (
-    SELECT 1 FROM service_request_items WHERE request_id = sr.request_id
-    UNION ALL
-    SELECT 1 FROM service_request_chemicals WHERE request_id = sr.request_id
-    UNION ALL
-    SELECT 1 FROM service_request_refrigerants WHERE request_id = sr.request_id
-    LIMIT 1
-  ) THEN 
-    COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-    COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-    COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-  ELSE 
-    sr.estimated_cost
-END as subtotal
+        COALESCE(
+          (SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(src.line_total), 0) FROM service_request_chemicals src WHERE src.request_id = sr.request_id) +
+          (SELECT COALESCE(SUM(srr.line_total), 0) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id),
+          sr.estimated_cost
+        ) as subtotal
       FROM service_requests sr
       WHERE sr.request_id = $1
     `;
@@ -222,14 +240,22 @@ END as subtotal
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
+    // ✅ NEW: Track payments for notification
+    const paymentsToNotify = [];
+
     if (payment_terms === "Full" || !downpayment_percentage) {
-      await client.query(
+      // ✅ CHANGED: Add RETURNING clause
+      const insertResult = await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-        VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
+VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
+RETURNING payment_phase, amount, due_date
       `,
         [requestId, estimated_cost]
       );
+
+      // ✅ NEW: Store payment info for notification
+      paymentsToNotify.push(insertResult.rows[0]);
     } else {
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
@@ -237,18 +263,44 @@ END as subtotal
       );
       const remainingAmount = estimated_cost - downpaymentAmount;
 
-      await client.query(
+      // ✅ CHANGED: Add RETURNING clause
+      const insertResult = await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-        VALUES 
-          ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-          ($1, 'Completion Balance', $3, 'Pending', NULL)
+VALUES 
+  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
+  ($1, 'Completion Balance', $3, 'Pending', NULL)
+RETURNING payment_phase, amount, due_date
       `,
         [requestId, downpaymentAmount, remainingAmount]
+      );
+
+      // ✅ NEW: Store payments with due dates for notification
+      paymentsToNotify.push(
+        ...insertResult.rows.filter((p) => p.due_date !== null)
       );
     }
 
     await client.query("COMMIT");
+
+    // ✅ NEW: Send notifications for payments with due dates (Bug #3 & #7)
+    // Send notifications AFTER successful commit
+    for (const payment of paymentsToNotify) {
+      try {
+        await notifyPaymentDeadlineSet(
+          requestId,
+          payment.payment_phase,
+          payment.due_date,
+          payment.amount
+        );
+      } catch (notifError) {
+        console.error(
+          `Failed to send payment deadline notification:`,
+          notifError
+        );
+        // Don't throw - payment was created successfully, notification is secondary
+      }
+    }
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
