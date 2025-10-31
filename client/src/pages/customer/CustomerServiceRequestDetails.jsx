@@ -13,6 +13,7 @@ const CustomerServiceRequestDetails = () => {
   const [requestData, setRequestData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentWarranty, setCurrentWarranty] = useState("Not set");
 
   // State for approval modal
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -47,6 +48,42 @@ const CustomerServiceRequestDetails = () => {
     }, 0);
   };
 
+  // Calculate warranty display from service items only (exclude chemicals/refrigerants)
+  const calculateWarrantyDisplay = (services) => {
+    if (!services || services.length === 0) {
+      return "Not set";
+    }
+
+    // Filter to only actual services (exclude chemicals and refrigerants)
+    const actualServices = services.filter(
+      (item) => item.itemType === "service"
+    );
+
+    if (actualServices.length === 0) {
+      return "Not set";
+    }
+
+    // Get all unique warranty months from actual services only
+    const warrantyValues = actualServices
+      .map((service) => service.warranty_months)
+      .filter((value) => value !== null && value !== undefined);
+
+    if (warrantyValues.length === 0) {
+      return "Not set";
+    }
+
+    // Check if all warranty values are the same
+    const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
+
+    if (allSame) {
+      const months = warrantyValues[0];
+      return `${months} ${months === 1 ? "month" : "months"}`;
+    } else {
+      // If different values, show "Varies"
+      return "Varies";
+    }
+  };
+
   // Payment proof modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -59,6 +96,14 @@ const CustomerServiceRequestDetails = () => {
       fetchRequestDetails();
     }
   }, [requestId]);
+
+  // Update warranty display whenever services change
+  useEffect(() => {
+    if (requestData && requestData.services) {
+      const warrantyDisplay = calculateWarrantyDisplay(requestData.services);
+      setCurrentWarranty(warrantyDisplay);
+    }
+  }, [requestData?.services]);
 
   const fetchRequestDetails = async () => {
     try {
@@ -106,6 +151,10 @@ const CustomerServiceRequestDetails = () => {
             quantity: item.quantity,
             unitPrice: item.unit_price,
             totalPrice: item.total_price,
+            itemType: item.item_type,
+            warranty_months: item.warranty_months || 6,
+            warranty_status: item.warranty_status || "Not Set",
+            warranty_start_date: item.warranty_start_date || "",
           })),
           paymentHistory: requestDetails.paymentHistory || [],
           estimatedDuration: requestDetails.estimated_duration || "3 - 7 Days",
@@ -544,9 +593,7 @@ const CustomerServiceRequestDetails = () => {
               <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Warranty: (In Months)
               </label>
-              <span className="text-sm text-gray-800">
-                {requestData.warranty}
-              </span>
+              <span className="text-sm text-gray-800">{currentWarranty}</span>
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
@@ -594,6 +641,12 @@ const CustomerServiceRequestDetails = () => {
                   <th className="px-3 py-3 text-center text-xs font-semibold text-black">
                     Total Price
                   </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Warranty (Months)
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-black">
+                    Warranty Status
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -616,6 +669,21 @@ const CustomerServiceRequestDetails = () => {
                     </td>
                     <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
                       {service.totalPrice}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-gray-800 text-center">
+                      {service.itemType === "service"
+                        ? service.warranty_months || "-"
+                        : "-"}
+                    </td>
+                    <td className="px-3 py-4 text-xs xl:text-sm text-center">
+                      {service.itemType === "service" ? (
+                        getStatusBadge(
+                          service.warranty_status || "Not Set",
+                          "warrantyStatus"
+                        )
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
                     </td>
                   </tr>
                 ))}
