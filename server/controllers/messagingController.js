@@ -119,12 +119,16 @@ const getInboxMessages = async (req, res) => {
               END`
         } as "senderCompany",
         COALESCE(ms.reply_count, 0) as reply_count,
-        COALESCE(ms.has_replies, false) as has_replies
+        COALESCE(ms.has_replies, false) as has_replies,
+        sr.request_number as related_request_number,
+        CONCAT(assigned_staff.first_name, ' ', assigned_staff.last_name) as assigned_staff_name
       FROM messages m
       JOIN users sender ON m.sender_id = sender.user_id
       JOIN users recipient ON m.recipient_id = recipient.user_id
       LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
       LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
+      LEFT JOIN service_requests sr ON m.related_request_id = sr.request_id
+      LEFT JOIN users assigned_staff ON sr.assigned_to_staff_id = assigned_staff.user_id
       LEFT JOIN message_stats ms ON m.message_id = ms.message_id
       LEFT JOIN message_read_status mrs ON m.message_id = mrs.message_id AND mrs.user_id = $${readStatusUserParam}
       WHERE ${whereClause}
@@ -168,6 +172,8 @@ const getInboxMessages = async (req, res) => {
       messageType: msg.message_type,
       hasReplies: msg.has_replies,
       replyCount: parseInt(msg.reply_count),
+      relatedRequestNumber: msg.related_request_number || null,
+      assignedStaff: msg.assigned_staff_name || null,
     }));
 
     res.json({
