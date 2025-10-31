@@ -56,40 +56,40 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   };
 
   // Calculate warranty display from service items only (exclude chemicals/refrigerants)
-const calculateWarrantyDisplay = (services) => {
-  if (!services || services.length === 0) {
-    return "Not set";
-  }
+  const calculateWarrantyDisplay = (services) => {
+    if (!services || services.length === 0) {
+      return "Not set";
+    }
 
-  // Filter to only actual services (exclude chemicals and refrigerants)
-  const actualServices = services.filter(
-    (item) => item.itemType === "service"
-  );
+    // Filter to only actual services (exclude chemicals and refrigerants)
+    const actualServices = services.filter(
+      (item) => item.itemType === "service"
+    );
 
-  if (actualServices.length === 0) {
-    return "Not set";
-  }
+    if (actualServices.length === 0) {
+      return "Not set";
+    }
 
-  // Get all unique warranty months from actual services only
-  const warrantyValues = actualServices
-    .map((service) => service.warranty_months)
-    .filter((value) => value !== null && value !== undefined);
+    // Get all unique warranty months from actual services only
+    const warrantyValues = actualServices
+      .map((service) => service.warranty_months)
+      .filter((value) => value !== null && value !== undefined);
 
-  if (warrantyValues.length === 0) {
-    return "Not set";
-  }
+    if (warrantyValues.length === 0) {
+      return "Not set";
+    }
 
-  // Check if all warranty values are the same
-  const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
+    // Check if all warranty values are the same
+    const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
 
-  if (allSame) {
-    const months = warrantyValues[0];
-    return `${months} ${months === 1 ? "month" : "months"}`;
-  } else {
-    // If different values, show "Varies"
-    return "Varies";
-  }
-};
+    if (allSame) {
+      const months = warrantyValues[0];
+      return `${months} ${months === 1 ? "month" : "months"}`;
+    } else {
+      // If different values, show "Varies"
+      return "Varies";
+    }
+  };
 
   // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
@@ -433,6 +433,10 @@ const calculateWarrantyDisplay = (services) => {
           warrantyStatus: requestDetails.warranty_status || "Pending",
           remarks: requestDetails.remarks || "-",
           serviceStatus: requestDetails.service_status || "Pending",
+          serviceLocation: requestDetails.site_location || "Not specified",
+          preferredSchedule:
+            requestDetails.preferred_schedule || "Not specified",
+          specialRequirements: requestDetails.special_requirements || "None",
         };
 
         // ✅ Auto-correct inconsistent status from database (legacy data fix)
@@ -1096,19 +1100,6 @@ const calculateWarrantyDisplay = (services) => {
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Warranty: (In Months)
-            </label>
-            <span className="text-sm text-gray-800">{currentWarranty}</span>
-          </div>
-          <div>
-            <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Customer Remarks:
-            </label>
-            <span className="text-sm text-gray-800">{requestData.remarks}</span>
-          </div>
-
-          <div className="col-span-2">
-            <label className="inline text-sm font-medium text-gray-700 mr-2">
               Assigned Staff:
             </label>
             {canAssignStaff ? (
@@ -1134,6 +1125,44 @@ const calculateWarrantyDisplay = (services) => {
                 {requestData.assignedStaff}
               </span>
             )}
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Preferred Schedule:
+            </label>
+            <span className="text-sm text-gray-800">
+              {requestData.preferredSchedule === "Not specified"
+                ? requestData.preferredSchedule
+                : formatDate(requestData.preferredSchedule)}
+            </span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Special Requirements:
+            </label>
+            <span className="text-sm text-gray-800">
+              {requestData.specialRequirements}
+            </span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Customer Remarks:
+            </label>
+            <span className="text-sm text-gray-800">{requestData.remarks}</span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Site Location:
+            </label>
+            <span className="text-sm text-gray-800">
+              {requestData.serviceLocation}
+            </span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Warranty: (In Months)
+            </label>
+            <span className="text-sm text-gray-800">{currentWarranty}</span>
           </div>
         </div>
 

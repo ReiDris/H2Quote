@@ -5,7 +5,7 @@ import CustomerLayout from "../../layouts/CustomerLayout";
 import PaymentProofUploadModal from "./PaymentProofUploadModal";
 import PaymentProofViewer from "../../components/shared/PaymentProofViewer";
 import { serviceRequestsAPI } from "../../config/api";
-import { formatPaymentDate, formatDateTime } from "../../utils/dateUtils";
+import { formatPaymentDate, formatDateTime, formatDate} from "../../utils/dateUtils";
 
 const CustomerServiceRequestDetails = () => {
   const navigate = useNavigate();
@@ -170,6 +170,10 @@ const CustomerServiceRequestDetails = () => {
           warranty: requestDetails.warranty || "6 months",
           statusName: requestDetails.status_name, // Backend status name
           quotation: quotation, // Store quotation information
+          remarks: requestDetails.remarks || "-",
+          serviceLocation: requestDetails.site_location || "-",
+          preferredSchedule: requestDetails.preferred_schedule || "-",
+          specialRequirements: requestDetails.special_requirements || "-",
         };
 
         setRequestData(transformedData);
@@ -591,17 +595,51 @@ const CustomerServiceRequestDetails = () => {
             </div>
             <div>
               <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Warranty: (In Months)
-              </label>
-              <span className="text-sm text-gray-800">{currentWarranty}</span>
-            </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
                 Assigned Staff:
               </label>
               <span className="text-sm text-gray-800">
                 {requestData.assignedStaff}
               </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Preferred Schedule:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.preferredSchedule === "Not specified"
+                  ? requestData.preferredSchedule
+                  : formatDate(requestData.preferredSchedule)}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Special Requirements:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.specialRequirements}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Customer Remarks:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.remarks}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Site Location:
+              </label>
+              <span className="text-sm text-gray-800">
+                {requestData.serviceLocation}
+              </span>
+            </div>
+            <div>
+              <label className="inline text-sm font-medium text-gray-700 mr-2">
+                Warranty: (In Months)
+              </label>
+              <span className="text-sm text-gray-800">{currentWarranty}</span>
             </div>
           </div>
 
