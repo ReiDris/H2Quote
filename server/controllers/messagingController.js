@@ -119,12 +119,16 @@ const getInboxMessages = async (req, res) => {
               END`
         } as "senderCompany",
         COALESCE(ms.reply_count, 0) as reply_count,
-        COALESCE(ms.has_replies, false) as has_replies
+        COALESCE(ms.has_replies, false) as has_replies,
+        sr.request_number as related_request_number,
+        CONCAT(assigned_staff.first_name, ' ', assigned_staff.last_name) as assigned_staff_name
       FROM messages m
       JOIN users sender ON m.sender_id = sender.user_id
       JOIN users recipient ON m.recipient_id = recipient.user_id
       LEFT JOIN companies sender_company ON sender.company_id = sender_company.company_id
       LEFT JOIN companies recipient_company ON recipient.company_id = recipient_company.company_id
+      LEFT JOIN service_requests sr ON m.related_request_id = sr.request_id
+      LEFT JOIN users assigned_staff ON sr.assigned_to_staff_id = assigned_staff.user_id
       LEFT JOIN message_stats ms ON m.message_id = ms.message_id
       LEFT JOIN message_read_status mrs ON m.message_id = mrs.message_id AND mrs.user_id = $${readStatusUserParam}
       WHERE ${whereClause}
@@ -168,6 +172,8 @@ const getInboxMessages = async (req, res) => {
       messageType: msg.message_type,
       hasReplies: msg.has_replies,
       replyCount: parseInt(msg.reply_count),
+      relatedRequestNumber: msg.related_request_number || null,
+      assignedStaff: msg.assigned_staff_name || null,
     }));
 
     res.json({
@@ -907,7 +913,7 @@ const replyToMessage = async (req, res) => {
     try {
       // Get sender's name
       const senderQuery = await pool.query(
-        "SELECT first_name, last_name FROM users WHERE user_id = $1",
+        "SELECT first_name, last_name, user_type FROM users WHERE user_id = $1",
         [senderId]
       );
 
@@ -916,21 +922,81 @@ const replyToMessage = async (req, res) => {
           ? `${senderQuery.rows[0].first_name} ${senderQuery.rows[0].last_name}`
           : req.user.email;
 
-      const recipientName = `${recipientFirstName} ${recipientLastName}`.trim();
+      const senderUserType = senderQuery.rows[0]?.user_type;
+
       const contentPreview =
         content.length > 100 ? content.substring(0, 100) + "..." : content;
 
-      await createNotification(
-        recipientId,
-        "New Message",
-        `Reply to: ${original.subject}`,
-        `You have received a reply from ${senderName}. ${contentPreview}`,
-        recipientEmail
-      );
+      // Check if this is a service request message AND sender is a client
+      if (original.related_request_id && senderUserType === "client") {
+        console.log(
+          "🔔 Client replied to service request message - notifying all admins and assigned staff"
+        );
 
-      console.log(
-        `✅ Reply notification sent to ${recipientEmail} (${recipientName})`
-      );
+        // Notify all admins
+        const allAdminsQuery = `
+          SELECT user_id, email FROM users 
+          WHERE user_type = 'admin' AND status = 'Active'
+        `;
+        const allAdminsResult = await pool.query(allAdminsQuery);
+
+        console.log(
+          `📢 Notifying ${allAdminsResult.rows.length} admins about client reply`
+        );
+
+        for (const admin of allAdminsResult.rows) {
+          await createNotification(
+            admin.user_id,
+            "New Message",
+            `Reply to: ${original.subject}`,
+            `${senderName} replied to service request message. ${contentPreview}`,
+            admin.email
+          );
+        }
+
+        // Notify assigned staff if exists
+        const assignedStaffQuery = `
+          SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
+          FROM service_requests sr
+          JOIN users u ON sr.assigned_to_staff_id = u.user_id
+          WHERE sr.request_id = $1 AND sr.assigned_to_staff_id IS NOT NULL AND u.status = 'Active'
+        `;
+        const assignedStaffResult = await pool.query(assignedStaffQuery, [
+          original.related_request_id,
+        ]);
+
+        if (assignedStaffResult.rows.length > 0) {
+          const assignedStaff = assignedStaffResult.rows[0];
+          console.log(`📢 Notifying assigned staff: ${assignedStaff.email}`);
+          await createNotification(
+            assignedStaff.assigned_to_staff_id,
+            "New Message",
+            `Reply to: ${original.subject}`,
+            `${senderName} replied to service request message (assigned to you). ${contentPreview}`,
+            assignedStaff.email
+          );
+        }
+
+        console.log(
+          `✅ Client reply notifications sent to admins and assigned staff`
+        );
+      } else {
+        // For non-service-request messages or replies from admin/staff, notify only the direct recipient
+        const recipientName =
+          `${recipientFirstName} ${recipientLastName}`.trim();
+
+        await createNotification(
+          recipientId,
+          "New Message",
+          `Reply to: ${original.subject}`,
+          `You have received a reply from ${senderName}. ${contentPreview}`,
+          recipientEmail
+        );
+
+        console.log(
+          `✅ Reply notification sent to ${recipientEmail} (${recipientName})`
+        );
+      }
     } catch (notifError) {
       console.error("❌ Failed to send reply notification:", notifError);
     }

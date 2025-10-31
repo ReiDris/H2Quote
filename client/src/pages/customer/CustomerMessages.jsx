@@ -154,7 +154,10 @@ const CustomerMessages = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-black whitespace-nowrap">
-                    Sender
+                    Service Request
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-black whitespace-nowrap">
+                    Assigned Staff
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-black whitespace-nowrap">
                     Subject
@@ -180,6 +183,15 @@ const CustomerMessages = () => {
                       }
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
+                        <p className="text-sm text-gray-700 font-medium">
+                          {message.relatedRequestNumber || (
+                            <span className="text-gray-400 italic">
+                              General Inquiry
+                            </span>
+                          )}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <p
                           className={`text-sm ${
                             !message.isRead
@@ -187,7 +199,11 @@ const CustomerMessages = () => {
                               : "font-medium text-gray-700"
                           }`}
                         >
-                          {message.sender}
+                          {message.assignedStaff || (
+                            <span className="text-gray-500 italic">
+                              Not assigned
+                            </span>
+                          )}
                         </p>
                       </td>
                       <td className="px-6 py-4">
@@ -213,7 +229,7 @@ const CustomerMessages = () => {
                 ) : (
                   <tr>
                     <td
-                      colSpan="4"
+                      colSpan="5"
                       className="px-6 py-8 text-center text-gray-500"
                     >
                       No messages found

@@ -37,6 +37,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
 
+  const [currentWarranty, setCurrentWarranty] = useState("Not set");
+
   const formatPaymentMode = (mode) => {
     const modeMap = {
       bank_transfer: "Bank Transfer",
@@ -51,6 +53,42 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     if (terms === "Down") return "Down Payment";
     if (terms === "Full") return "Full Payment";
     return terms;
+  };
+
+  // Calculate warranty display from service items only (exclude chemicals/refrigerants)
+  const calculateWarrantyDisplay = (services) => {
+    if (!services || services.length === 0) {
+      return "Not set";
+    }
+
+    // Filter to only actual services (exclude chemicals and refrigerants)
+    const actualServices = services.filter(
+      (item) => item.itemType === "service"
+    );
+
+    if (actualServices.length === 0) {
+      return "Not set";
+    }
+
+    // Get all unique warranty months from actual services only
+    const warrantyValues = actualServices
+      .map((service) => service.warranty_months)
+      .filter((value) => value !== null && value !== undefined);
+
+    if (warrantyValues.length === 0) {
+      return "Not set";
+    }
+
+    // Check if all warranty values are the same
+    const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
+
+    if (allSame) {
+      const months = warrantyValues[0];
+      return `${months} ${months === 1 ? "month" : "months"}`;
+    } else {
+      // If different values, show "Varies"
+      return "Varies";
+    }
   };
 
   // State for payment breakdown individual status changes
@@ -178,6 +216,42 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       );
       setShowStatusRestrictionModal(true);
       return;
+    }
+
+    // ✅ NEW: Check if trying to set to "Completed" from "Ongoing" without payment deadline
+    if (newStatus === "Completed" && serviceStatus === "Ongoing") {
+      if (
+        !paymentDeadline ||
+        paymentDeadline === "" ||
+        paymentDeadline === "Not set"
+      ) {
+        setStatusRestrictionMessage(
+          <div className="space-y-3">
+            <p className="font-semibold text-gray-900">
+              Cannot set status to Completed
+            </p>
+            <p className="text-gray-700 leading-relaxed">
+              Please set a payment deadline for the completion balance before
+              marking the service as completed.
+            </p>
+            <p className="text-gray-700 leading-relaxed">
+              This ensures the customer knows when to submit their final
+              payment.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">Action Required:</span> Set the
+                payment deadline in the "Payment Deadline" field below before
+                changing the status to Completed.
+              </p>
+            </div>
+          </div>
+        );
+        setShowStatusRestrictionModal(true);
+        // Keep the current status unchanged
+        setServiceStatus(serviceStatus);
+        return;
+      }
     }
 
     // Automatically set service start date when status changes to Ongoing
@@ -359,6 +433,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           warrantyStatus: requestDetails.warranty_status || "Pending",
           remarks: requestDetails.remarks || "-",
           serviceStatus: requestDetails.service_status || "Pending",
+          serviceLocation: requestDetails.site_location || "Not specified",
+          preferredSchedule:
+            requestDetails.preferred_schedule || "Not specified",
+          specialRequirements: requestDetails.special_requirements || "None",
         };
 
         // ✅ Auto-correct inconsistent status from database (legacy data fix)
@@ -497,6 +575,22 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       setPaymentStatus(calculatedStatus);
     }
   }, [paymentBreakdown, paymentDeadline]);
+
+  // Update warranty display whenever services change
+  useEffect(() => {
+    if (requestData && requestData.services) {
+      const warrantyDisplay = calculateWarrantyDisplay(requestData.services);
+      setCurrentWarranty(warrantyDisplay);
+    }
+  }, [requestData?.services]);
+
+  // Recalculate payment breakdown when discount changes
+  useEffect(() => {
+    if (requestData && paymentBreakdown.length > 0) {
+      recalculatePaymentBreakdown();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDiscount, customDiscountPercent]);
 
   // Recalculate payment breakdown when discount changes
   useEffect(() => {
@@ -1006,29 +1100,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Warranty: (In Months)
-            </label>
-            <span className="text-sm text-gray-800">
-              {requestData.warranty}
-            </span>
-          </div>
-          <div>
-            <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Customer Remarks:
-            </label>
-            <span className="text-sm text-gray-800">{requestData.remarks}</span>
-          </div>
-          <div>
-            <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Warranty Fulfillment Status:
-            </label>
-            <span className="text-sm text-gray-800">
-              {requestData.warrantyStatus}
-            </span>
-          </div>
-
-          <div className="col-span-2">
-            <label className="inline text-sm font-medium text-gray-700 mr-2">
               Assigned Staff:
             </label>
             {canAssignStaff ? (
@@ -1054,6 +1125,44 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                 {requestData.assignedStaff}
               </span>
             )}
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Preferred Schedule:
+            </label>
+            <span className="text-sm text-gray-800">
+              {requestData.preferredSchedule === "Not specified"
+                ? requestData.preferredSchedule
+                : formatDate(requestData.preferredSchedule)}
+            </span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Special Requirements:
+            </label>
+            <span className="text-sm text-gray-800">
+              {requestData.specialRequirements}
+            </span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Customer Remarks:
+            </label>
+            <span className="text-sm text-gray-800">{requestData.remarks}</span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Site Location:
+            </label>
+            <span className="text-sm text-gray-800">
+              {requestData.serviceLocation}
+            </span>
+          </div>
+          <div>
+            <label className="inline text-sm font-medium text-gray-700 mr-2">
+              Warranty: (In Months)
+            </label>
+            <span className="text-sm text-gray-800">{currentWarranty}</span>
           </div>
         </div>
 
@@ -1403,7 +1512,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                         }
                         handlePaymentStatusChange(index, e.target.value);
                       }}
-                      className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer w-48"
+                      disabled={payment.paymentStatus === "Paid"}
+                      className={`text-xs xl:text-sm border border-gray-300 rounded p-2 w-48 ${
+                        payment.paymentStatus === "Paid"
+                          ? "bg-gray-100 cursor-not-allowed text-gray-500"
+                          : "cursor-pointer"
+                      }`}
                     >
                       <option value="Pending">Pending</option>
                       <option
