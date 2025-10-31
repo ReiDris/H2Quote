@@ -1106,14 +1106,6 @@ const calculateWarrantyDisplay = (services) => {
             </label>
             <span className="text-sm text-gray-800">{requestData.remarks}</span>
           </div>
-          <div>
-            <label className="inline text-sm font-medium text-gray-700 mr-2">
-              Warranty Fulfillment Status:
-            </label>
-            <span className="text-sm text-gray-800">
-              {requestData.warrantyStatus}
-            </span>
-          </div>
 
           <div className="col-span-2">
             <label className="inline text-sm font-medium text-gray-700 mr-2">
