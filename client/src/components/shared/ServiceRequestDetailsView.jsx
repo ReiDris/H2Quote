@@ -180,6 +180,42 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return;
     }
 
+    // ✅ NEW: Check if trying to set to "Completed" from "Ongoing" without payment deadline
+    if (newStatus === "Completed" && serviceStatus === "Ongoing") {
+      if (
+        !paymentDeadline ||
+        paymentDeadline === "" ||
+        paymentDeadline === "Not set"
+      ) {
+        setStatusRestrictionMessage(
+          <div className="space-y-3">
+            <p className="font-semibold text-gray-900">
+              Cannot set status to Completed
+            </p>
+            <p className="text-gray-700 leading-relaxed">
+              Please set a payment deadline for the completion balance before
+              marking the service as completed.
+            </p>
+            <p className="text-gray-700 leading-relaxed">
+              This ensures the customer knows when to submit their final
+              payment.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">Action Required:</span> Set the
+                payment deadline in the "Payment Deadline" field below before
+                changing the status to Completed.
+              </p>
+            </div>
+          </div>
+        );
+        setShowStatusRestrictionModal(true);
+        // Keep the current status unchanged
+        setServiceStatus(serviceStatus);
+        return;
+      }
+    }
+
     // Automatically set service start date when status changes to Ongoing
     if (newStatus === "Ongoing" && serviceStatus !== "Ongoing") {
       const today = new Date().toISOString().split("T")[0];
