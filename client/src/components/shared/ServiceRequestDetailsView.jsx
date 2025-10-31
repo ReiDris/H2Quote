@@ -37,6 +37,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(null);
 
+  const [currentWarranty, setCurrentWarranty] = useState("Not set");
+
   const formatPaymentMode = (mode) => {
     const modeMap = {
       bank_transfer: "Bank Transfer",
@@ -52,6 +54,42 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     if (terms === "Full") return "Full Payment";
     return terms;
   };
+
+  // Calculate warranty display from service items only (exclude chemicals/refrigerants)
+const calculateWarrantyDisplay = (services) => {
+  if (!services || services.length === 0) {
+    return "Not set";
+  }
+
+  // Filter to only actual services (exclude chemicals and refrigerants)
+  const actualServices = services.filter(
+    (item) => item.itemType === "service"
+  );
+
+  if (actualServices.length === 0) {
+    return "Not set";
+  }
+
+  // Get all unique warranty months from actual services only
+  const warrantyValues = actualServices
+    .map((service) => service.warranty_months)
+    .filter((value) => value !== null && value !== undefined);
+
+  if (warrantyValues.length === 0) {
+    return "Not set";
+  }
+
+  // Check if all warranty values are the same
+  const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
+
+  if (allSame) {
+    const months = warrantyValues[0];
+    return `${months} ${months === 1 ? "month" : "months"}`;
+  } else {
+    // If different values, show "Varies"
+    return "Varies";
+  }
+};
 
   // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
@@ -533,6 +571,22 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       setPaymentStatus(calculatedStatus);
     }
   }, [paymentBreakdown, paymentDeadline]);
+
+  // Update warranty display whenever services change
+  useEffect(() => {
+    if (requestData && requestData.services) {
+      const warrantyDisplay = calculateWarrantyDisplay(requestData.services);
+      setCurrentWarranty(warrantyDisplay);
+    }
+  }, [requestData?.services]);
+
+  // Recalculate payment breakdown when discount changes
+  useEffect(() => {
+    if (requestData && paymentBreakdown.length > 0) {
+      recalculatePaymentBreakdown();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDiscount, customDiscountPercent]);
 
   // Recalculate payment breakdown when discount changes
   useEffect(() => {
@@ -1044,9 +1098,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             <label className="inline text-sm font-medium text-gray-700 mr-2">
               Warranty: (In Months)
             </label>
-            <span className="text-sm text-gray-800">
-              {requestData.warranty}
-            </span>
+            <span className="text-sm text-gray-800">{currentWarranty}</span>
           </div>
           <div>
             <label className="inline text-sm font-medium text-gray-700 mr-2">
@@ -1439,7 +1491,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                         }
                         handlePaymentStatusChange(index, e.target.value);
                       }}
-                      className="text-xs xl:text-sm border border-gray-300 rounded p-2 cursor-pointer w-48"
+                      disabled={payment.paymentStatus === "Paid"}
+                      className={`text-xs xl:text-sm border border-gray-300 rounded p-2 w-48 ${
+                        payment.paymentStatus === "Paid"
+                          ? "bg-gray-100 cursor-not-allowed text-gray-500"
+                          : "cursor-pointer"
+                      }`}
                     >
                       <option value="Pending">Pending</option>
                       <option
