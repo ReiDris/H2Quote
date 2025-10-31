@@ -603,14 +603,6 @@ const CustomerServiceRequestDetails = () => {
                 {requestData.assignedStaff}
               </span>
             </div>
-            <div>
-              <label className="inline text-sm font-medium text-gray-700 mr-2">
-                Warranty Fulfillment Status:
-              </label>
-              <span className="text-sm text-gray-800">
-                {requestData.warrantyStatus}
-              </span>
-            </div>
           </div>
 
           <div className="flex items-center justify-between mb-4">
