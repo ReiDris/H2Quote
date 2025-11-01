@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import AdminLayout from "../../layouts/AdminLayout";
 import { usersAPI } from "../../config/api";
 import { CgMaximizeAlt } from "react-icons/cg";
-import { X } from "lucide-react";
+import { X, Archive, ArchiveRestore } from "lucide-react";
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState([]);
@@ -13,12 +13,20 @@ const UserManagementPage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedRole, setSelectedRole] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
-  
+
   // Alert modal states
   const [showAlertModal, setShowAlertModal] = useState(false);
-  const [alertType, setAlertType] = useState("success"); // "success" or "error"
+  const [alertType, setAlertType] = useState("success");
   const [alertMessage, setAlertMessage] = useState("");
-  
+
+  // Archive confirmation modal
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+
+  // Archived users view
+  const [showArchivedView, setShowArchivedView] = useState(false);
+  const [archivedUsers, setArchivedUsers] = useState([]);
+  const [loadingArchived, setLoadingArchived] = useState(false);
+
   const usersPerPage = 10;
 
   // Fetch users from API
@@ -32,7 +40,7 @@ const UserManagementPage = () => {
       setError(null);
 
       const response = await usersAPI.getAllUsers();
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -42,9 +50,9 @@ const UserManagementPage = () => {
       if (!contentType || !contentType.includes("application/json")) {
         throw new Error("Server returned non-JSON response");
       }
-      
+
       const data = await response.json();
-      
+
       if (data.success && data.data) {
         setUsers(data.data);
       } else if (Array.isArray(data)) {
@@ -52,12 +60,43 @@ const UserManagementPage = () => {
       } else {
         throw new Error("Unexpected data format");
       }
-      
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching users:', err);
+      console.error("Error fetching users:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchArchivedUsers = async () => {
+    try {
+      setLoadingArchived(true);
+
+      console.log("🔍 Fetching archived users...");
+      const response = await usersAPI.getArchivedUsers();
+
+      console.log("📡 Response status:", response.status);
+      console.log("📡 Response OK:", response.ok);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error("❌ Error response:", errorData);
+        throw new Error(errorData?.message || "Failed to fetch archived users");
+      }
+
+      const data = await response.json();
+      console.log("✅ Archived users data:", data);
+
+      if (data.success && data.data) {
+        setArchivedUsers(data.data);
+      } else {
+        setArchivedUsers([]);
+      }
+    } catch (err) {
+      console.error("❌ Full error:", err);
+      showAlert("error", "Failed to fetch archived users: " + err.message);
+    } finally {
+      setLoadingArchived(false);
     }
   };
 
@@ -91,42 +130,116 @@ const UserManagementPage = () => {
 
     try {
       setIsUpdating(true);
-      
+
       const response = await usersAPI.updateUser(selectedUser.user_id, {
-        user_type: selectedRole
+        user_type: selectedRole,
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update user role');
+        throw new Error("Failed to update user role");
       }
 
       const data = await response.json();
-      
+
       if (data.success) {
-        // Update local state
-        setUsers(users.map(u => 
-          u.user_id === selectedUser.user_id 
-            ? { ...u, user_type: selectedRole }
-            : u
-        ));
-        
+        setUsers(
+          users.map((u) =>
+            u.user_id === selectedUser.user_id
+              ? { ...u, user_type: selectedRole }
+              : u
+          )
+        );
+
         handleCloseModal();
         showAlert("success", "User role updated successfully!");
       } else {
-        throw new Error(data.message || 'Failed to update user role');
+        throw new Error(data.message || "Failed to update user role");
       }
-      
     } catch (err) {
-      console.error('Error updating user role:', err);
+      console.error("Error updating user role:", err);
       showAlert("error", "Failed to update user role: " + err.message);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const handleArchiveUser = () => {
-    // Function to be implemented later
-    showAlert("success", "Archive functionality will be implemented later");
+  const handleArchiveClick = () => {
+    setShowModal(false);
+    setShowArchiveConfirm(true);
+  };
+
+  const handleArchiveUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      setIsUpdating(true);
+
+      const response = await usersAPI.archiveUser(selectedUser.user_id);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to archive user");
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUsers(users.filter((u) => u.user_id !== selectedUser.user_id));
+
+        setShowArchiveConfirm(false);
+        setSelectedUser(null);
+        showAlert("success", "User archived successfully!");
+      } else {
+        throw new Error(data.message || "Failed to archive user");
+      }
+    } catch (err) {
+      console.error("Error archiving user:", err);
+      showAlert("error", "Failed to archive user: " + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRestoreUser = async (user) => {
+    try {
+      setIsUpdating(true);
+
+      const response = await usersAPI.restoreUser(user.user_id);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to restore user");
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setArchivedUsers(
+          archivedUsers.filter((u) => u.user_id !== user.user_id)
+        );
+
+        await fetchUsers();
+
+        showAlert("success", "User restored successfully!");
+      } else {
+        throw new Error(data.message || "Failed to restore user");
+      }
+    } catch (err) {
+      console.error("Error restoring user:", err);
+      showAlert("error", "Failed to restore user: " + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleViewArchived = () => {
+    setShowArchivedView(true);
+    fetchArchivedUsers();
+  };
+
+  const handleCloseArchivedView = () => {
+    setShowArchivedView(false);
+    setArchivedUsers([]);
   };
 
   // Pagination logic
@@ -148,13 +261,13 @@ const UserManagementPage = () => {
   };
 
   const formatUserId = (userId) => {
-    return `#USER${userId.toString().padStart(2, '0')}`;
+    return `#USER${userId.toString().padStart(2, "0")}`;
   };
 
   const formatRole = (userType) => {
-    if (userType === 'admin') return 'Administrator';
-    if (userType === 'staff') return 'Staff';
-    return 'Client';
+    if (userType === "admin") return "Administrator";
+    if (userType === "staff") return "Staff";
+    return "Client";
   };
 
   if (loading) {
@@ -190,8 +303,17 @@ const UserManagementPage = () => {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
+        <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold text-[#004785]">Users</h1>
+
+          {/* View Archived Button */}
+          <button
+            onClick={handleViewArchived}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+          >
+            <Archive size={18} />
+            View Archived Users
+          </button>
         </div>
 
         {/* Table Section */}
@@ -246,7 +368,10 @@ const UserManagementPage = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    <td
+                      colSpan="5"
+                      className="px-6 py-8 text-center text-gray-500"
+                    >
                       No users found
                     </td>
                   </tr>
@@ -268,13 +393,13 @@ const UserManagementPage = () => {
             >
               ← Previous
             </button>
-            
+
             <div className="flex items-center gap-2">
               <span className="px-4 py-2 text-sm font-medium bg-gray-100 rounded-md">
                 {currentPage}
               </span>
             </div>
-            
+
             <button
               onClick={handleNextPage}
               disabled={currentPage === totalPages || totalPages === 0}
@@ -296,9 +421,7 @@ const UserManagementPage = () => {
           <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-2 border-b border-gray-200 mb-4">
-              <h2 className="text-lg font-bold text-[#004785]">
-                Manage User
-              </h2>
+              <h2 className="text-lg font-bold text-[#004785]">Manage User</h2>
               <button
                 onClick={handleCloseModal}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -312,18 +435,28 @@ const UserManagementPage = () => {
               {/* User Info */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-600">User ID:</span>
-                  <span className="text-sm text-gray-900">{formatUserId(selectedUser.user_id)}</span>
+                  <span className="text-sm font-medium text-gray-600">
+                    User ID:
+                  </span>
+                  <span className="text-sm text-gray-900">
+                    {formatUserId(selectedUser.user_id)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-600">Name:</span>
+                  <span className="text-sm font-medium text-gray-600">
+                    Name:
+                  </span>
                   <span className="text-sm text-gray-900">
                     {`${selectedUser.first_name} ${selectedUser.last_name}`.trim()}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-600">Email:</span>
-                  <span className="text-sm text-gray-900">{selectedUser.email}</span>
+                  <span className="text-sm font-medium text-gray-600">
+                    Email:
+                  </span>
+                  <span className="text-sm text-gray-900">
+                    {selectedUser.email}
+                  </span>
                 </div>
               </div>
 
@@ -347,7 +480,9 @@ const UserManagementPage = () => {
               <div className="space-y-3 pt-2">
                 <button
                   onClick={handleRoleChange}
-                  disabled={isUpdating || selectedRole === selectedUser.user_type}
+                  disabled={
+                    isUpdating || selectedRole === selectedUser.user_type
+                  }
                   className={`w-full px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer ${
                     isUpdating || selectedRole === selectedUser.user_type
                       ? "bg-gray-300 text-gray-500 cursor-not-allowed"
@@ -358,7 +493,7 @@ const UserManagementPage = () => {
                 </button>
 
                 <button
-                  onClick={handleArchiveUser}
+                  onClick={handleArchiveClick}
                   disabled={isUpdating}
                   className={`w-full px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer ${
                     isUpdating
@@ -385,16 +520,168 @@ const UserManagementPage = () => {
         </div>
       )}
 
+      {/* Archive Confirmation Modal */}
+      {showArchiveConfirm && selectedUser && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+          <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 mb-4">
+              <h2 className="text-lg font-bold text-[#004785]">
+                Confirm Archive
+              </h2>
+              <button
+                onClick={() => {
+                  setShowArchiveConfirm(false);
+                  setShowModal(true);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isUpdating}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-black text-sm mb-4">
+                Are you sure you want to archive this user?
+              </p>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">
+                    Name:
+                  </span>
+                  <span className="text-sm text-gray-900">
+                    {`${selectedUser.first_name} ${selectedUser.last_name}`.trim()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">
+                    Email:
+                  </span>
+                  <span className="text-sm text-gray-900">
+                    {selectedUser.email}
+                  </span>
+                </div>
+              </div>
+              <p className="text-gray-600 text-xs mt-4">
+                This will suspend their account and remove them from the active
+                users list. You can restore them later from the archived users
+                view.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowArchiveConfirm(false);
+                  setShowModal(true);
+                }}
+                disabled={isUpdating}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleArchiveUser}
+                disabled={isUpdating}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  isUpdating
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+                }`}
+              >
+                {isUpdating ? "Archiving..." : "Archive User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archived Users Modal */}
+      {showArchivedView && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-5 w-[800px] max-w-[90vw] mx-4 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 mb-4">
+              <h2 className="text-lg font-bold text-[#004785]">
+                Archived Users
+              </h2>
+              <button
+                onClick={handleCloseArchivedView}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto">
+              {loadingArchived ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-600">Loading archived users...</div>
+                </div>
+              ) : archivedUsers.length > 0 ? (
+                <div className="space-y-3">
+                  {archivedUsers.map((user) => (
+                    <div
+                      key={user.user_id}
+                      className="bg-gray-50 rounded-lg p-4 flex items-center justify-between"
+                    >
+                      <div className="space-y-1">
+                        <div className="font-medium text-gray-900">
+                          {`${user.first_name} ${user.last_name}`.trim()}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {user.email}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Role: {formatRole(user.user_type)} • User ID:{" "}
+                          {formatUserId(user.user_id)}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRestoreUser(user)}
+                        disabled={isUpdating}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                          isUpdating
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-green-600 text-white hover:bg-green-700 cursor-pointer"
+                        }`}
+                      >
+                        <ArchiveRestore size={16} />
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                  <Archive size={48} className="mb-3 text-gray-400" />
+                  <p>No archived users found</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-4 border-t border-gray-200 mt-4">
+              <button
+                onClick={handleCloseArchivedView}
+                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Alert Modal for Success/Error */}
       {showAlertModal && (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center">
           <div className="bg-white rounded-3xl p-5 w-120 max-w-md mx-4">
             <h2 className="text-lg font-bold text-[#004785] mb-4 pb-2 border-b border-gray-200">
               {alertType === "success" ? "Success" : "Error"}
             </h2>
-            <p className="text-black mb-6 text-sm">
-              {alertMessage}
-            </p>
+            <p className="text-black mb-6 text-sm">{alertMessage}</p>
             <div className="flex gap-3">
               <button
                 onClick={closeAlertModal}
