@@ -1408,7 +1408,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                 type="date"
                 value={paymentDeadline}
                 onChange={(e) => setPaymentDeadline(e.target.value)}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 cursor-pointer text-gray-400"
+                className="text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 cursor-pointer text-gray-900"
               />
             </div>
           </div>
@@ -1592,7 +1592,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
                 disabled={serviceStatus !== "Completed"}
                 className={`text-sm border border-gray-300 rounded-lg px-2 py-2 w-50 ${
                   serviceStatus === "Completed"
-                    ? "cursor-pointer text-gray-400"
+                    ? "cursor-pointer text-gray-800"
                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
                 }`}
               />
