@@ -41,22 +41,14 @@ const createDefaultPayments = async (requestId) => {
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
-    // ✅ NEW: Track payments for notification
-    const paymentsToNotify = [];
-
     if (payment_terms === "Full" || !downpayment_percentage) {
-      // ✅ CHANGED: Add RETURNING clause
-      const insertResult = await client.query(
+      await client.query(
         `
-       INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
-RETURNING payment_phase, amount, due_date
+      INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+    VALUES ($1, 'Full Payment', $2, 'Pending', NULL)
       `,
         [requestId, estimated_cost]
       );
-
-      // ✅ NEW: Store payment info for notification
-      paymentsToNotify.push(insertResult.rows[0]);
     } else {
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
@@ -64,44 +56,19 @@ RETURNING payment_phase, amount, due_date
       );
       const remainingAmount = estimated_cost - downpaymentAmount;
 
-      // ✅ CHANGED: Add RETURNING clause
-      const insertResult = await client.query(
+      await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES 
-  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-  ($1, 'Completion Balance', $3, 'Pending', NULL)
-RETURNING payment_phase, amount, due_date
+    VALUES 
+      ($1, 'Down Payment', $2, 'Pending', NULL), 
+      ($1, 'Completion Balance', $3, 'Pending', NULL)
       `,
         [requestId, downpaymentAmount, remainingAmount]
-      );
-
-      // ✅ NEW: Store payments with due dates for notification
-      paymentsToNotify.push(
-        ...insertResult.rows.filter((p) => p.due_date !== null)
       );
     }
 
     await client.query("COMMIT");
 
-    // ✅ NEW: Send notifications for payments with due dates (Bug #3 & #7)
-    // Send notifications AFTER successful commit
-    for (const payment of paymentsToNotify) {
-      try {
-        await notifyPaymentDeadlineSet(
-          requestId,
-          payment.payment_phase,
-          payment.due_date,
-          payment.amount
-        );
-      } catch (notifError) {
-        console.error(
-          `Failed to send payment deadline notification:`,
-          notifError
-        );
-        // Don't throw - payment was created successfully, notification is secondary
-      }
-    }
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -240,22 +207,14 @@ const recreatePayments = async (requestId) => {
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const estimated_cost = subtotal - discountAmount;
 
-    // ✅ NEW: Track payments for notification
-    const paymentsToNotify = [];
-
     if (payment_terms === "Full" || !downpayment_percentage) {
-      // ✅ CHANGED: Add RETURNING clause
-      const insertResult = await client.query(
+      await client.query(
         `
-        INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES ($1, 'Full Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days')
-RETURNING payment_phase, amount, due_date
+      INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
+    VALUES ($1, 'Full Payment', $2, 'Pending', NULL)
       `,
         [requestId, estimated_cost]
       );
-
-      // ✅ NEW: Store payment info for notification
-      paymentsToNotify.push(insertResult.rows[0]);
     } else {
       const downpaymentPercent = downpayment_percentage || 50;
       const downpaymentAmount = Math.round(
@@ -263,44 +222,18 @@ RETURNING payment_phase, amount, due_date
       );
       const remainingAmount = estimated_cost - downpaymentAmount;
 
-      // ✅ CHANGED: Add RETURNING clause
-      const insertResult = await client.query(
+      await client.query(
         `
         INSERT INTO payments (request_id, payment_phase, amount, status, due_date)
-VALUES 
-  ($1, 'Down Payment', $2, 'Pending', CURRENT_DATE + INTERVAL '7 days'), 
-  ($1, 'Completion Balance', $3, 'Pending', NULL)
-RETURNING payment_phase, amount, due_date
+    VALUES 
+      ($1, 'Down Payment', $2, 'Pending', NULL), 
+      ($1, 'Completion Balance', $3, 'Pending', NULL)
       `,
         [requestId, downpaymentAmount, remainingAmount]
-      );
-
-      // ✅ NEW: Store payments with due dates for notification
-      paymentsToNotify.push(
-        ...insertResult.rows.filter((p) => p.due_date !== null)
       );
     }
 
     await client.query("COMMIT");
-
-    // ✅ NEW: Send notifications for payments with due dates (Bug #3 & #7)
-    // Send notifications AFTER successful commit
-    for (const payment of paymentsToNotify) {
-      try {
-        await notifyPaymentDeadlineSet(
-          requestId,
-          payment.payment_phase,
-          payment.due_date,
-          payment.amount
-        );
-      } catch (notifError) {
-        console.error(
-          `Failed to send payment deadline notification:`,
-          notifError
-        );
-        // Don't throw - payment was created successfully, notification is secondary
-      }
-    }
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
