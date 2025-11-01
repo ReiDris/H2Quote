@@ -11,3 +11,4 @@ fuckin notif updates
 redploy for notif updates
 dami neto gagi, fixed mga bugs maliban sa notifs for payment - to follow to
 payment notifs scheduler deployment fucker
+fixed duplicate payments and payment proof notif
