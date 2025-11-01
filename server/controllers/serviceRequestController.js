@@ -3037,7 +3037,7 @@ const updateServiceRequest = async (req, res) => {
     const currentRequestQuery = `
       SELECT sr.assigned_to_staff_id, sr.actual_completion_date, 
              sr.request_acknowledged_date, rs.status_name as current_status_name,
-             sr.requested_by_user_id, sr.request_number,
+             sr.requested_by_user_id, sr.request_number, sr.payment_deadline,
              u.email as customer_email, 
              CONCAT(u.first_name, ' ', u.last_name) as customer_name
       FROM service_requests sr
@@ -3342,9 +3342,20 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // Update payment statuses if provided
+    // Update payment statuses if provided and track which ones changed to "Paid"
+    const newlyPaidPayments = [];
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
+        // Get the old status before updating
+        const oldStatusResult = await client.query(
+          `SELECT status FROM payments 
+          WHERE request_id = $1 AND payment_phase = $2`,
+          [requestId, payment.phase]
+        );
+
+        const oldStatus = oldStatusResult.rows[0]?.status;
+
+        // Update the payment
         await client.query(
           `UPDATE payments
           SET status = $1,
@@ -3353,6 +3364,63 @@ const updateServiceRequest = async (req, res) => {
           WHERE request_id = $2 AND payment_phase = $3`,
           [payment.paymentStatus, requestId, payment.phase]
         );
+
+        // Track if this payment just changed to "Paid" (not already "Paid")
+        if (payment.paymentStatus === "Paid" && oldStatus !== "Paid") {
+          newlyPaidPayments.push(payment.phase);
+        }
+      }
+    }
+
+    // ✅ Check if payment deadline was just set and notify
+    const oldPaymentDeadline = currentRequest.payment_deadline;
+    const deadlineWasSet = !oldPaymentDeadline && paymentDeadline;
+
+    if (deadlineWasSet) {
+      console.log(
+        `💳 Payment deadline set for request ${requestId}: ${paymentDeadline}`
+      );
+
+      // Update due_date for all pending payments to match the payment_deadline
+      await client.query(
+        `UPDATE payments 
+     SET due_date = $1, updated_at = NOW() 
+     WHERE request_id = $2 AND status = 'Pending'`,
+        [paymentDeadline, requestId]
+      );
+
+      // Get payment information for notifications
+      const paymentsInfoQuery = `
+    SELECT payment_phase, amount, due_date
+    FROM payments
+    WHERE request_id = $1 AND status = 'Pending'
+    ORDER BY payment_id
+  `;
+      const paymentsInfo = await client.query(paymentsInfoQuery, [requestId]);
+
+      // Store payment info to send notifications after commit
+      if (paymentsInfo.rows.length > 0) {
+        // After COMMIT, send notifications asynchronously
+        setImmediate(async () => {
+          try {
+            for (const paymentInfo of paymentsInfo.rows) {
+              await notifyPaymentDeadlineSet(
+                requestId,
+                paymentInfo.payment_phase,
+                paymentDeadline,
+                paymentInfo.amount
+              );
+            }
+            console.log(
+              `✅ Payment deadline notifications sent for request ${requestId}`
+            );
+          } catch (notifError) {
+            console.error(
+              "❌ Failed to send payment deadline notifications:",
+              notifError
+            );
+          }
+        });
       }
     }
 
@@ -3488,22 +3556,22 @@ const updateServiceRequest = async (req, res) => {
         }
       }
 
-      if (paymentBreakdown && paymentBreakdown.length > 0) {
-        const paidPayments = paymentBreakdown.filter(
-          (p) => p.paymentStatus === "Paid"
+      // Only notify about payments that JUST changed to "Paid"
+      if (newlyPaidPayments.length > 0) {
+        // ← This checks the NEW variable we created earlier
+        const paidPhases = newlyPaidPayments.join(", "); // ← Uses the payments that JUST changed
+        await createServiceRequestNotification(
+          currentRequest.requested_by_user_id,
+          currentRequest.request_number,
+          requestId,
+          "Payment Confirmed",
+          `Payment received for service request #${currentRequest.request_number}. Phase(s): ${paidPhases}. Thank you!`
         );
-        if (paidPayments.length > 0) {
-          const paidPhases = paidPayments.map((p) => p.phase).join(", ");
-          await createServiceRequestNotification(
-            currentRequest.requested_by_user_id,
-            currentRequest.request_number,
-            requestId,
-            "Payment Confirmed",
-            `Payment received for service request #${currentRequest.request_number}. Phase(s): ${paidPhases}. Thank you!`
-          );
 
-          console.log("Payment notification sent to customer");
-        }
+        console.log(
+          "Payment notification sent to customer for newly paid phases:",
+          paidPhases
+        );
       }
     } catch (notifError) {
       console.error("Failed to create customer notification:", notifError);
