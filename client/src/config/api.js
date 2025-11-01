@@ -163,7 +163,7 @@ export const serviceRequestsAPI = {
     return fetchWithAuth(`/service-requests/${requestId}/add-chemicals`, {
       method: "POST",
       body: JSON.stringify({
-        chemicals, 
+        chemicals,
         adminNotes,
       }),
     });
@@ -173,7 +173,7 @@ export const serviceRequestsAPI = {
     return fetchWithAuth(`/service-requests/${requestId}/add-refrigerants`, {
       method: "POST",
       body: JSON.stringify({
-        refrigerants, 
+        refrigerants,
         adminNotes,
       }),
     });
@@ -182,14 +182,14 @@ export const serviceRequestsAPI = {
   removeChemicals: (requestId, chemicalItemIds) => {
     return fetchWithAuth(`/service-requests/${requestId}/remove-chemicals`, {
       method: "DELETE",
-      body: JSON.stringify({ chemicalItemIds }), 
+      body: JSON.stringify({ chemicalItemIds }),
     });
   },
 
   removeRefrigerants: (requestId, refrigerantItemIds) => {
     return fetchWithAuth(`/service-requests/${requestId}/remove-refrigerants`, {
       method: "DELETE",
-      body: JSON.stringify({ refrigerantItemIds }), 
+      body: JSON.stringify({ refrigerantItemIds }),
     });
   },
 
@@ -205,21 +205,24 @@ export const serviceRequestsAPI = {
   },
 
   approveQuotation: (quotationId, approved, customerNotes = "") => {
-    return fetchWithAuth(`/service-requests/quotations/${quotationId}/respond`, {
-      method: "PUT",
-      body: JSON.stringify({
-        approved,
-        customerNotes,
-      }),
-    });
+    return fetchWithAuth(
+      `/service-requests/quotations/${quotationId}/respond`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          approved,
+          customerNotes,
+        }),
+      }
+    );
   },
 
   approveServiceRequest: (requestId, notes = null) => {
-  return fetchWithAuth(`/service-requests/${requestId}/approve`, {
-    method: "POST",  // ✅ Change from PUT to POST
-    body: JSON.stringify({ customerNotes: notes }),
-  });
-},
+    return fetchWithAuth(`/service-requests/${requestId}/approve`, {
+      method: "POST", // ✅ Change from PUT to POST
+      body: JSON.stringify({ customerNotes: notes }),
+    });
+  },
 };
 
 export const authAPI = {
@@ -234,7 +237,7 @@ export const authAPI = {
   signup: (formData) => {
     return fetch(`${API_URL}/auth/signup`, {
       method: "POST",
-      body: formData, 
+      body: formData,
     });
   },
 
@@ -278,7 +281,6 @@ export const authAPI = {
     });
   },
 };
-
 
 export const messagingAPI = {
   getInbox: (params) => {
@@ -431,6 +433,22 @@ export const usersAPI = {
   deleteUser: (userId) => {
     return fetchWithAuth(`/users/${userId}`, {
       method: "DELETE",
+    });
+  },
+
+  archiveUser: (userId) => {
+    return fetchWithAuth(`/users/${userId}/archive`, {
+      method: "PUT",
+    });
+  },
+
+  getArchivedUsers: () => {
+    return fetchWithAuth("/users/archived");
+  },
+
+  restoreUser: (userId) => {
+    return fetchWithAuth(`/users/${userId}/restore`, {
+      method: "PUT",
     });
   },
 };
