@@ -53,6 +53,20 @@ async function testDatabaseStructure() {
       return false;
     }
     
+    // Check service_requests has payment_deadline column
+    const requestsCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'service_requests' 
+        AND column_name = 'payment_deadline'
+    `);
+    
+    if (requestsCheck.rows.length === 1) {
+      log.success('Service requests table has payment_deadline column');
+    } else {
+      log.warning('Service requests table missing payment_deadline column');
+    }
+    
     // Check notifications table
     const notificationsCheck = await pool.query(`
       SELECT column_name 
@@ -77,12 +91,13 @@ async function testDatabaseStructure() {
 }
 
 // ============================================================================
-// Test 2: Check Pending Payments
+// Test 2: Check Pending Payments (WITH DEADLINES ONLY)
 // ============================================================================
 async function testPendingPayments() {
-  log.title('TEST 2: Checking Pending Payments');
+  log.title('TEST 2: Checking Pending Payments (WITH DEADLINES)');
   
   try {
+    // ✅ Updated query to match the scheduler's filtering
     const result = await pool.query(`
       SELECT 
         p.payment_id,
@@ -91,19 +106,37 @@ async function testPendingPayments() {
         p.due_date,
         p.status,
         sr.request_number,
+        sr.payment_deadline,
         CURRENT_DATE - p.due_date as days_overdue,
         p.due_date - CURRENT_DATE as days_until_due
       FROM payments p
       JOIN service_requests sr ON p.request_id = sr.request_id
-      WHERE p.status = 'Pending' AND p.due_date IS NOT NULL
+      WHERE p.status = 'Pending' 
+        AND p.due_date IS NOT NULL
+        AND sr.payment_deadline IS NOT NULL
       ORDER BY p.due_date ASC
       LIMIT 10
     `);
     
-    log.info(`Found ${result.rows.length} pending payments with due dates`);
+    log.info(`Found ${result.rows.length} pending payments WITH deadlines`);
+    
+    // Also show how many don't have deadlines (for info)
+    const noDeadlineResult = await pool.query(`
+      SELECT COUNT(*) as count
+      FROM payments p
+      JOIN service_requests sr ON p.request_id = sr.request_id
+      WHERE p.status = 'Pending' 
+        AND (p.due_date IS NULL OR sr.payment_deadline IS NULL)
+    `);
+    
+    const noDeadlineCount = parseInt(noDeadlineResult.rows[0].count);
+    if (noDeadlineCount > 0) {
+      log.info(`(${noDeadlineCount} pending payments WITHOUT deadlines - these will be SKIPPED)`);
+    }
     
     if (result.rows.length === 0) {
-      log.warning('No pending payments found. Create some test data to see notifications.');
+      log.warning('No pending payments WITH deadlines found.');
+      log.info('💡 Set payment deadlines for service requests to test notifications');
       return false;
     }
     
@@ -111,11 +144,13 @@ async function testPendingPayments() {
     const overdue = result.rows.filter(p => parseInt(p.days_until_due) < 0);
     const dueToday = result.rows.filter(p => parseInt(p.days_until_due) === 0);
     const dueIn3Days = result.rows.filter(p => parseInt(p.days_until_due) === 3);
-    const upcoming = result.rows.filter(p => parseInt(p.days_until_due) > 0 && parseInt(p.days_until_due) !== 3);
+    const dueIn7Days = result.rows.filter(p => parseInt(p.days_until_due) === 7);
+    const upcoming = result.rows.filter(p => parseInt(p.days_until_due) > 0 && ![3, 7].includes(parseInt(p.days_until_due)));
     
     log.info(`  • Overdue: ${overdue.length}`);
     log.info(`  • Due Today: ${dueToday.length}`);
     log.info(`  • Due in 3 Days: ${dueIn3Days.length}`);
+    log.info(`  • Due in 7 Days: ${dueIn7Days.length}`);
     log.info(`  • Upcoming: ${upcoming.length}`);
     
     // Show details of actionable payments
@@ -140,6 +175,13 @@ async function testPendingPayments() {
       });
     }
     
+    if (dueIn7Days.length > 0) {
+      log.info('\nPayments Due in 7 Days:');
+      dueIn7Days.forEach(p => {
+        console.log(`    ${p.request_number} - ${p.payment_phase} - ₱${parseFloat(p.amount).toLocaleString()}`);
+      });
+    }
+    
     return true;
     
   } catch (error) {
@@ -152,7 +194,7 @@ async function testPendingPayments() {
 // Test 3: Check Recent Notifications
 // ============================================================================
 async function testRecentNotifications() {
-  log.title('TEST 3: Checking Recent Notifications');
+  log.title('TEST 3: Checking Recent Payment Notifications');
   
   try {
     const result = await pool.query(`
@@ -169,8 +211,7 @@ async function testRecentNotifications() {
           ELSE 'Other'
         END as category
       FROM notifications
-      WHERE notification_type = 'Service Request'
-        AND (subject LIKE '%Payment%' OR subject LIKE '%Overdue%')
+      WHERE notification_type = 'Payment'
         AND created_at >= CURRENT_DATE - INTERVAL '7 days'
       ORDER BY created_at DESC
       LIMIT 20
@@ -277,6 +318,8 @@ async function testPaymentCheck() {
   
   try {
     log.info('Calling checkPaymentDueDates()...\n');
+    log.info('This will ONLY process payments with deadlines set');
+    log.info('Payments without deadlines will be SKIPPED\n');
     
     // This will run the actual payment check function
     await checkPaymentDueDates();
@@ -288,6 +331,7 @@ async function testPaymentCheck() {
     
   } catch (error) {
     log.error(`Payment check failed: ${error.message}`);
+    console.error(error);
     return false;
   }
 }
@@ -306,8 +350,7 @@ async function testDuplicates() {
         recipient_user_id,
         COUNT(*) as count
       FROM notifications
-      WHERE notification_type = 'Service Request'
-        AND (subject LIKE '%Payment%' OR subject LIKE '%Overdue%')
+      WHERE notification_type = 'Payment'
         AND created_at >= CURRENT_DATE - INTERVAL '7 days'
       GROUP BY DATE(created_at), subject, recipient_user_id
       HAVING COUNT(*) > 1
@@ -332,10 +375,10 @@ async function testDuplicates() {
 }
 
 // ============================================================================
-// Create Test Data
+// Create Test Data (WITH DEADLINES)
 // ============================================================================
 async function createTestData() {
-  log.title('BONUS: Creating Test Payment Data');
+  log.title('BONUS: Creating Test Payment Data WITH DEADLINES');
   
   try {
     log.info('This will create test payments with various due dates');
@@ -343,8 +386,9 @@ async function createTestData() {
     
     // Get a test request
     const requestResult = await pool.query(`
-      SELECT request_id, request_number
-      FROM service_requests
+      SELECT sr.request_id, sr.request_number
+      FROM service_requests sr
+      WHERE sr.requested_by_user_id IS NOT NULL
       LIMIT 1
     `);
     
@@ -354,6 +398,17 @@ async function createTestData() {
     }
     
     const requestId = requestResult.rows[0].request_id;
+    const requestNumber = requestResult.rows[0].request_number;
+    
+    // ✅ Set payment deadline on the service request
+    log.info(`Setting payment deadline on request ${requestNumber}...`);
+    await pool.query(`
+      UPDATE service_requests
+      SET payment_deadline = CURRENT_DATE + INTERVAL '7 days'
+      WHERE request_id = $1
+    `, [requestId]);
+    
+    log.success('Payment deadline set on service request');
     
     // Create test payments
     const testPayments = [
@@ -373,12 +428,14 @@ async function createTestData() {
     }
     
     log.success('\nTest data created successfully!');
+    log.info(`All test payments linked to request: ${requestNumber}`);
     log.info('You can now run the tests again to see notifications');
     
     return true;
     
   } catch (error) {
     log.error(`Test data creation failed: ${error.message}`);
+    console.error(error);
     return false;
   }
 }
@@ -422,12 +479,15 @@ async function runAllTests() {
   }
   
   console.log('\n' + '='.repeat(70));
-  console.log('Test suite completed!');
+  console.log('✅ Test suite completed!');
   console.log('='.repeat(70) + '\n');
+  
+  log.info('💡 IMPORTANT: Only payments with deadlines set will trigger notifications');
+  log.info('💡 Requests without payment_deadline will be SKIPPED');
   
   // Offer to create test data if no pending payments
   if (results.failed > 0) {
-    log.info('💡 TIP: If you need test data, run: node testPaymentNotifications.js --create-test-data');
+    log.info('\n💡 TIP: If you need test data, run: node testPaymentNotifications.js --create-test-data');
   }
   
   // Properly close the database connection after a delay
@@ -445,11 +505,126 @@ async function runAllTests() {
 }
 
 // ============================================================================
+// Test with Specific Date
+// ============================================================================
+async function testWithSpecificDate(testDate) {
+  log.title(`🧪 TESTING WITH SPECIFIC DATE: ${testDate}`);
+  
+  try {
+    log.info('Temporarily overriding CURRENT_DATE for testing...');
+    log.warning('This will show what notifications WOULD be sent on that date\n');
+    
+    // Override the checkPaymentDueDates function to use test date
+    const originalCheckPaymentDueDates = require('./paymentNotificationScheduler').checkPaymentDueDates;
+    
+    // Get payments as if it were the test date
+    const result = await pool.query(`
+      SELECT 
+        p.payment_id,
+        p.payment_phase,
+        p.amount,
+        p.due_date,
+        p.status,
+        sr.request_id,
+        sr.request_number,
+        sr.requested_by_user_id as customer_id,
+        sr.assigned_to_staff_id,
+        CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+        u.email as customer_email,
+        CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+        staff.email as assigned_staff_email,
+        p.due_date - DATE '${testDate}' as days_until_due
+      FROM payments p
+      JOIN service_requests sr ON p.request_id = sr.request_id
+      JOIN users u ON sr.requested_by_user_id = u.user_id
+      LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+      WHERE p.status = 'Pending' 
+        AND p.due_date IS NOT NULL
+        AND sr.payment_deadline IS NOT NULL
+      ORDER BY p.due_date ASC
+    `);
+    
+    log.info(`Found ${result.rows.length} pending payments to check`);
+    
+    const payments = result.rows;
+    
+    // Categorize payments
+    const overdue = payments.filter(p => parseInt(p.days_until_due) < 0);
+    const dueToday = payments.filter(p => parseInt(p.days_until_due) === 0);
+    const dueIn3Days = payments.filter(p => parseInt(p.days_until_due) === 3);
+    const dueIn7Days = payments.filter(p => parseInt(p.days_until_due) === 7);
+    
+    log.info(`\n📊 Notification Summary for ${testDate}:`);
+    log.info(`  • Would notify OVERDUE: ${overdue.length} payments`);
+    log.info(`  • Would notify DUE TODAY: ${dueToday.length} payments`);
+    log.info(`  • Would notify DUE IN 3 DAYS: ${dueIn3Days.length} payments`);
+    log.info(`  • Would notify DUE IN 7 DAYS: ${dueIn7Days.length} payments`);
+    
+    console.log('\n' + '='.repeat(70));
+    
+    if (overdue.length > 0) {
+      log.warning('\n⚠️  OVERDUE Notifications:');
+      overdue.forEach(p => {
+        console.log(`    ${p.request_number} - ${p.payment_phase} - ₱${parseFloat(p.amount).toLocaleString()} - Due: ${p.due_date} (${Math.abs(p.days_until_due)} days overdue)`);
+      });
+    }
+    
+    if (dueToday.length > 0) {
+      log.warning('\n🔔 DUE TODAY Notifications:');
+      dueToday.forEach(p => {
+        console.log(`    ${p.request_number} - ${p.payment_phase} - ₱${parseFloat(p.amount).toLocaleString()} - Due: ${p.due_date}`);
+      });
+    }
+    
+    if (dueIn3Days.length > 0) {
+      log.info('\n⏰ DUE IN 3 DAYS Notifications:');
+      dueIn3Days.forEach(p => {
+        console.log(`    ${p.request_number} - ${p.payment_phase} - ₱${parseFloat(p.amount).toLocaleString()} - Due: ${p.due_date}`);
+      });
+    }
+    
+    if (dueIn7Days.length > 0) {
+      log.info('\n📅 DUE IN 7 DAYS Notifications:');
+      dueIn7Days.forEach(p => {
+        console.log(`    ${p.request_number} - ${p.payment_phase} - ₱${parseFloat(p.amount).toLocaleString()} - Due: ${p.due_date}`);
+      });
+    }
+    
+    const totalNotifications = overdue.length + dueToday.length + dueIn3Days.length + dueIn7Days.length;
+    
+    console.log('\n' + '='.repeat(70));
+    log.success(`\n✅ Total notifications that would be sent: ${totalNotifications * 2} (client + staff for each)`);
+    log.info('💡 Run without --date to actually send notifications for today\n');
+    
+  } catch (error) {
+    log.error(`Test with specific date failed: ${error.message}`);
+    console.error(error);
+  } finally {
+    setTimeout(async () => {
+      await pool.end();
+      process.exit(0);
+    }, 500);
+  }
+}
+
+// ============================================================================
 // CLI Argument Handling
 // ============================================================================
 const args = process.argv.slice(2);
 
-if (args.includes('--create-test-data') || args.includes('-c')) {
+// Check for --date argument
+const dateIndex = args.findIndex(arg => arg === '--date' || arg === '-d');
+if (dateIndex !== -1 && args[dateIndex + 1]) {
+  const testDate = args[dateIndex + 1];
+  
+  // Validate date format (YYYY-MM-DD)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {
+    log.error('Invalid date format. Use YYYY-MM-DD (e.g., 2025-11-05)');
+    process.exit(1);
+  }
+  
+  testWithSpecificDate(testDate);
+} else if (args.includes('--create-test-data') || args.includes('-c')) {
   createTestData().then(() => {
     log.info('\nRun tests again to see notifications!');
     setTimeout(async () => {
@@ -462,17 +637,43 @@ if (args.includes('--create-test-data') || args.includes('-c')) {
 Payment Notification Test Suite
 
 Usage:
-  node testPaymentNotifications.js              Run all tests
-  node testPaymentNotifications.js -c           Create test data
-  node testPaymentNotifications.js --help       Show this help
+  node testPaymentNotifications.js                    Run all tests (uses today's date)
+  node testPaymentNotifications.js -d 2025-11-05      Test what notifications would be sent on a specific date
+  node testPaymentNotifications.js --date 2025-11-05  Same as above
+  node testPaymentNotifications.js -c                 Create test data
+  node testPaymentNotifications.js --help             Show this help
 
 Tests:
   1. Database Structure   - Verify tables and columns exist
-  2. Pending Payments     - Show payments that need notifications
+  2. Pending Payments     - Show payments WITH deadlines that need notifications
   3. Recent Notifications - Check last 7 days of notifications
   4. Notification Function- Test creating a notification
   5. Manual Payment Check - Run the scheduler manually
   6. Duplicate Check      - Look for duplicate notifications
+
+Testing with Specific Date:
+  node testPaymentNotifications.js --date 2025-11-05
+  
+  This will show what notifications WOULD be sent on that date WITHOUT actually sending them.
+  Useful for testing:
+    • What happens on a specific future date
+    • What would have happened on a past date
+    • If your date logic is working correctly
+
+Important:
+  ✅ Only processes payments where service_requests.payment_deadline IS NOT NULL
+  ✅ Skips legacy test requests without deadlines
+  ✅ Prevents duplicate notifications
+  
+Examples:
+  # Test notifications for November 5, 2025
+  node testPaymentNotifications.js --date 2025-11-05
+  
+  # Test notifications for a past date
+  node testPaymentNotifications.js --date 2025-10-28
+  
+  # Actually run the checker for TODAY
+  node testPaymentNotifications.js
   `);
   process.exit(0);
 } else {
