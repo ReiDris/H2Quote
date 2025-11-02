@@ -68,7 +68,6 @@ const createDefaultPayments = async (requestId) => {
     }
 
     await client.query("COMMIT");
-
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -3117,9 +3116,28 @@ const updateServiceRequest = async (req, res) => {
       actualCompletionDate = new Date().toISOString().split("T")[0];
     }
 
-    let discountPercentage = 0;
-    if (discount && discount !== "No Discount") {
-      discountPercentage = parseFloat(discount.replace("%", ""));
+    // ✅ Parse both values as floats to ensure type consistency
+    const oldDiscountPercentage =
+      parseFloat(currentRequest.discount_percentage) || 0;
+
+    let discountPercentage = oldDiscountPercentage; // Default to existing value
+
+    // Handle discount changes
+    if (discount !== undefined && discount !== null) {
+      if (discount === "No Discount") {
+        // ✅ Explicitly set to 0 when "No Discount" is selected
+        discountPercentage = 0;
+      } else {
+        // Parse the incoming discount (handles "20%" or "20" formats)
+        const cleanDiscount =
+          typeof discount === "string"
+            ? discount.replace("%", "").trim()
+            : discount;
+        const parsed = parseFloat(cleanDiscount);
+        if (!isNaN(parsed)) {
+          discountPercentage = parsed;
+        }
+      }
     }
 
     const updateRequestQuery = `
@@ -3507,13 +3525,12 @@ const updateServiceRequest = async (req, res) => {
           paidPhases
         );
       }
-      const oldDiscountPercentage = currentRequest.discount_percentage || 0;
-      
+
       if (discountPercentage !== oldDiscountPercentage) {
         try {
           // Format discount messages
           let customerMessage, staffMessage;
-          
+
           if (discountPercentage > 0 && oldDiscountPercentage === 0) {
             // Discount was added
             customerMessage = `Good news! A ${discountPercentage}% discount has been applied to your service request #${currentRequest.request_number}.\n\nYour updated total reflects this discount. Thank you for choosing TRISHKAYE!`;
@@ -3531,47 +3548,82 @@ const updateServiceRequest = async (req, res) => {
           // Notify the customer
           await createNotification(
             currentRequest.requested_by_user_id,
-            'Service Request',
+            "Service Request",
             `Discount Update - ${currentRequest.request_number}`,
             customerMessage,
             currentRequest.customer_email
           );
 
-          console.log(`✅ Discount notification sent to customer: ${currentRequest.customer_email}`);
+          console.log(
+            `✅ Discount notification sent to customer: ${currentRequest.customer_email}`
+          );
 
           // Get admin name who made the change
           const adminQuery = await pool.query(
             "SELECT first_name, last_name FROM users WHERE user_id = $1",
             [req.user.id]
           );
-          
-          const adminName = adminQuery.rows.length > 0
-            ? `${adminQuery.rows[0].first_name} ${adminQuery.rows[0].last_name}`
-            : req.user.email;
 
-          // Notify all active staff (excluding the one who made the change)
-          const staffQuery = `
+          const adminName =
+            adminQuery.rows.length > 0
+              ? `${adminQuery.rows[0].first_name} ${adminQuery.rows[0].last_name}`
+              : req.user.email;
+
+          if (currentRequest.assigned_to_staff_id) {
+            const assignedStaffQuery = `
+              SELECT user_id, email, first_name, last_name 
+              FROM users 
+              WHERE user_id = $1 AND status = 'Active'
+            `;
+            const assignedStaffResult = await pool.query(assignedStaffQuery, [
+              currentRequest.assigned_to_staff_id,
+            ]);
+
+            if (assignedStaffResult.rows.length > 0) {
+              const staff = assignedStaffResult.rows[0];
+              await createNotification(
+                staff.user_id,
+                "Service Request",
+                `Discount Update - ${currentRequest.request_number}`,
+                `${adminName} ${staffMessage} on service request #${currentRequest.request_number}.\n\nCustomer: ${currentRequest.customer_name}\n\nPlease review the updated quotation if needed.`,
+                staff.email
+              );
+              console.log(
+                `✅ Discount notification sent to assigned staff: ${staff.email}`
+              );
+            }
+          }
+
+          // Notify all admins (excluding the one who made the change)
+          const adminNotifyQuery = `
             SELECT user_id, email, first_name, last_name 
             FROM users 
-            WHERE user_type IN ('admin', 'staff') 
+            WHERE user_type = 'admin' 
               AND status = 'Active'
               AND user_id != $1
           `;
-          const staffResult = await pool.query(staffQuery, [req.user.id]);
+          const adminNotifyResult = await pool.query(adminNotifyQuery, [
+            req.user.id,
+          ]);
 
-          for (const staff of staffResult.rows) {
+          for (const admin of adminNotifyResult.rows) {
             await createNotification(
-              staff.user_id,
-              'Service Request',
+              admin.user_id,
+              "Service Request",
               `Discount Update - ${currentRequest.request_number}`,
               `${adminName} ${staffMessage} on service request #${currentRequest.request_number}.\n\nCustomer: ${currentRequest.customer_name}\n\nPlease review the updated quotation if needed.`,
-              staff.email
+              admin.email
             );
           }
 
-          console.log(`✅ Discount notifications sent to ${staffResult.rows.length} staff member(s)`);
+          console.log(
+            `✅ Discount notifications sent to ${adminNotifyResult.rows.length} admin(s)`
+          );
         } catch (discountNotifError) {
-          console.error('❌ Failed to send discount notifications:', discountNotifError);
+          console.error(
+            "❌ Failed to send discount notifications:",
+            discountNotifError
+          );
         }
       }
     } catch (notifError) {
