@@ -10,6 +10,7 @@ const {
   sendAdminNotificationEmail,
   sendPasswordResetEmail,
 } = require("../emailServices/emailService");
+const { createNotification } = require("./notificationController");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -210,6 +211,34 @@ const signup = async (req, res) => {
           "❌ Failed to send admin notification:",
           emailError.message
         );
+      }
+
+      try {
+        // Get all active admin users
+        const adminQuery = `
+          SELECT user_id, email, first_name, last_name 
+          FROM users 
+          WHERE user_type = 'admin' AND status = 'Active'
+        `;
+        const adminResult = await pool.query(adminQuery);
+
+        console.log(`Creating in-app notifications for ${adminResult.rows.length} admin(s)`);
+
+        // Create notification for each admin
+        for (const admin of adminResult.rows) {
+          await createNotification(
+            admin.user_id,
+            'Account Registration',
+            'New Account Registration - Verification Required',
+            `A new account registration requires your verification.\n\nUser: ${customerName}\nEmail: ${email}\nCompany: ${companyName}\n\nPlease review and verify this account in the "Verify Accounts" page.`,
+            admin.email
+          );
+        }
+
+        console.log('✅ Admin in-app notifications created successfully');
+      } catch (notifError) {
+        console.error('❌ Failed to create admin notifications:', notifError);
+        // Don't block signup if notification fails
       }
     });
 
