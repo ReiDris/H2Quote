@@ -394,6 +394,63 @@ const generatePasswordResetEmail = (userName, resetToken, resetUrl) => {
     `;
 };
 
+const generateAccountRejectionEmail = (userName, companyName, rejectionReason) => {
+    return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px; border-left: 5px solid #dc3545;">
+                <h1 style="color: #721c24; text-align: center; margin-bottom: 30px;">Account Registration Status</h1>
+                
+                <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                    Dear ${userName},
+                </p>
+                
+                <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                    Thank you for your interest in creating an account with TRISHKAYE Enterprises.
+                </p>
+                
+                <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                    Unfortunately, we are unable to approve your registration at this time.
+                </p>
+                
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                    <h3 style="color: #856404; margin-top: 0;">Reason for Rejection:</h3>
+                    <p style="color: #856404; line-height: 1.6; margin: 0;">
+                        ${rejectionReason}
+                    </p>
+                </div>
+                
+                <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #f5c6cb;">
+                    <h3 style="color: #721c24; margin-top: 0;">What You Can Do:</h3>
+                    <ul style="color: #555; margin: 10px 0; padding-left: 20px;">
+                        <li style="margin-bottom: 8px;">Review the rejection reason above</li>
+                        <li style="margin-bottom: 8px;">If you believe this was an error, contact our support team</li>
+                        <li style="margin-bottom: 8px;">You may submit a new registration with the correct information</li>
+                    </ul>
+                </div>
+                
+                <p style="font-size: 14px; color: #666; line-height: 1.6;">
+                    <strong>Company Information:</strong><br>
+                    Company: ${companyName}
+                </p>
+                
+                <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                    If you have any questions or need assistance, please don't hesitate to contact our support team.
+                </p>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <p style="color: #888; font-size: 14px;">
+                        Best regards,<br>
+                        TRISHKAYE Enterprises Team
+                    </p>
+                    <p style="color: #aaa; font-size: 12px; margin-top: 10px;">
+                        This is an automated notification from H2Quote
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
 // Public API functions
 const sendUserWelcomeEmail = async (customerName, companyName, email, contactNo) => {
     const subject = 'Welcome to H2Quote - Account Under Review';
@@ -421,15 +478,23 @@ const sendPasswordResetEmail = async (email, userName, resetToken) => {
     return await sendEmail(email, subject, htmlContent);
 };
 
+const sendAccountRejectionEmail = async (userName, userEmail, companyName, rejectionReason) => {
+    const subject = '[H2Quote] Account Registration Status';
+    const htmlContent = generateAccountRejectionEmail(userName, companyName, rejectionReason);
+    return await sendEmail(userEmail, subject, htmlContent);
+};
+
 // Export all functions
 module.exports = {
     sendEmail,
     generateUserWelcomeEmail,
     generateAdminNotificationEmail,
     generateAccountApprovalEmail,
+    generateAccountRejectionEmail,
     sendUserWelcomeEmail,
     sendAdminNotificationEmail,
     sendAccountApprovalEmail,
+    sendAccountRejectionEmail,
     generatePasswordResetEmail,
     sendPasswordResetEmail
 };

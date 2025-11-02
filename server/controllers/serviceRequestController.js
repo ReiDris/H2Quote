@@ -2971,6 +2971,7 @@ const updateServiceRequest = async (req, res) => {
       SELECT sr.assigned_to_staff_id, sr.actual_completion_date, 
              sr.request_acknowledged_date, rs.status_name as current_status_name,
              sr.requested_by_user_id, sr.request_number, sr.payment_deadline,
+             sr.discount_percentage,
              u.email as customer_email, 
              CONCAT(u.first_name, ' ', u.last_name) as customer_name
       FROM service_requests sr
@@ -3505,6 +3506,73 @@ const updateServiceRequest = async (req, res) => {
           "Payment notification sent to customer for newly paid phases:",
           paidPhases
         );
+      }
+      const oldDiscountPercentage = currentRequest.discount_percentage || 0;
+      
+      if (discountPercentage !== oldDiscountPercentage) {
+        try {
+          // Format discount messages
+          let customerMessage, staffMessage;
+          
+          if (discountPercentage > 0 && oldDiscountPercentage === 0) {
+            // Discount was added
+            customerMessage = `Good news! A ${discountPercentage}% discount has been applied to your service request #${currentRequest.request_number}.\n\nYour updated total reflects this discount. Thank you for choosing TRISHKAYE!`;
+            staffMessage = `applied a ${discountPercentage}% discount`;
+          } else if (discountPercentage === 0 && oldDiscountPercentage > 0) {
+            // Discount was removed
+            customerMessage = `The discount on your service request #${currentRequest.request_number} has been removed.\n\nYour total has been updated accordingly.`;
+            staffMessage = `removed the discount`;
+          } else {
+            // Discount was changed
+            customerMessage = `The discount on your service request #${currentRequest.request_number} has been updated from ${oldDiscountPercentage}% to ${discountPercentage}%.\n\nYour total has been recalculated accordingly.`;
+            staffMessage = `changed the discount from ${oldDiscountPercentage}% to ${discountPercentage}%`;
+          }
+
+          // Notify the customer
+          await createNotification(
+            currentRequest.requested_by_user_id,
+            'Service Request',
+            `Discount Update - ${currentRequest.request_number}`,
+            customerMessage,
+            currentRequest.customer_email
+          );
+
+          console.log(`✅ Discount notification sent to customer: ${currentRequest.customer_email}`);
+
+          // Get admin name who made the change
+          const adminQuery = await pool.query(
+            "SELECT first_name, last_name FROM users WHERE user_id = $1",
+            [req.user.id]
+          );
+          
+          const adminName = adminQuery.rows.length > 0
+            ? `${adminQuery.rows[0].first_name} ${adminQuery.rows[0].last_name}`
+            : req.user.email;
+
+          // Notify all active staff (excluding the one who made the change)
+          const staffQuery = `
+            SELECT user_id, email, first_name, last_name 
+            FROM users 
+            WHERE user_type IN ('admin', 'staff') 
+              AND status = 'Active'
+              AND user_id != $1
+          `;
+          const staffResult = await pool.query(staffQuery, [req.user.id]);
+
+          for (const staff of staffResult.rows) {
+            await createNotification(
+              staff.user_id,
+              'Service Request',
+              `Discount Update - ${currentRequest.request_number}`,
+              `${adminName} ${staffMessage} on service request #${currentRequest.request_number}.\n\nCustomer: ${currentRequest.customer_name}\n\nPlease review the updated quotation if needed.`,
+              staff.email
+            );
+          }
+
+          console.log(`✅ Discount notifications sent to ${staffResult.rows.length} staff member(s)`);
+        } catch (discountNotifError) {
+          console.error('❌ Failed to send discount notifications:', discountNotifError);
+        }
       }
     } catch (notifError) {
       console.error("Failed to create customer notification:", notifError);

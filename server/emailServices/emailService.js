@@ -112,6 +112,73 @@ const sendServiceRequestNotificationEmail = async (email, userName, requestNumbe
     return await sendEmail(email, subject, htmlContent);
 };
 
+const sendAccountRejectionEmail = async (userName, userEmail, companyName, rejectionReason) => {
+  const emailSubject = '[H2Quote] Account Registration Rejected';
+  
+  const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px; border-left: 5px solid #dc3545;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #333; margin: 0;">Account Registration Status</h2>
+          <p style="color: #666; font-size: 14px; margin-top: 5px;">TRISHKAYE Enterprises</p>
+        </div>
+        
+        <div style="background-color: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+          <p style="color: #555; margin-bottom: 15px;">Dear ${userName},</p>
+          
+          <p style="color: #555; line-height: 1.6; margin-bottom: 15px;">
+            Thank you for your interest in creating an account with TRISHKAYE Enterprises.
+          </p>
+          
+          <p style="color: #555; line-height: 1.6; margin-bottom: 15px;">
+            Unfortunately, we are unable to approve your registration at this time.
+          </p>
+          
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="color: #856404; font-weight: bold; margin: 0 0 10px 0;">Reason for Rejection:</p>
+            <p style="color: #856404; margin: 0; line-height: 1.6;">${rejectionReason}</p>
+          </div>
+          
+          <p style="color: #555; line-height: 1.6; margin-bottom: 15px;">
+            If you believe this was an error or would like to provide additional information, please feel free to contact us or submit a new registration with the correct details.
+          </p>
+          
+          <p style="color: #555; line-height: 1.6; margin-bottom: 15px;">
+            <strong>Company Information:</strong><br>
+            Company: ${companyName}<br>
+            Email: ${userEmail}
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+          <p style="color: #888; font-size: 14px; margin: 0;">
+            Best regards,<br>
+            TRISHKAYE Enterprises Team
+          </p>
+          <p style="color: #aaa; font-size: 12px; margin-top: 10px;">
+            This is an automated notification from H2Quote
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  try {
+    const emailSent = await sendEmail(userEmail, emailSubject, emailHtml);
+    
+    if (emailSent) {
+      console.log(`✅ Rejection email sent to: ${userEmail}`);
+      return true;
+    } else {
+      console.error(`❌ Failed to send rejection email to: ${userEmail}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error sending rejection email:', error);
+    return false;
+  }
+};
+
 // Re-export common functions from config/email.js
 const {
     generateUserWelcomeEmail,
@@ -132,6 +199,7 @@ module.exports = {
     sendUserWelcomeEmail,
     sendAdminNotificationEmail,
     sendAccountApprovalEmail,
+    sendAccountRejectionEmail,
     generatePasswordResetEmail,
     sendPasswordResetEmail,
     sendNotificationEmail,

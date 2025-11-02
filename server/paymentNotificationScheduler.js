@@ -111,7 +111,7 @@ const checkPaymentDueDates = async () => {
   console.log(`📅 Current date: ${new Date().toISOString().split('T')[0]}`);
   
   try {
-    // Get all pending payments with due dates
+    // ✅ IMPROVED: Get all pending payments with due dates (stricter filtering)
     const paymentsQuery = `
       SELECT 
         p.payment_id,
@@ -133,6 +133,7 @@ const checkPaymentDueDates = async () => {
       LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
       WHERE p.status = 'Pending' 
         AND p.due_date IS NOT NULL
+        AND sr.payment_deadline IS NOT NULL
         AND p.due_date >= CURRENT_DATE - INTERVAL '30 days'
       ORDER BY p.due_date ASC
     `;
@@ -140,7 +141,7 @@ const checkPaymentDueDates = async () => {
     const result = await pool.query(paymentsQuery);
     const payments = result.rows;
 
-    console.log(`📊 Found ${payments.length} pending payments to check`);
+    console.log(`📊 Found ${payments.length} pending payments with deadlines to check`);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -148,8 +149,20 @@ const checkPaymentDueDates = async () => {
     let notificationsSent = 0;
 
     for (const payment of payments) {
+      // ✅ SAFETY CHECK: Skip if due_date is invalid
+      if (!payment.due_date) {
+        console.log(`\n⏭️  Skipping payment #${payment.payment_id} - No due date set`);
+        continue;
+      }
+
       const dueDate = new Date(payment.due_date);
       dueDate.setHours(0, 0, 0, 0);
+
+      // ✅ SAFETY CHECK: Skip if date is invalid
+      if (isNaN(dueDate.getTime())) {
+        console.log(`\n⚠️  Skipping payment #${payment.payment_id} - Invalid due date: ${payment.due_date}`);
+        continue;
+      }
 
       const daysUntilDue = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
 
@@ -290,8 +303,52 @@ const checkPaymentDueDates = async () => {
 
         notificationsSent++;
       }
+      // DUE IN 7 DAYS (ADDED THIS)
+      else if (daysUntilDue === 7) {
+        console.log(`   📅 Due in 7 days (early reminder)`);
+        
+        // Notify client
+        await notifyClient(
+          payment,
+          'Reminder',
+          '📅 PAYMENT REMINDER: Your {payment_phase} for service request #{request_number} is due in 7 days on {due_date}. Amount: {amount}. Please prepare payment.'
+        );
+
+        // Notify all admins
+        const adminsQuery = `
+          SELECT user_id, email, first_name, last_name 
+          FROM users 
+          WHERE user_type = 'admin' AND status = 'Active'
+        `;
+        const adminsResult = await pool.query(adminsQuery);
+
+        for (const admin of adminsResult.rows) {
+          await notifyStaff(
+            payment,
+            'Reminder',
+            '📅 PAYMENT REMINDER: {payment_phase} for request #{request_number} from {customer_name} is due in 7 days on {due_date}. Amount: {amount}.',
+            admin.user_id,
+            admin.email,
+            `${admin.first_name} ${admin.last_name}`
+          );
+        }
+
+        // Notify assigned staff if exists
+        if (payment.assigned_to_staff_id && payment.assigned_staff_email) {
+          await notifyStaff(
+            payment,
+            'Reminder',
+            '📅 PAYMENT REMINDER: {payment_phase} for your assigned request #{request_number} from {customer_name} is due in 7 days on {due_date}. Amount: {amount}.',
+            payment.assigned_to_staff_id,
+            payment.assigned_staff_email,
+            payment.assigned_staff_name
+          );
+        }
+
+        notificationsSent++;
+      }
       else {
-        console.log(`   ✓ No action needed`);
+        console.log(`   ✔ No action needed`);
       }
     }
 

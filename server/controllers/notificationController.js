@@ -10,11 +10,6 @@ const supabase = createClient(
 // Get notifications for logged-in user
 const getUserNotifications = async (req, res) => {
   try {
-    console.log("=== getUserNotifications called ===");
-    console.log("User ID:", req.user?.id);
-    console.log("User Type:", req.user?.userType);
-    console.log("Raw query params:", req.query);
-
     const userId = req.user.id;
     const { limit = 20, unreadOnly } = req.query;
 
@@ -59,21 +54,13 @@ const getUserNotifications = async (req, res) => {
     query += ` ORDER BY created_at DESC LIMIT $${queryParams.length + 1}`;
     queryParams.push(parseInt(limit));
 
-    console.log("Final SQL query:", query);
-    console.log("Query params:", queryParams);
-
     const result = await pool.query(query, queryParams);
-
-    console.log("Found notifications:", result.rows.length);
 
     // Fix: Get unread count for anything NOT 'Sent'
     const unreadResult = await pool.query(
       "SELECT COUNT(*) as count FROM notifications WHERE recipient_user_id = $1 AND status != $2",
       [userId, "Sent"]
     );
-
-    console.log("Total unread count:", unreadResult.rows[0].count);
-    console.log("=== getUserNotifications complete ===\n");
 
     res.json({
       success: true,
