@@ -219,7 +219,7 @@ export const serviceRequestsAPI = {
 
   approveServiceRequest: (requestId, notes = null) => {
     return fetchWithAuth(`/service-requests/${requestId}/approve`, {
-      method: "POST", // ✅ Change from PUT to POST
+      method: "POST",
       body: JSON.stringify({ customerNotes: notes }),
     });
   },
@@ -518,9 +518,10 @@ export const activityLogsAPI = {
 };
 
 export const chatbotAPI = {
-  startSession: () => {
+  startSession: (userContext = {}) => {
     return fetchPublic("/chatbot/start-session", {
       method: "POST",
+      body: JSON.stringify({ userContext }),
     });
   },
 
