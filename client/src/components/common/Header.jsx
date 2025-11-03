@@ -3,7 +3,7 @@ import { Bell, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 import ServiceRequestModal from "../customer/ServiceRequestModal";
-import { notificationsAPI } from '../../config/api';
+import { notificationsAPI } from "../../config/api";
 
 const Header = () => {
   const { user } = useAuth();
@@ -16,72 +16,75 @@ const Header = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [filteredCount, setFilteredCount] = useState(0);
   const notificationRef = useRef(null);
 
-  // Fetch notifications from API
-  // Fetch notifications from API
-const fetchNotifications = async () => {
-  try {
-    setLoading(true);
+  const fetchNotifications = async (limit = 20) => {
+    try {
+      setLoading(true);
 
-    const response = await notificationsAPI.getNotifications(activeFilter === "unread");
+      const response = await notificationsAPI.getNotifications(
+        activeFilter === "unread",
+        limit
+      );
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch notifications');
+      if (!response.ok) {
+        throw new Error("Failed to fetch notifications");
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setNotifications(data.data.notifications);
+        setUnreadCount(data.data.unreadCount);
+        setFilteredCount(data.data.filteredCount);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      // Keep existing notifications on error instead of clearing
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const data = await response.json();
-
-    if (data.success) {
-      setNotifications(data.data.notifications);
-      setUnreadCount(data.data.unreadCount);
+  // Mark notification as read
+  const markAsRead = async (notificationId) => {
+    try {
+      const response = await notificationsAPI.markAsRead(notificationId);
+      if (!response.ok) {
+        throw new Error("Failed to mark notification as read");
+      }
+      await fetchNotifications();
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
     }
-  } catch (error) {
-    console.error("Error fetching notifications:", error);
-    // Keep existing notifications on error instead of clearing
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
-// Mark notification as read
-const markAsRead = async (notificationId) => {
-  try {
-    const response = await notificationsAPI.markAsRead(notificationId);
-    if (!response.ok) {
-      throw new Error('Failed to mark notification as read');
+  // Mark all as read
+  const markAllAsRead = async () => {
+    try {
+      const response = await notificationsAPI.markAllAsRead();
+      if (!response.ok) {
+        throw new Error("Failed to mark all as read");
+      }
+      await fetchNotifications();
+    } catch (error) {
+      console.error("Error marking all as read:", error);
     }
-    await fetchNotifications();
-  } catch (error) {
-    console.error("Error marking notification as read:", error);
-  }
-};
+  };
 
-// Mark all as read
-const markAllAsRead = async () => {
-  try {
-    const response = await notificationsAPI.markAllAsRead();
-    if (!response.ok) {
-      throw new Error('Failed to mark all as read');
+  // Clear read notifications
+  const clearReadNotifications = async () => {
+    try {
+      const response = await notificationsAPI.clearReadNotifications();
+      if (!response.ok) {
+        throw new Error("Failed to clear read notifications");
+      }
+      await fetchNotifications();
+    } catch (error) {
+      console.error("Error clearing read notifications:", error);
     }
-    await fetchNotifications();
-  } catch (error) {
-    console.error("Error marking all as read:", error);
-  }
-};
-
-// Clear read notifications
-const clearReadNotifications = async () => {
-  try {
-    const response = await notificationsAPI.clearReadNotifications();
-    if (!response.ok) {
-      throw new Error('Failed to clear read notifications');
-    }
-    await fetchNotifications();
-  } catch (error) {
-    console.error("Error clearing read notifications:", error);
-  }
-};
+  };
 
   const getTimeAgo = (timestamp) => {
     const now = new Date();
@@ -125,12 +128,16 @@ const clearReadNotifications = async () => {
   };
 
   const toggleShowAllNotifications = () => {
+    if (!showAllNotifications) {
+      // Fetch all notifications when showing all
+      fetchNotifications(1000); // or use a very large number
+    }
     setShowAllNotifications(!showAllNotifications);
   };
 
   // Determine which notifications to display
-  const displayedNotifications = showAllNotifications 
-    ? notifications 
+  const displayedNotifications = showAllNotifications
+    ? notifications
     : notifications.slice(0, 4);
 
   // Fetch notifications on mount and filter change
@@ -256,7 +263,7 @@ const clearReadNotifications = async () => {
                             Mark all as read
                           </button>
                         )}
-                        {notifications.some(n => !n.is_unread) && (
+                        {notifications.some((n) => !n.is_unread) && (
                           <button
                             onClick={clearReadNotifications}
                             className="text-xs text-red-600 hover:underline cursor-pointer"
@@ -277,7 +284,9 @@ const clearReadNotifications = async () => {
                         displayedNotifications.map((notification) => (
                           <div
                             key={notification.notification_id}
-                            onClick={() => handleNotificationClick(notification)}
+                            onClick={() =>
+                              handleNotificationClick(notification)
+                            }
                             className={`p-5 rounded-3xl cursor-pointer transition-colors ${
                               notification.is_unread
                                 ? "bg-blue-100 hover:bg-blue-200"
@@ -327,10 +336,9 @@ const clearReadNotifications = async () => {
                           onClick={toggleShowAllNotifications}
                           className="text-sm text-[#004785] hover:underline font-medium cursor-pointer"
                         >
-                          {showAllNotifications 
-                            ? 'Show Less' 
-                            : `View All (${notifications.length})`
-                          }
+                          {showAllNotifications
+                            ? "Show Less"
+                            : `View All (${filteredCount})`}
                         </button>
                       </div>
                     )}

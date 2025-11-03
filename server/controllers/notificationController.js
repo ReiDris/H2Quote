@@ -62,11 +62,27 @@ const getUserNotifications = async (req, res) => {
       [userId, "Sent"]
     );
 
+    // Get filtered count (total count matching the current filter)
+    let filteredCountQuery =
+      "SELECT COUNT(*) as count FROM notifications WHERE recipient_user_id = $1";
+    const filteredCountParams = [userId];
+
+    if (isUnreadOnly) {
+      filteredCountQuery += " AND status != $2";
+      filteredCountParams.push("Sent");
+    }
+
+    const filteredCountResult = await pool.query(
+      filteredCountQuery,
+      filteredCountParams
+    );
+
     res.json({
       success: true,
       data: {
         notifications: result.rows,
         unreadCount: parseInt(unreadResult.rows[0].count),
+        filteredCount: parseInt(filteredCountResult.rows[0].count),
       },
     });
   } catch (error) {
