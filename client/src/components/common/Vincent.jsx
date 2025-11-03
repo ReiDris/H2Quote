@@ -3,11 +3,30 @@ import { AiFillMessage } from "react-icons/ai";
 import { IoSend } from "react-icons/io5";
 import { chatbotAPI } from "../../config/api";
 
+const STORAGE_KEYS = {
+  SESSION_ID: 'vincent_session_id',
+  MESSAGES: 'vincent_messages',
+  IS_OPEN: 'vincent_is_open'
+};
+
 const Vincent = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
+  // Initialize state from localStorage
+  const [isOpen, setIsOpen] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.IS_OPEN);
+    return saved === 'true';
+  });
+
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [inputMessage, setInputMessage] = useState("");
-  const [sessionId, setSessionId] = useState(null);
+  
+  const [sessionId, setSessionId] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.SESSION_ID);
+  });
+
   const [quickActions, setQuickActions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -20,17 +39,44 @@ const Vincent = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Start chat session when chat opens
+  // Persist isOpen state to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.IS_OPEN, isOpen);
+  }, [isOpen]);
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+  }, [messages]);
+
+  // Persist sessionId to localStorage
+  useEffect(() => {
+    if (sessionId) {
+      localStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
+    }
+  }, [sessionId]);
+
+  // Start chat session when chat opens (only if no existing session)
   useEffect(() => {
     const startSession = async () => {
       if (isOpen && !sessionId) {
         try {
-          const response = await chatbotAPI.startSession();
+          // Determine user context based on current URL
+          const isSystemUser = window.location.pathname.startsWith('/customer') || 
+                               window.location.pathname.startsWith('/admin') || 
+                               window.location.pathname.startsWith('/staff');
+          
+          const userContext = {
+            isAuthenticated: isSystemUser,
+            userType: isSystemUser ? 'system' : 'public'
+          };
+          
+          const response = await chatbotAPI.startSession(userContext);
           const data = await response.json();
           
           if (data.success) {
             setSessionId(data.data.sessionId);
-            console.log("Chat session started:", data.data.sessionId);
+            console.log("Chat session started:", data.data.sessionId, "Context:", userContext);
           }
         } catch (error) {
           console.error("Failed to start chat session:", error);
@@ -41,7 +87,7 @@ const Vincent = () => {
     startSession();
   }, [isOpen, sessionId]);
 
-  // Load quick actions
+  // Load quick actions once
   useEffect(() => {
     const loadQuickActions = async () => {
       try {
@@ -66,19 +112,64 @@ const Vincent = () => {
     loadQuickActions();
   }, []);
 
-  // End session when chat closes
-  const handleCloseChat = async () => {
-    if (sessionId) {
-      try {
-        await chatbotAPI.endSession(sessionId);
-        console.log("Chat session ended");
-      } catch (error) {
-        console.error("Failed to end chat session:", error);
+  // Listen for logout event to clear chat
+  useEffect(() => {
+    const handleLogout = () => {
+      // Clear all Vincent data
+      localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
+      localStorage.removeItem(STORAGE_KEYS.MESSAGES);
+      localStorage.removeItem(STORAGE_KEYS.IS_OPEN);
+      
+      // End session if exists
+      if (sessionId) {
+        chatbotAPI.endSession(sessionId).catch(console.error);
       }
+      
+      // Reset state
+      setSessionId(null);
+      setMessages([]);
+      setIsOpen(false);
+    };
+
+    // Listen for custom logout event
+    window.addEventListener('user-logout', handleLogout);
+
+    // AUTOMATIC LOGOUT DETECTION (only on system pages)
+    const isSystemPage = window.location.pathname.startsWith('/customer') || 
+                         window.location.pathname.startsWith('/admin') || 
+                         window.location.pathname.startsWith('/staff');
+    
+    let checkTokenInterval = null;
+    
+    if (isSystemPage) {
+      // Store initial token state
+      let hadToken = !!localStorage.getItem('h2quote_token');
+      
+      checkTokenInterval = setInterval(() => {
+        const hasToken = !!localStorage.getItem('h2quote_token');
+        const hasSession = !!localStorage.getItem(STORAGE_KEYS.SESSION_ID);
+        
+        // If we HAD a token but now don't, and Vincent has a session = user logged out
+        if (hadToken && !hasToken && hasSession) {
+          console.log('Vincent: Detected logout via token removal');
+          handleLogout();
+        }
+        
+        hadToken = hasToken; // Update for next check
+      }, 1000); // Check every second
     }
+
+    return () => {
+      window.removeEventListener('user-logout', handleLogout);
+      if (checkTokenInterval) {
+        clearInterval(checkTokenInterval);
+      }
+    };
+  }, [sessionId]);
+
+  // Close chat UI without clearing conversation
+  const handleCloseChat = () => {
     setIsOpen(false);
-    setSessionId(null);
-    setMessages([]);
   };
 
   const handleSendMessage = async (e) => {
@@ -179,6 +270,48 @@ const Vincent = () => {
     }
   };
 
+  // Helper function to render formatted message text
+  const renderFormattedMessage = (text) => {
+    return text.split('\n').map((line, index) => {
+      // Check if line contains a link with format: 🔗 [URL|Link Text]
+      const linkWithTextMatch = line.match(/🔗\s*\[(.*?)\|(.*?)\]/);
+      if (linkWithTextMatch) {
+        const url = linkWithTextMatch[1];
+        const linkText = linkWithTextMatch[2];
+        return (
+          <a
+            key={index}
+            href={url}
+            target="_self"
+            rel="noopener noreferrer"
+            className="text-blue-300 hover:text-blue-100 underline block mt-1 mb-1"
+          >
+            {linkText}
+          </a>
+        );
+      }
+      
+      // Fallback: Check if line contains old format [URL] only
+      const linkMatch = line.match(/🔗\s*\[(.*?)\]/);
+      if (linkMatch) {
+        return (
+          <a
+            key={index}
+            href={linkMatch[1]}
+            target="_self"
+            rel="noopener noreferrer"
+            className="text-blue-300 hover:text-blue-100 underline block mt-1 mb-1"
+          >
+            Click here to visit
+          </a>
+        );
+      }
+      
+      // Return empty line or text line
+      return line ? <div key={index}>{line}</div> : <br key={index} />;
+    });
+  };
+
   return (
     <>
       {/* Chat Button */}
@@ -275,7 +408,14 @@ const Vincent = () => {
                             : "bg-[#1B4781] text-gray-200 rounded-bl-none"
                         }`}
                       >
-                        {message.text}
+                        {/* Render formatted message with line breaks and links */}
+                        {message.sender === "bot" ? (
+                          <div className="whitespace-pre-line">
+                            {renderFormattedMessage(message.text)}
+                          </div>
+                        ) : (
+                          message.text
+                        )}
                       </div>
                     </div>
                   ))}
@@ -326,7 +466,7 @@ const Vincent = () => {
                       handleSendMessage(e);
                     }
                   }}
-                  placeholder={isLoading ? "Waiting for response..." : "Do you supply chemicals only without the service?"}
+                  placeholder={isLoading ? "Waiting for response..." : "Type your message here..."}
                   disabled={isLoading}
                   className="w-full border border-gray-500 rounded-full px-4 py-3 pr-12 text-sm focus:outline-none focus:border-[#1B4781] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />

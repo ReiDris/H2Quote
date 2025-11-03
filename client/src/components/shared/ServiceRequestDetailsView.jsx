@@ -114,9 +114,12 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [statusRestrictionMessage, setStatusRestrictionMessage] = useState("");
 
   // Check if discount should be disabled based on service status
-  const isDiscountDisabled = ["Ongoing", "Completed", "Cancelled"].includes(
-    serviceStatus
-  );
+  const isDiscountDisabled = [
+    "Approved",
+    "Ongoing",
+    "Completed",
+    "Cancelled",
+  ].includes(serviceStatus);
 
   const handleServiceStatusChange = (newStatus) => {
     // 🔍 DEBUG LOGGING

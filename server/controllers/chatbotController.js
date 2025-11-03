@@ -6,18 +6,58 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Helper function to replace context-specific placeholders in responses
+const replaceContextPlaceholders = (response, userContext) => {
+  if (!userContext) return response;
+  
+  const isSystem = userContext.isAuthenticated === true || userContext.userType === 'system';
+  
+  // Define replacements based on context
+  const replacements = {
+    // Services URL
+    '{SERVICES_URL}': isSystem ? '/customer/services' : '/services',
+    '{SERVICES_LINK}': isSystem ? '[/customer/services|Services Page]' : '[/services|Services Page]',
+    
+    // Sign up references - remove for system users
+    '{SIGNUP_STEP}': isSystem ? '' : '\n\n📝 **Step 3:** Sign up for an H2Quote account (if you haven\'t already)\n🔗 [/signup|Sign Up Here]',
+    '{SIGNUP_NOTE}': isSystem ? '' : '\n(Skip this if you already have an account)',
+    
+    // Home/Dashboard URL
+    '{HOME_URL}': isSystem ? '/customer/services' : '/',
+    
+    // Generic page references
+    '{PAGE_CONTEXT}': isSystem ? 'in your dashboard' : 'on our website',
+  };
+  
+  // Apply all replacements
+  let modifiedResponse = response;
+  for (const [placeholder, replacement] of Object.entries(replacements)) {
+    modifiedResponse = modifiedResponse.replace(new RegExp(placeholder, 'g'), replacement);
+  }
+  
+  // Clean up extra whitespace from removed sections
+  modifiedResponse = modifiedResponse.replace(/\n{3,}/g, '\n\n').trim();
+  
+  return modifiedResponse;
+};
+
 const startChatSession = async (req, res) => {
   try {
     const userId = req.user?.id || null; 
     const userIP = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
+    const { userContext = {} } = req.body; // Get user context from request
 
     const { data: session, error } = await supabase
       .from('chat_sessions')
       .insert({
         user_id: userId,
         user_ip: userIP,
-        user_agent: userAgent
+        user_agent: userAgent,
+        metadata: {
+          user_context: userContext,
+          failed_attempts: 0
+        }
       })
       .select()
       .single();
@@ -31,7 +71,12 @@ const startChatSession = async (req, res) => {
       .insert({
         session_id: session.session_id,
         event_type: 'session_start',
-        event_data: { user_agent: userAgent, ip: userIP }
+        event_data: { 
+          user_agent: userAgent, 
+          ip: userIP,
+          is_authenticated: userContext.isAuthenticated || false,
+          user_type: userContext.userType || 'public'
+        }
       });
 
     res.json({
@@ -67,7 +112,7 @@ const sendMessage = async (req, res) => {
     }
 
     const sessionCheck = await client.query(
-      'SELECT session_id, is_active FROM chat_sessions WHERE session_id = $1',
+      'SELECT session_id, is_active, metadata FROM chat_sessions WHERE session_id = $1',
       [sessionId]
     );
 
@@ -85,6 +130,11 @@ const sendMessage = async (req, res) => {
       });
     }
 
+    // Get session metadata for context and attempt tracking
+    let sessionMetadata = sessionCheck.rows[0].metadata || {};
+    let failedAttempts = sessionMetadata.failed_attempts || 0;
+    const userContext = sessionMetadata.user_context || {};
+
     const userMessageResult = await client.query(`
       INSERT INTO chat_messages (session_id, message_type, content)
       VALUES ($1, $2, $3)
@@ -94,6 +144,7 @@ const sendMessage = async (req, res) => {
     const userMessage = userMessageResult.rows[0];
 
     let botResponse;
+    let responseMetadata = {};
     const isQuickAction = ['Types of Services', 'Request a Service', 'Payment Options', 'Pricing Info'].includes(message);
 
     if (isQuickAction) {
@@ -104,12 +155,52 @@ const sendMessage = async (req, res) => {
       
       if (quickActionResult.rows.length > 0) {
         botResponse = quickActionResult.rows[0].response_text;
+        responseMetadata.is_quick_action = true;
+        failedAttempts = 0; // Reset on successful response
       } else {
-        botResponse = await getBotResponse(client, message);
+        const responseData = await getBotResponse(client, message);
+        botResponse = responseData.response;
+        if (responseData.is_fallback) {
+          failedAttempts++;
+        }
       }
     } else {
-      botResponse = await getBotResponse(client, message);
+      const responseData = await getBotResponse(client, message);
+      botResponse = responseData.response;
+      
+      // Track if response was a fallback
+      if (responseData.is_fallback) {
+        failedAttempts++;
+        responseMetadata.is_fallback = true;
+        responseMetadata.attempt_number = failedAttempts;
+        
+        // After 3 failed attempts, show contact info
+        if (failedAttempts >= 3) {
+          const contactResponse = await client.query(
+            `SELECT responses FROM chat_intents WHERE intent_name = 'fallback_contact' AND is_active = TRUE LIMIT 1`
+          );
+          
+          if (contactResponse.rows.length > 0) {
+            const responses = contactResponse.rows[0].responses;
+            botResponse = responses[Math.floor(Math.random() * responses.length)];
+          }
+          
+          failedAttempts = 0; // Reset after showing contact
+        }
+      } else {
+        failedAttempts = 0; // Reset on successful response
+      }
     }
+
+    // Apply context-aware replacements to bot response
+    botResponse = replaceContextPlaceholders(botResponse, userContext);
+
+    // Update session metadata with attempt count
+    sessionMetadata.failed_attempts = failedAttempts;
+    await client.query(
+      'UPDATE chat_sessions SET metadata = $1 WHERE session_id = $2',
+      [JSON.stringify(sessionMetadata), sessionId]
+    );
 
     const botMessageResult = await client.query(`
       INSERT INTO chat_messages (session_id, message_type, content, metadata)
@@ -118,7 +209,7 @@ const sendMessage = async (req, res) => {
     `, [
       sessionId, 
       botResponse, 
-      JSON.stringify({ is_quick_action: isQuickAction })
+      JSON.stringify(responseMetadata)
     ]);
 
     const botMessage = botMessageResult.rows[0];
@@ -136,7 +227,7 @@ const sendMessage = async (req, res) => {
     `, [
       sessionId,
       JSON.stringify({ message_type: messageType, content_length: message.length }),
-      JSON.stringify({ response_length: botResponse.length, is_quick_action: isQuickAction })
+      JSON.stringify({ response_length: botResponse.length, ...responseMetadata })
     ]);
 
     await client.query('COMMIT');
@@ -174,10 +265,21 @@ const sendMessage = async (req, res) => {
 const getBotResponse = async (client, userInput) => {
   try {
     const result = await client.query('SELECT get_chatbot_response($1) as response', [userInput]);
-    return result.rows[0].response;
+    const response = result.rows[0].response;
+    
+    // Check if response is a fallback (default) response
+    const isFallback = response.includes("I'm sorry, I'm having trouble processing");
+    
+    return {
+      response: response,
+      is_fallback: isFallback
+    };
   } catch (error) {
     console.error('Error getting bot response:', error);
-    return "I'm sorry, I'm having trouble processing your request right now. Please try again or contact our support team directly.";
+    return {
+      response: "I'm sorry, I'm having trouble processing your request right now. Please try again or contact our support team directly.",
+      is_fallback: true
+    };
   }
 };
 
