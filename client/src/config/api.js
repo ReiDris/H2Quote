@@ -338,8 +338,10 @@ export const messagingAPI = {
 };
 
 export const notificationsAPI = {
-  getNotifications: (unreadOnly = false) => {
-    return fetchWithAuth(`/notifications?unreadOnly=${unreadOnly}`);
+  getNotifications: (unreadOnly = false, limit = 20) => {
+    return fetchWithAuth(
+      `/notifications?unreadOnly=${unreadOnly}&limit=${limit}`
+    );
   },
 
   markAsRead: (notificationId) => {
