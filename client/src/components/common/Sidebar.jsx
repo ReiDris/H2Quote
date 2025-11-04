@@ -31,6 +31,9 @@ const Sidebar = ({ userRole }) => {
   };
 
   const handleConfirmLogout = () => {
+    // Notify Vincent to clear data BEFORE navigation
+    window.dispatchEvent(new Event("user-logout"));
+
     logout();
     navigate("/login");
     setShowLogoutModal(false);
@@ -114,7 +117,8 @@ const Sidebar = ({ userRole }) => {
       },
     ];
 
-    const items = actualUserRole === "customer" ? customerItems : adminStaffItems;
+    const items =
+      actualUserRole === "customer" ? customerItems : adminStaffItems;
     return items.filter((item) => item.roles.includes(actualUserRole));
   };
 

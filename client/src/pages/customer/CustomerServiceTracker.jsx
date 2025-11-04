@@ -81,15 +81,6 @@ const CustomerServiceTracker = () => {
       const data = await response.json();
 
       if (data.success) {
-        console.log('Fetched customer requests:', data.data);
-        
-        // Debug: Log estimated_cost values
-        console.log('💰 Cost values from backend:');
-        data.data.forEach(item => {
-          console.log(`  ${item.request_number}: estimated_cost =`, item.estimated_cost, '(type:', typeof item.estimated_cost, ')');
-        });
-        
-        // Transform backend data to match your existing UI structure
         const transformedData = (data.data || []).map(item => ({
           id: item.request_number,
           requestedAt: formatDateTime(item.created_at),

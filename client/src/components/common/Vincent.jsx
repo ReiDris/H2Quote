@@ -9,22 +9,45 @@ const STORAGE_KEYS = {
   IS_OPEN: 'vincent_is_open'
 };
 
+// Helper to determine if user is authenticated (has token)
+const isAuthenticated = () => {
+  return !!localStorage.getItem('h2quote_token');
+};
+
 const Vincent = () => {
-  // Initialize state from localStorage
+  // For PUBLIC users: NO storage persistence (resets on refresh)
+  // For AUTHENTICATED users: Use localStorage (persists until logout)
   const [isOpen, setIsOpen] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.IS_OPEN);
-    return saved === 'true';
+    if (isAuthenticated()) {
+      const saved = localStorage.getItem(STORAGE_KEYS.IS_OPEN);
+      console.log('Vincent: [AUTH] Initial isOpen from localStorage:', saved);
+      return saved === 'true';
+    }
+    console.log('Vincent: [PUBLIC] Initial isOpen: false (no storage)');
+    return false;
   });
 
   const [messages, setMessages] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES);
-    return saved ? JSON.parse(saved) : [];
+    if (isAuthenticated()) {
+      const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES);
+      const parsed = saved ? JSON.parse(saved) : [];
+      console.log('Vincent: [AUTH] Initial messages from localStorage:', parsed.length);
+      return parsed;
+    }
+    console.log('Vincent: [PUBLIC] Initial messages: empty (no storage)');
+    return [];
   });
 
   const [inputMessage, setInputMessage] = useState("");
   
   const [sessionId, setSessionId] = useState(() => {
-    return localStorage.getItem(STORAGE_KEYS.SESSION_ID);
+    if (isAuthenticated()) {
+      const id = localStorage.getItem(STORAGE_KEYS.SESSION_ID);
+      console.log('Vincent: [AUTH] Initial sessionId from localStorage:', id);
+      return id;
+    }
+    console.log('Vincent: [PUBLIC] Initial sessionId: null (no storage)');
+    return null;
   });
 
   const [quickActions, setQuickActions] = useState([]);
@@ -39,20 +62,32 @@ const Vincent = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Persist isOpen state to localStorage
+  // Persist isOpen state ONLY for authenticated users
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.IS_OPEN, isOpen);
+    if (isAuthenticated()) {
+      localStorage.setItem(STORAGE_KEYS.IS_OPEN, isOpen);
+      console.log('Vincent: [AUTH] Saved isOpen to localStorage:', isOpen);
+    }
   }, [isOpen]);
 
-  // Persist messages to localStorage
+  // Persist messages ONLY for authenticated users
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+    if (isAuthenticated()) {
+      localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+      console.log('Vincent: [AUTH] Saved messages to localStorage:', messages.length);
+    }
   }, [messages]);
 
-  // Persist sessionId to localStorage
+  // Persist sessionId ONLY for authenticated users
   useEffect(() => {
-    if (sessionId) {
-      localStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
+    if (isAuthenticated()) {
+      if (sessionId) {
+        localStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
+        console.log('Vincent: [AUTH] Saved sessionId to localStorage:', sessionId);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
+        console.log('Vincent: [AUTH] Removed sessionId from localStorage');
+      }
     }
   }, [sessionId]);
 
@@ -61,25 +96,23 @@ const Vincent = () => {
     const startSession = async () => {
       if (isOpen && !sessionId) {
         try {
-          // Determine user context based on current URL
-          const isSystemUser = window.location.pathname.startsWith('/customer') || 
-                               window.location.pathname.startsWith('/admin') || 
-                               window.location.pathname.startsWith('/staff');
+          const isSystemUser = isAuthenticated();
           
           const userContext = {
             isAuthenticated: isSystemUser,
             userType: isSystemUser ? 'system' : 'public'
           };
           
+          console.log('Vincent: Starting new session, context:', userContext);
           const response = await chatbotAPI.startSession(userContext);
           const data = await response.json();
           
           if (data.success) {
             setSessionId(data.data.sessionId);
-            console.log("Chat session started:", data.data.sessionId, "Context:", userContext);
+            console.log('Vincent: New session started:', data.data.sessionId);
           }
         } catch (error) {
-          console.error("Failed to start chat session:", error);
+          console.error("Vincent: Failed to start chat session:", error);
         }
       }
     };
@@ -98,8 +131,7 @@ const Vincent = () => {
           setQuickActions(data.data.map(action => action.action_text));
         }
       } catch (error) {
-        console.error("Failed to load quick actions:", error);
-        // Fallback to default quick actions
+        console.error("Vincent: Failed to load quick actions:", error);
         setQuickActions([
           "Types of Services",
           "Request a Service",
@@ -112,10 +144,12 @@ const Vincent = () => {
     loadQuickActions();
   }, []);
 
-  // Listen for logout event to clear chat
+  // Monitor for logout - runs continuously
   useEffect(() => {
-    const handleLogout = () => {
-      // Clear all Vincent data
+    const clearVincentData = () => {
+      console.log('Vincent: 🧹 Clearing all data...');
+      
+      // Clear localStorage
       localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
       localStorage.removeItem(STORAGE_KEYS.MESSAGES);
       localStorage.removeItem(STORAGE_KEYS.IS_OPEN);
@@ -129,47 +163,49 @@ const Vincent = () => {
       setSessionId(null);
       setMessages([]);
       setIsOpen(false);
+      
+      console.log('Vincent: ✅ All data cleared');
     };
 
     // Listen for custom logout event
-    window.addEventListener('user-logout', handleLogout);
+    window.addEventListener('user-logout', clearVincentData);
 
-    // AUTOMATIC LOGOUT DETECTION (only on system pages)
-    const isSystemPage = window.location.pathname.startsWith('/customer') || 
-                         window.location.pathname.startsWith('/admin') || 
-                         window.location.pathname.startsWith('/staff');
+    // Continuous monitoring for token removal
+    let checkCount = 0;
+    console.log('Vincent: 👁️ Starting logout monitoring...');
     
-    let checkTokenInterval = null;
-    
-    if (isSystemPage) {
-      // Store initial token state
-      let hadToken = !!localStorage.getItem('h2quote_token');
+    const checkTokenInterval = setInterval(() => {
+      checkCount++;
+      const hasToken = !!localStorage.getItem('h2quote_token');
+      const hasVincentSession = !!localStorage.getItem(STORAGE_KEYS.SESSION_ID);
       
-      checkTokenInterval = setInterval(() => {
-        const hasToken = !!localStorage.getItem('h2quote_token');
-        const hasSession = !!localStorage.getItem(STORAGE_KEYS.SESSION_ID);
-        
-        // If we HAD a token but now don't, and Vincent has a session = user logged out
-        if (hadToken && !hasToken && hasSession) {
-          console.log('Vincent: Detected logout via token removal');
-          handleLogout();
-        }
-        
-        hadToken = hasToken; // Update for next check
-      }, 1000); // Check every second
-    }
+      // Log every 10 checks (every 5 seconds) to show it's running
+      if (checkCount % 10 === 0) {
+        console.log(`Vincent: Monitoring check #${checkCount} - Token: ${hasToken}, Session: ${hasVincentSession}`);
+      }
+      
+      // If token is gone and we still have Vincent data = user logged out
+      if (!hasToken && hasVincentSession) {
+        console.log('Vincent: ⚠️ LOGOUT DETECTED - Token removed but Vincent session exists!');
+        clearVincentData();
+      }
+    }, 500);
 
     return () => {
-      window.removeEventListener('user-logout', handleLogout);
-      if (checkTokenInterval) {
-        clearInterval(checkTokenInterval);
-      }
+      console.log('Vincent: 🛑 Stopping logout monitoring');
+      window.removeEventListener('user-logout', clearVincentData);
+      clearInterval(checkTokenInterval);
     };
-  }, [sessionId]);
+  }, [sessionId]); // Keep sessionId dependency
 
-  // Close chat UI without clearing conversation
   const handleCloseChat = () => {
     setIsOpen(false);
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleCloseChat();
+    }
   };
 
   const handleSendMessage = async (e) => {
@@ -206,7 +242,6 @@ const Vincent = () => {
     } catch (error) {
       console.error("Failed to send message:", error);
       
-      // Show error message to user
       const errorMessage = {
         id: Date.now(),
         text: "I'm sorry, I'm having trouble connecting right now. Please try again.",
@@ -248,9 +283,8 @@ const Vincent = () => {
         throw new Error("Failed to get bot response");
       }
     } catch (error) {
-      console.error("Failed to send quick action:", error);
+      console.error("Failed to send message:", error);
       
-      // Show error message to user
       const errorMessage = {
         id: Date.now(),
         text: "I'm sorry, I'm having trouble connecting right now. Please try again.",
@@ -263,17 +297,8 @@ const Vincent = () => {
     }
   };
 
-  const handleBackdropClick = (e) => {
-    // Close the chat if clicking on the backdrop (not the chat window)
-    if (e.target === e.currentTarget) {
-      handleCloseChat();
-    }
-  };
-
-  // Helper function to render formatted message text
   const renderFormattedMessage = (text) => {
     return text.split('\n').map((line, index) => {
-      // Check if line contains a link with format: 🔗 [URL|Link Text]
       const linkWithTextMatch = line.match(/🔗\s*\[(.*?)\|(.*?)\]/);
       if (linkWithTextMatch) {
         const url = linkWithTextMatch[1];
@@ -291,7 +316,6 @@ const Vincent = () => {
         );
       }
       
-      // Fallback: Check if line contains old format [URL] only
       const linkMatch = line.match(/🔗\s*\[(.*?)\]/);
       if (linkMatch) {
         return (
@@ -307,7 +331,6 @@ const Vincent = () => {
         );
       }
       
-      // Return empty line or text line
       return line ? <div key={index}>{line}</div> : <br key={index} />;
     });
   };
@@ -379,7 +402,6 @@ const Vincent = () => {
             {/* Messages or Logo */}
             <div className="flex-1 space-y-3 p-4 bg-gray-50 overflow-y-auto">
               {messages.length === 0 ? (
-                // Show logo in center when no messages
                 <div className="flex items-center justify-center h-full ">
                   <div className="w-20 h-20">
                     <img
@@ -390,7 +412,6 @@ const Vincent = () => {
                   </div>
                 </div>
               ) : (
-                // Show messages when conversation has started
                 <>
                   {messages.map((message) => (
                     <div
@@ -408,7 +429,6 @@ const Vincent = () => {
                             : "bg-[#1B4781] text-gray-200 rounded-bl-none"
                         }`}
                       >
-                        {/* Render formatted message with line breaks and links */}
                         {message.sender === "bot" ? (
                           <div className="whitespace-pre-line">
                             {renderFormattedMessage(message.text)}
@@ -419,7 +439,6 @@ const Vincent = () => {
                       </div>
                     </div>
                   ))}
-                  {/* Typing indicator */}
                   {isLoading && (
                     <div className="flex justify-start">
                       <div className="bg-[#1B4781] text-gray-200 rounded-lg rounded-bl-none px-4 py-3">
@@ -436,7 +455,7 @@ const Vincent = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Actions - only show when no messages */}
+            {/* Quick Actions */}
             {messages.length === 0 && (
               <div className="px-4 py-2 bg-gray-50">
                 <div className="grid grid-cols-2 gap-2">
