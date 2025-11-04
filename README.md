@@ -19,3 +19,4 @@ LAST LAST LAST LAST PLS LORD, disc notif, test notifs file etc.
 LAST LAST LAST LAST BWAKANANGSHIT, discount notifs fix
 LAST LAST LAST LAST LAST, fixed view all in notifs, overdue now notifies every 3 days after dl
 LAST LAST LAST LAST LAST LAST, FUCK U VINCENT (CHATBOT)
+LAST X7, fixed vincent conversation persist and minor frontend fix for payment overdue
