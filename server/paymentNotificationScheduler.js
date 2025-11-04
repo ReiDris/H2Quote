@@ -296,7 +296,9 @@ const checkPaymentDueDates = async () => {
             await notifyStaff(
               payment,
               "Overdue",
-              `${reminderText}⚠️ OVERDUE PAYMENT (${daysOverdue} days): {payment_phase} for request #{request_number} from {customer_name}. Amount: {amount}. Follow up required.`,
+              `${reminderText}⚠️ OVERDUE PAYMENT (${daysOverdue} day${
+                daysOverdue > 1 ? "s" : ""
+              }): {payment_phase} for request #{request_number} from {customer_name}. Amount: {amount}. Follow up required.`,
               admin.user_id,
               admin.email,
               `${admin.first_name} ${admin.last_name}`
@@ -308,7 +310,9 @@ const checkPaymentDueDates = async () => {
             await notifyStaff(
               payment,
               "Overdue",
-              `${reminderText}⚠️ OVERDUE PAYMENT (${daysOverdue} days): {payment_phase} for your assigned request #{request_number} from {customer_name}. Amount: {amount}. Please follow up with the client.`,
+              `${reminderText}⚠️ OVERDUE PAYMENT (${daysOverdue} day${
+                daysOverdue > 1 ? "s" : ""
+              }): {payment_phase} for your assigned request #{request_number} from {customer_name}. Amount: {amount}. Please follow up with the client.`,
               payment.assigned_to_staff_id,
               payment.assigned_staff_email,
               payment.assigned_staff_name
