@@ -100,7 +100,6 @@ const PasswordResetPage = () => {
 
       if (data.success) {
         setIsSuccess(true);
-        // Redirect to login after 3 seconds
         setTimeout(() => {
           navigate("/login", {
             state: {
