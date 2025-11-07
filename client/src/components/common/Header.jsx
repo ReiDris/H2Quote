@@ -41,7 +41,6 @@ const Header = () => {
       }
     } catch (error) {
       console.error("Error fetching notifications:", error);
-      // Keep existing notifications on error instead of clearing
     } finally {
       setLoading(false);
     }
@@ -107,7 +106,7 @@ const Header = () => {
 
   const toggleNotifications = () => {
     setIsNotificationOpen(!isNotificationOpen);
-    setShowAllNotifications(false); // Reset to showing limited notifications when reopening
+    setShowAllNotifications(false);
   };
 
   const openServiceRequestModal = () => {
@@ -120,7 +119,7 @@ const Header = () => {
 
   const handleFilterChange = (filter) => {
     setActiveFilter(filter);
-    setShowAllNotifications(false); // Reset when changing filters
+    setShowAllNotifications(false);
   };
 
   const handleLogoClick = () => {
@@ -129,8 +128,7 @@ const Header = () => {
 
   const toggleShowAllNotifications = () => {
     if (!showAllNotifications) {
-      // Fetch all notifications when showing all
-      fetchNotifications(1000); // or use a very large number
+      fetchNotifications(1000);
     }
     setShowAllNotifications(!showAllNotifications);
   };

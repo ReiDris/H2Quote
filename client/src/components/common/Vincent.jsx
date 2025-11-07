@@ -9,32 +9,25 @@ const STORAGE_KEYS = {
   IS_OPEN: 'vincent_is_open'
 };
 
-// Helper to determine if user is authenticated (has token)
 const isAuthenticated = () => {
   return !!localStorage.getItem('h2quote_token');
 };
 
-// Helper to detect if page was refreshed (F5) vs navigated (link click)
 const wasPageRefreshed = () => {
   const navEntries = performance.getEntriesByType('navigation');
   if (navEntries.length > 0) {
     return navEntries[0].type === 'reload';
   }
-  // Fallback for older browsers
   return performance.navigation.type === 1;
 };
 
 const Vincent = () => {
-  // Determine storage strategy based on authentication
   const useStorage = isAuthenticated() ? localStorage : sessionStorage;
   const storageType = isAuthenticated() ? 'localStorage' : 'sessionStorage';
   
-  // For PUBLIC users: Clear sessionStorage if page was refreshed (F5)
-  // For AUTHENTICATED users: Keep localStorage always
   const shouldClearStorage = !isAuthenticated() && wasPageRefreshed();
   
   if (shouldClearStorage) {
-    console.log('Vincent: [PUBLIC] Page was refreshed - clearing sessionStorage');
     sessionStorage.removeItem(STORAGE_KEYS.SESSION_ID);
     sessionStorage.removeItem(STORAGE_KEYS.MESSAGES);
     sessionStorage.removeItem(STORAGE_KEYS.IS_OPEN);
@@ -42,11 +35,9 @@ const Vincent = () => {
 
   const [isOpen, setIsOpen] = useState(() => {
     if (shouldClearStorage) {
-      console.log('Vincent: [PUBLIC] Starting fresh after refresh');
       return false;
     }
     const saved = useStorage.getItem(STORAGE_KEYS.IS_OPEN);
-    console.log(`Vincent: [${storageType}] Initial isOpen:`, saved);
     return saved === 'true';
   });
 
@@ -56,7 +47,6 @@ const Vincent = () => {
     }
     const saved = useStorage.getItem(STORAGE_KEYS.MESSAGES);
     const parsed = saved ? JSON.parse(saved) : [];
-    console.log(`Vincent: [${storageType}] Initial messages:`, parsed.length);
     return parsed;
   });
 
@@ -67,7 +57,6 @@ const Vincent = () => {
       return null;
     }
     const id = useStorage.getItem(STORAGE_KEYS.SESSION_ID);
-    console.log(`Vincent: [${storageType}] Initial sessionId:`, id);
     return id;
   });
 
@@ -83,19 +72,16 @@ const Vincent = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Persist isOpen state to appropriate storage
   useEffect(() => {
     const storage = isAuthenticated() ? localStorage : sessionStorage;
     storage.setItem(STORAGE_KEYS.IS_OPEN, isOpen);
   }, [isOpen]);
 
-  // Persist messages to appropriate storage
   useEffect(() => {
     const storage = isAuthenticated() ? localStorage : sessionStorage;
     storage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
   }, [messages]);
 
-  // Persist sessionId to appropriate storage
   useEffect(() => {
     const storage = isAuthenticated() ? localStorage : sessionStorage;
     if (sessionId) {
@@ -105,7 +91,6 @@ const Vincent = () => {
     }
   }, [sessionId]);
 
-  // Start chat session when chat opens (only if no existing session)
   useEffect(() => {
     const startSession = async () => {
       if (isOpen && !sessionId) {
@@ -117,13 +102,11 @@ const Vincent = () => {
             userType: isSystemUser ? 'system' : 'public'
           };
           
-          console.log('Vincent: Starting new session, context:', userContext);
           const response = await chatbotAPI.startSession(userContext);
           const data = await response.json();
           
           if (data.success) {
             setSessionId(data.data.sessionId);
-            console.log('Vincent: New session started:', data.data.sessionId);
           }
         } catch (error) {
           console.error("Vincent: Failed to start chat session:", error);
@@ -134,7 +117,6 @@ const Vincent = () => {
     startSession();
   }, [isOpen, sessionId]);
 
-  // Load quick actions once
   useEffect(() => {
     const loadQuickActions = async () => {
       try {
@@ -158,12 +140,8 @@ const Vincent = () => {
     loadQuickActions();
   }, []);
 
-  // Monitor for logout (authenticated users only)
   useEffect(() => {
     const clearVincentData = () => {
-      console.log('Vincent: 🧹 Clearing all data...');
-      
-      // Clear both storages to be safe
       localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
       localStorage.removeItem(STORAGE_KEYS.MESSAGES);
       localStorage.removeItem(STORAGE_KEYS.IS_OPEN);
@@ -180,24 +158,16 @@ const Vincent = () => {
       setSessionId(null);
       setMessages([]);
       setIsOpen(false);
-      
-      console.log('Vincent: ✅ All data cleared');
     };
 
-    // Listen for custom logout event
     window.addEventListener('user-logout', clearVincentData);
 
-    // Monitor token removal ONLY if currently authenticated
     if (isAuthenticated()) {
-      console.log('Vincent: 👁️ Monitoring for logout...');
-      
       const checkTokenInterval = setInterval(() => {
         const hasToken = !!localStorage.getItem('h2quote_token');
         const hasVincentSession = !!localStorage.getItem(STORAGE_KEYS.SESSION_ID);
         
-        // If token is gone and we still have Vincent data = user logged out
         if (!hasToken && hasVincentSession) {
-          console.log('Vincent: ⚠️ Token removed - triggering logout cleanup');
           clearVincentData();
         }
       }, 500);

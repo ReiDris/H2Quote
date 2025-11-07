@@ -23,7 +23,6 @@ const Sidebar = ({ userRole }) => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isHomeExpanded, setIsHomeExpanded] = useState(false);
 
-  // Use the user role from auth context instead of props for reliability
   const actualUserRole = user?.role || userRole;
 
   const handleLogoutClick = () => {
@@ -31,7 +30,6 @@ const Sidebar = ({ userRole }) => {
   };
 
   const handleConfirmLogout = () => {
-    // Notify Vincent to clear data BEFORE navigation
     window.dispatchEvent(new Event("user-logout"));
 
     logout();
@@ -49,7 +47,6 @@ const Sidebar = ({ userRole }) => {
 
   // Define navigation items based on user role
   const getNavigationItems = () => {
-    // Admin and Staff items (staff will have fewer items)
     const adminStaffItems = [
       {
         to: `/${actualUserRole}/service-tracker`,
@@ -61,7 +58,7 @@ const Sidebar = ({ userRole }) => {
         to: `/${actualUserRole}/verify-accounts`,
         icon: Inbox,
         label: "Verify Accounts",
-        roles: ["admin"], // Only admin can see this
+        roles: ["admin"],
       },
       {
         to: `/${actualUserRole}/client-profiles`,
@@ -85,7 +82,7 @@ const Sidebar = ({ userRole }) => {
         to: `/${actualUserRole}/user-management`,
         icon: UserCheck,
         label: "User Management",
-        roles: ["admin"], // Only admin can see this
+        roles: ["admin"],
       },
       {
         to: `/${actualUserRole}/account-settings`,
