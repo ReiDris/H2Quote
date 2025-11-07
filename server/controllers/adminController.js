@@ -160,15 +160,13 @@ const rejectUser = async (req, res) => {
     const { userId } = req.params;
     const { reason } = req.body;
 
-    // Enhanced logging for debugging
-    console.log("🔍 Reject User Request:");
+    console.log("Reject User Request:");
     console.log("═══════════════════════════════════════");
     console.log("User ID:", userId);
     console.log("Reason:", reason);
     console.log("Admin Email:", req.user?.email);
     console.log("═══════════════════════════════════════");
 
-    // Validate inputs
     if (!userId) {
       return res.status(400).json({
         success: false,
@@ -183,7 +181,6 @@ const rejectUser = async (req, res) => {
       });
     }
 
-    // First, check if user exists
     const { data: existingUser, error: checkError } = await supabase
       .from("users")
       .select(`
@@ -195,7 +192,7 @@ const rejectUser = async (req, res) => {
       .single();
 
     if (checkError) {
-      console.error("❌ Error checking user:", checkError);
+      console.error("Error checking user:", checkError);
       return res.status(404).json({
         success: false,
         message: "User not found",
@@ -207,13 +204,11 @@ const rejectUser = async (req, res) => {
     }
 
     console.log(
-      "✅ User found:",
+      "User found:",
       existingUser.first_name,
       existingUser.last_name
     );
 
-    // Update user status - CHANGED FROM 'Rejected' TO 'Suspended'
-    // The database constraint only allows: 'Active', 'Inactive', 'Suspended'
     const { data: updatedUser, error: updateError } = await supabase
       .from("users")
       .update({
@@ -225,13 +220,12 @@ const rejectUser = async (req, res) => {
       .select();
 
     if (updateError) {
-      console.error("❌ Error updating user:", updateError);
+      console.error("Error updating user:", updateError);
       throw updateError;
     }
 
-    console.log("✅ User status updated successfully");
+    console.log("User status updated successfully");
 
-    // Insert audit log (with error handling)
     try {
       const { error: auditError } = await supabase.from("audit_log").insert({
         table_name: "users",
@@ -244,14 +238,12 @@ const rejectUser = async (req, res) => {
       });
 
       if (auditError) {
-        console.error("⚠️  Warning: Failed to create audit log:", auditError);
-        // Don't fail the request if audit log fails
+        console.error("Warning: Failed to create audit log:", auditError);
       } else {
-        console.log("✅ Audit log created successfully");
+        console.log("Audit log created successfully");
       }
     } catch (auditException) {
-      console.error("⚠️  Warning: Audit log exception:", auditException);
-      // Don't fail the request if audit log fails
+      console.error("Warning: Audit log exception:", auditException);
     }
 
     setImmediate(async () => {
@@ -269,23 +261,22 @@ const rejectUser = async (req, res) => {
         );
 
         console.log(
-          "✅ Rejection email sent successfully to:",
+          "Rejection email sent successfully to:",
           existingUser.email
         );
       } catch (emailError) {
-        console.error("❌ Failed to send rejection email:", emailError.message);
-        // Don't fail the request if email fails
+        console.error("Failed to send rejection email:", emailError.message);
       }
     });
 
-    console.log("✅ Rejection completed successfully");
+    console.log("Rejection completed successfully");
 
     res.json({
       success: true,
       message: "User rejected successfully",
     });
   } catch (error) {
-    console.error("❌ Reject user error:");
+    console.error("Reject user error:");
     console.error("═══════════════════════════════════════");
     console.error("Error Message:", error.message);
     console.error("Error Code:", error.code);
