@@ -9,7 +9,6 @@ import { formatDateTime, formatDate } from "../../utils/dateUtils";
 const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const navigate = useNavigate();
 
-  // Helper function to decode HTML entities (e.g., &#8369; to ₱)
   const decodeHTMLEntities = (text) => {
     if (!text) return text;
     const textarea = document.createElement("textarea");
@@ -17,11 +16,9 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     return textarea.value;
   };
 
-  // Permission flags based on role
   const canAssignStaff = userRole === "admin";
   const canGiveDiscounts = userRole === "admin";
 
-  // State for editable fields
   const [serviceStatus, setServiceStatus] = useState("Pending");
   const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [warrantyStatus, setWarrantyStatus] = useState("Pending");
@@ -31,7 +28,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   const [selectedDiscount, setSelectedDiscount] = useState("No Discount");
   const [customDiscountPercent, setCustomDiscountPercent] = useState("");
 
-  // State for data loading
   const [requestData, setRequestData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -55,13 +51,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     return terms;
   };
 
-  // Calculate warranty display from service items only (exclude chemicals/refrigerants)
   const calculateWarrantyDisplay = (services) => {
     if (!services || services.length === 0) {
       return "Not set";
     }
 
-    // Filter to only actual services (exclude chemicals and refrigerants)
     const actualServices = services.filter(
       (item) => item.itemType === "service"
     );
@@ -70,7 +64,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return "Not set";
     }
 
-    // Get all unique warranty months from actual services only
     const warrantyValues = actualServices
       .map((service) => service.warranty_months)
       .filter((value) => value !== null && value !== undefined);
@@ -79,41 +72,33 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return "Not set";
     }
 
-    // Check if all warranty values are the same
     const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
 
     if (allSame) {
       const months = warrantyValues[0];
       return `${months} ${months === 1 ? "month" : "months"}`;
     } else {
-      // If different values, show "Varies"
       return "Varies";
     }
   };
 
-  // State for payment breakdown individual status changes
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
 
-  // State for manage items modal
   const [isManageItemsModalOpen, setIsManageItemsModalOpen] = useState(false);
 
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [viewingPaymentId, setViewingPaymentId] = useState(null);
   const [viewingFileName, setViewingFileName] = useState("");
 
-  // State for staff list
   const [staffList, setStaffList] = useState([]);
 
-  // State for success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
-  // State for status restriction modal
   const [showStatusRestrictionModal, setShowStatusRestrictionModal] =
     useState(false);
   const [statusRestrictionMessage, setStatusRestrictionMessage] = useState("");
 
-  // Check if discount should be disabled based on service status
   const isDiscountDisabled = [
     "Approved",
     "Ongoing",
@@ -122,17 +107,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
   ].includes(serviceStatus);
 
   const handleServiceStatusChange = (newStatus) => {
-    // 🔍 DEBUG LOGGING
-    console.log("=== handleServiceStatusChange DEBUG ===");
-    console.log("New Status:", newStatus);
-    console.log("Assigned Staff:", requestData?.assignedStaff);
-    console.log(
-      "Staff is 'Not assigned'?",
-      requestData?.assignedStaff === "Not assigned"
-    );
-    console.log("=======================================");
 
-    // Check if trying to set to "Assigned" without assigning staff
     const staffValue = requestData?.assignedStaff?.trim() || "";
     const isNoStaff =
       staffValue === "Not assigned" || staffValue === "" || !staffValue;
@@ -145,12 +120,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         "Cannot set status to Assigned for Processing. Please assign a staff member first."
       );
       setShowStatusRestrictionModal(true);
-      // Keep the current status unchanged
       setServiceStatus(serviceStatus);
       return;
     }
 
-    // Check if trying to set to "Waiting for Approval" without assigning staff
     if (newStatus === "Waiting for Approval" && isNoStaff) {
       console.error(
         "❌ VALIDATION BLOCKED: Cannot set to Waiting for Approval without staff"
@@ -159,12 +132,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         "Cannot set status to Waiting for Approval. Please assign a staff member first."
       );
       setShowStatusRestrictionModal(true);
-      // Keep the current status unchanged
       setServiceStatus(serviceStatus);
       return;
     }
 
-    // Check if trying to set to "Ongoing" without being "Approved"
     if (newStatus === "Ongoing" && serviceStatus !== "Approved") {
       setStatusRestrictionMessage(
         "Cannot set status to Service Ongoing. Please wait for customer approval first."
@@ -173,9 +144,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return;
     }
 
-    // ✅ NEW: Check if trying to set to "Ongoing" without settled partial payments
     if (newStatus === "Ongoing" && serviceStatus === "Approved") {
-      // Check if there are any pending partial payments (excluding Completion Balance)
       const hasPendingPartialPayments = paymentBreakdown.some(
         (payment) =>
           payment.paymentStatus === "Pending" &&
@@ -206,13 +175,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           </div>
         );
         setShowStatusRestrictionModal(true);
-        // Keep the current status unchanged
         setServiceStatus(serviceStatus);
         return;
       }
     }
 
-    // Check if trying to set to "Completed" without being "Ongoing"
     if (newStatus === "Completed" && serviceStatus !== "Ongoing") {
       setStatusRestrictionMessage(
         "Cannot set status to Completed. The service must be ongoing first."
@@ -221,7 +188,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return;
     }
 
-    // ✅ NEW: Check if trying to set to "Completed" from "Ongoing" without payment deadline
     if (newStatus === "Completed" && serviceStatus === "Ongoing") {
       if (
         !paymentDeadline ||
@@ -251,19 +217,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           </div>
         );
         setShowStatusRestrictionModal(true);
-        // Keep the current status unchanged
         setServiceStatus(serviceStatus);
         return;
       }
     }
 
-    // Automatically set service start date when status changes to Ongoing
     if (newStatus === "Ongoing" && serviceStatus !== "Ongoing") {
       const today = new Date().toISOString().split("T")[0];
       setServiceStartDate(today);
     }
 
-    // If validation passes, update the status
     setServiceStatus(newStatus);
   };
 
@@ -274,7 +237,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return requestData.totalCost;
     }
 
-    // Use customDiscountPercent if it's a custom discount
     const discountPercent =
       selectedDiscount === "Custom"
         ? parseFloat(customDiscountPercent) || 0
@@ -294,7 +256,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
     const baseTotal = parseFloat(requestData.totalCost.replace(/[₱,]/g, ""));
 
-    // Calculate discounted total
     let discountPercent = 0;
     if (selectedDiscount !== "No Discount" && selectedDiscount) {
       discountPercent =
@@ -306,7 +267,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     const discountAmount = (baseTotal * discountPercent) / 100;
     const discountedTotal = baseTotal - discountAmount;
 
-    // Recalculate payment breakdown amounts based on percentages
     const updatedBreakdown = paymentBreakdown.map((payment) => {
       const percentage = parseFloat(payment.percentage.replace("%", ""));
       const newAmount = Math.round((discountedTotal * percentage) / 100);
@@ -329,7 +289,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     setIsViewerOpen(true);
   };
 
-  // Fetch staff list
   const fetchStaffList = async () => {
     try {
       const response = await serviceRequestsAPI.getStaffList();
@@ -343,12 +302,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
   };
 
-  // Fetch request details from backend
   const fetchRequestDetails = async () => {
     try {
       setLoading(true);
 
-      // Use getAll with search parameter
       const searchResponse = await serviceRequestsAPI.getAll({
         search: requestNumber,
         limit: 1,
@@ -368,7 +325,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       const request = searchData.data.requests[0];
       setRequestId(request.request_id);
 
-      // Use getDetails (not getRequestDetails)
       const detailResponse = await serviceRequestsAPI.getDetails(
         request.request_id
       );
@@ -442,34 +398,23 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           specialRequirements: requestDetails.special_requirements || "None",
         };
 
-        // ✅ Auto-correct inconsistent status from database (legacy data fix)
         const dbStatus = requestDetails.service_status || "Pending";
         const dbStaff = requestDetails.assigned_staff_name || "Not assigned";
 
-        // Correct "Assigned" status without staff
         if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
           console.warn(
             "⚠️ INCONSISTENT DATA: Correcting 'Assigned' without staff"
           );
-          console.log("  Database status:", dbStatus);
-          console.log("  Database staff:", dbStaff);
-          console.log("  Correcting to: Pending");
 
-          // Correct the status in transformedData
           transformedData.serviceStatus = "Pending";
         }
 
-        // NOTE: Removed auto-correction for "Waiting for Approval"
-        // The validation in handleServiceStatusChange already prevents this
-        // Auto-correction was causing the tracker to show "Pending" incorrectly
 
         setRequestData(transformedData);
         setPaymentBreakdown(requestDetails.paymentHistory || []);
 
-        // Set service status with correction applied
         setServiceStatus(transformedData.serviceStatus);
 
-        // Show message if we corrected an inconsistent status
         if (dbStatus === "Assigned" && dbStaff === "Not assigned") {
           setTimeout(() => {
             setStatusRestrictionMessage(
@@ -487,7 +432,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         setServiceEndDate(requestDetails.actual_completion_date || "");
         setPaymentDeadline(requestDetails.payment_deadline || "");
 
-        // Initialize discount states
         if (
           requestDetails.discount_percentage &&
           requestDetails.discount_percentage > 0
@@ -516,7 +460,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return "Pending";
     }
 
-    // Check if any payment is marked as Overdue
     const hasOverdue = paymentBreakdown.some(
       (payment) => payment.paymentStatus === "Overdue"
     );
@@ -525,11 +468,10 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return "Overdue";
     }
 
-    // Check if payment deadline has passed and there are still pending payments
     if (paymentDeadline) {
       const deadline = new Date(paymentDeadline);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+      today.setHours(0, 0, 0, 0);
 
       const hasPendingPayments = paymentBreakdown.some(
         (payment) => payment.paymentStatus === "Pending"
@@ -540,7 +482,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       }
     }
 
-    // Check if all payments are paid
     const allPaid = paymentBreakdown.every(
       (payment) => payment.paymentStatus === "Paid"
     );
@@ -549,7 +490,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return "Paid";
     }
 
-    // Check if at least one payment is paid (partial payment)
     const somePaid = paymentBreakdown.some(
       (payment) => payment.paymentStatus === "Paid"
     );
@@ -558,7 +498,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       return "Partial";
     }
 
-    // Default to Pending
     return "Pending";
   };
 
@@ -571,7 +510,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
   }, [requestNumber, canAssignStaff]);
 
-  // Auto-calculate Full Payment Status based on payment breakdown
   useEffect(() => {
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       const calculatedStatus = calculateFullPaymentStatus();
@@ -579,7 +517,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
   }, [paymentBreakdown, paymentDeadline]);
 
-  // Update warranty display whenever services change
   useEffect(() => {
     if (requestData && requestData.services) {
       const warrantyDisplay = calculateWarrantyDisplay(requestData.services);
@@ -587,20 +524,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     }
   }, [requestData?.services]);
 
-  // Recalculate payment breakdown when discount changes
   useEffect(() => {
     if (requestData && paymentBreakdown.length > 0) {
       recalculatePaymentBreakdown();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDiscount, customDiscountPercent]);
 
-  // Recalculate payment breakdown when discount changes
   useEffect(() => {
     if (requestData && paymentBreakdown.length > 0) {
       recalculatePaymentBreakdown();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDiscount, customDiscountPercent]);
 
   const handleItemsUpdated = () => {
@@ -663,8 +596,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
     ];
 
     const getCurrentStep = () => {
-      // ✅ FIX: Use serviceStatus state instead of requestData.serviceStatus
-      // This makes the tracker update immediately when dropdown changes
       switch (serviceStatus) {
         case "Pending":
           return 0;
@@ -738,13 +669,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
 
   const handleSaveChanges = async () => {
     try {
-      // 🔍 DEBUG LOGGING
-      console.log("=== handleSaveChanges DEBUG ===");
-      console.log("Service Status:", serviceStatus);
-      console.log("Assigned Staff:", requestData?.assignedStaff);
-      console.log("================================");
 
-      // Validate Service End Date when status is Completed
       if (serviceStatus === "Completed" && !serviceEndDate) {
         setStatusRestrictionMessage(
           "Service End Date is required when marking service as Completed."
@@ -753,9 +678,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // ✅ NEW: Validate payment before allowing Service Ongoing status
       if (serviceStatus === "Ongoing") {
-        // Check if there are any pending partial payments (excluding Completion Balance)
         const hasPendingPartialPayments = paymentBreakdown.some(
           (payment) =>
             payment.paymentStatus === "Pending" &&
@@ -790,14 +713,11 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         }
       }
 
-      // ✅ NEW: Validate warranty periods for services when status is Completed
       if (serviceStatus === "Completed") {
-        // Filter only actual services (not chemicals/refrigerants)
         const actualServices = requestData.services.filter(
           (item) => item.itemType === "service"
         );
 
-        // Check if any service is missing warranty information
         const servicesWithoutWarranty = actualServices.filter(
           (service) => !service.warranty_start_date || !service.warranty_months
         );
@@ -815,7 +735,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         }
       }
 
-      // Validate staff assignment for "Assigned" or "Waiting for Approval" status
       const staffValue = requestData?.assignedStaff?.trim() || "";
       const isNoStaff =
         staffValue === "Not assigned" || staffValue === "" || !staffValue;
@@ -840,11 +759,8 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // ✅ IMPROVED: Smart status management based on staff assignment
       let finalServiceStatus = serviceStatus;
 
-      // ✅ VALIDATION 1: If currently "Assigned" but staff was just unassigned
-      // This means user is trying to remove staff from an Assigned request
       if (
         serviceStatus === "Assigned" &&
         requestData.assignedStaff === "Not assigned"
@@ -854,19 +770,16 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
             "The status will be automatically reverted to 'Pending' when you save."
         );
         setShowStatusRestrictionModal(true);
-        // Change status to Pending automatically
         finalServiceStatus = "Pending";
         setServiceStatus("Pending");
-        return; // Stop here so user can see the revert, then save again
+        return;
       }
 
-      // ✅ AUTO-ASSIGN: If staff is assigned and status is "Pending", auto-promote to "Assigned"
       if (
         requestData.assignedStaff !== "Not assigned" &&
         serviceStatus === "Pending"
       ) {
         finalServiceStatus = "Assigned";
-        // Don't update UI here - let backend confirm via fetchRequestDetails()
       }
 
       if (
@@ -880,7 +793,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         return;
       }
 
-      // Format discount for backend
       let discountForBackend = "No Discount";
       if (selectedDiscount === "Custom" && customDiscountPercent) {
         discountForBackend = `${customDiscountPercent}%`;
@@ -908,9 +820,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
         })),
       };
 
-      console.log("Sending update payload:", updatePayload);
-
-      // Use updateRequest (not updateRequestDetails)
       const response = await serviceRequestsAPI.updateRequest(
         requestId,
         updatePayload
@@ -918,7 +827,6 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
       const data = await response.json();
 
       if (data.success) {
-        // Check if backend auto-reverted the status
         if (data.statusReverted) {
           setSuccessMessage(
             "Staff unassigned. Status has been automatically reverted to 'Pending'."
@@ -927,7 +835,7 @@ const ServiceRequestDetailsView = ({ requestNumber, userRole }) => {
           setSuccessMessage("Changes saved successfully!");
         }
         setShowSuccessModal(true);
-        fetchRequestDetails(); // Reload data from backend to sync UI
+        fetchRequestDetails();
       } else {
         setSuccessMessage("Failed to save changes: " + data.message);
         setShowSuccessModal(true);
