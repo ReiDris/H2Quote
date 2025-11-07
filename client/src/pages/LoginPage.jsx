@@ -13,7 +13,6 @@ const LoginPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Check if there's a success message from signup
     if (location.state?.message) {
       setSuccessMessage(location.state.message);
     }
@@ -22,12 +21,11 @@ const LoginPage = () => {
   const handleLogin = async (credentials) => {
     setIsSubmitting(true);
     try {
-      setLoginError(''); // Clear previous errors
-      setSuccessMessage(''); // Clear success message
+      setLoginError('');
+      setSuccessMessage('');
       
       const user = await login(credentials);
       
-      // Redirect based on user role - using correct routes that exist in App.jsx
       switch (user.role) {
         case 'admin':
           navigate('/admin/service-tracker');
@@ -39,7 +37,7 @@ const LoginPage = () => {
           navigate('/customer/service-tracker');
           break;
         default:
-          navigate('/customer/service-tracker'); // Default to customer service tracker
+          navigate('/customer/service-tracker');
       }
     } catch (error) {
       console.error('Login failed:', error);

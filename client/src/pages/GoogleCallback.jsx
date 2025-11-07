@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../config/api';
-import { useAuth } from '../hooks/useAuth'; // ✅ ADD THIS
+import { useAuth } from '../hooks/useAuth';
 
 const GoogleCallback = () => {
   const navigate = useNavigate();
-  const { googleLogin } = useAuth(); // ✅ ADD THIS
+  const { googleLogin } = useAuth();
   const [error, setError] = useState(null);
   const hasProcessed = useRef(false);
 
@@ -33,17 +33,11 @@ const GoogleCallback = () => {
       try {
         const redirectUri = `${window.location.origin}/auth/google/callback`;
         
-        console.log('🔐 Exchanging code for token (single call)');
-        
-        // ✅ USE googleLogin from useAuth hook instead of direct API call
         const userData = await googleLogin({
           code: code,
           redirect_uri: redirectUri
         });
 
-        console.log('✅ Login successful, user data:', userData);
-        
-        // Redirect based on user role
         const userRole = userData.role;
         switch (userRole) {
           case 'admin':
@@ -66,7 +60,7 @@ const GoogleCallback = () => {
     };
 
     handleCallback();
-  }, [navigate, googleLogin]); // ✅ ADD googleLogin to dependencies
+  }, [navigate, googleLogin]);
 
   if (error) {
     return (

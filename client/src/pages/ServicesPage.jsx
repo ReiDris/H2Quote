@@ -27,11 +27,9 @@ const ServicesPage = () => {
     try {
       setLoading(true);
 
-      // Fetch services
       const servicesResponse = await serviceRequestsAPI.getServicesCatalog();
       const servicesData = await servicesResponse.json();
 
-      // Fetch chemicals (with error handling)
       let chemicalsData = { success: true, data: [] };
       try {
         const chemicalsResponse =
@@ -41,7 +39,6 @@ const ServicesPage = () => {
         console.log("Chemicals not accessible:", chemError);
       }
 
-      // Fetch refrigerants (with error handling)
       let refrigerantsData = { success: true, data: [] };
       try {
         const refrigerantsResponse =
@@ -51,7 +48,6 @@ const ServicesPage = () => {
         console.log("Refrigerants not accessible:", refrigerantError);
       }
 
-      // Transform services data
       if (servicesData.success) {
         const transformedServices = servicesData.data.map((service) => ({
           id: service.service_id,
@@ -72,7 +68,6 @@ const ServicesPage = () => {
         setServices(transformedServices);
       }
 
-      // Transform chemicals data
       if (chemicalsData.success && chemicalsData.data.length > 0) {
         const transformedChemicals = chemicalsData.data.map((chemical) => ({
           id: `chem_${chemical.id}`,
@@ -90,7 +85,6 @@ const ServicesPage = () => {
         setChemicals(transformedChemicals);
       }
 
-      // Transform refrigerants data
       if (refrigerantsData.success && refrigerantsData.data.length > 0) {
         const transformedRefrigerants = refrigerantsData.data.map(
           (refrigerant) => ({
@@ -134,11 +128,9 @@ const ServicesPage = () => {
     return [...services, ...chemicals, ...refrigerants];
   }, [services, chemicals, refrigerants]);
 
-  // Filter services based on search term and active filter
   const filteredServices = useMemo(() => {
     let filtered = allServices;
 
-    // If there's a search term, search across ALL services regardless of filter
     if (searchTerm) {
       filtered = allServices.filter(
         (service) =>
@@ -150,7 +142,6 @@ const ServicesPage = () => {
           service.type.toLowerCase().includes(searchTerm.toLowerCase())
       );
     } else {
-      // Only apply type filter when there's no search term
       if (activeFilter !== "All") {
         filtered = filtered.filter((service) => service.type === activeFilter);
       }
@@ -159,7 +150,6 @@ const ServicesPage = () => {
     return filtered;
   }, [searchTerm, activeFilter, allServices]);
 
-  // Calculate pagination
   const totalPages = Math.ceil(filteredServices.length / servicesPerPage);
   const startIndex = (currentPage - 1) * servicesPerPage;
   const currentServices = filteredServices.slice(
@@ -167,23 +157,19 @@ const ServicesPage = () => {
     startIndex + servicesPerPage
   );
 
-  // Handle search
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset to first page when searching
+    setCurrentPage(1);
   };
 
-  // Handle filter change
   const handleFilterChange = (filterType) => {
     setActiveFilter(filterType);
     setCurrentPage(1);
     setSearchTerm("");
   };
 
-  // Handle pagination
   const handlePageChange = (page) => {
     setCurrentPage(page);
-    // Scroll to the services content area instead of top of page
     const servicesContent = document.getElementById("services-grid");
     if (servicesContent) {
       servicesContent.scrollIntoView({ behavior: "smooth", block: "start" });

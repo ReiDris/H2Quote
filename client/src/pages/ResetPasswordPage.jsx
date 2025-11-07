@@ -16,7 +16,6 @@ const ResetPasswordPage = () => {
   const token = searchParams.get('token');
   const email = searchParams.get('email');
 
-  // Validate token on component mount
   useEffect(() => {
     const validateToken = async () => {
       if (!token || !email) {
@@ -71,7 +70,6 @@ const ResetPasswordPage = () => {
       const data = await response.json();
 
       if (data.success) {
-        // Navigate to login with success message
         navigate('/login', {
           state: {
             message: 'Password has been reset successfully. You can now log in with your new password.',

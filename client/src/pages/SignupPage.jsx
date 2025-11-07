@@ -15,8 +15,7 @@ const SignupPage = () => {
     try {
       console.log("Signup data:", signupData);
       const response = await signup(signupData);
-      // Ignore response.message and set your own custom message
-      setSuccessMessage(""); // You don't even need to use response.message
+      setSuccessMessage("");
       setShowSuccessModal(true);
     } catch (error) {
       console.error("Signup failed:", error);
