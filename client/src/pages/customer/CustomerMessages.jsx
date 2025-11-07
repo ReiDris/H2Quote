@@ -17,13 +17,10 @@ const CustomerMessages = () => {
   const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
-    // Check for success message from navigation states
     if (location.state?.successMessage) {
       setSuccessMessage(location.state.successMessage);
-      // Clear the navigation state
       window.history.replaceState({}, document.title);
 
-      // Auto-hide success message after 5 seconds
       setTimeout(() => {
         setSuccessMessage(null);
       }, 5000);
@@ -61,14 +58,12 @@ const CustomerMessages = () => {
   };
 
   const handleMessageClick = async (messageId, isRead) => {
-    // Mark as read if unread
     if (!isRead) {
       try {
         const response = await messagingAPI.markAsRead([messageId]);
         const data = await response.json();
 
         if (data.success) {
-          // Update local state
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === messageId ? { ...msg, isRead: true } : msg
@@ -83,7 +78,6 @@ const CustomerMessages = () => {
     navigate(`/customer/messages/${messageId}`);
   };
 
-  // Calculate total pages
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   if (loading && messages.length === 0) {

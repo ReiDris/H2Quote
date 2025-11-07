@@ -10,7 +10,7 @@ import AboutUsPage from "./pages/AboutUsPage";
 import ServicesPage from "./pages/ServicesPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage"; // NEW IMPORT
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import GoogleCallback from "./pages/GoogleCallback";
 
 // Admin Pages
@@ -53,7 +53,7 @@ function App() {
               {/* Authentication Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} /> {/* NEW ROUTE */}
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
               {/* Protected Admin Routes */}

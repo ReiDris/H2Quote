@@ -8,7 +8,6 @@ const CustomerComposeMessage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Get request details from navigation state
   const { requestId, requestNumber } = location.state || {};
   
   const [subject, setSubject] = useState("");
@@ -17,7 +16,6 @@ const CustomerComposeMessage = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // If no request context, redirect back
     if (!requestId || !requestNumber) {
       navigate("/customer/messages");
     }
@@ -37,10 +35,8 @@ const CustomerComposeMessage = () => {
       setSending(true);
       setError("");
 
-      // Format subject with request identifier
       const formattedSubject = `[Request #${requestNumber}] ${subject.trim()}`;
       
-      // Format content with request context
       const formattedContent = `Regarding Service Request: ${requestNumber}\n\n${message.trim()}`;
 
       const response = await messagingAPI.createServiceRequestMessage(requestId, {
@@ -51,7 +47,6 @@ const CustomerComposeMessage = () => {
       const data = await response.json();
 
       if (data.success) {
-        // Redirect to messages page after successful send
         navigate("/customer/messages", {
           state: { 
             successMessage: `Message sent successfully to TRISHKAYE team regarding Request #${requestNumber}`
@@ -75,7 +70,7 @@ const CustomerComposeMessage = () => {
   };
 
   if (!requestId || !requestNumber) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   return (

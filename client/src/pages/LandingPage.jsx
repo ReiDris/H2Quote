@@ -22,7 +22,6 @@ import Vincent from '../components/common/Vincent';
 const LandingPage = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // Placeholder images for slideshow
   const slideImages = [
     "/images/site/carousel1.jpg",
     "/images/site/carousel2.jpg",

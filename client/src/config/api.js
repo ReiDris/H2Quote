@@ -1,4 +1,3 @@
-//DEBUG MODE - Set to false in production
 const DEBUG_MODE = false;
 
 //Environment Check and Debug Logging

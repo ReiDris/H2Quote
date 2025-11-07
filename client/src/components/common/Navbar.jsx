@@ -5,14 +5,12 @@ const Navbar = () => {
   const location = useLocation();
 
   const handleNavigation = (section) => {
-    // If we're on the home page, scroll to section
     if (location.pathname === "/") {
       const element = document.getElementById(section);
       if (element) {
         element.scrollIntoView({ behavior: "smooth" });
       }
     } else {
-      // If we're on another page, navigate to home page with section
       window.location.href = `/#${section}`;
     }
   };

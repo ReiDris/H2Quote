@@ -23,7 +23,6 @@ const ActivityLogPage = () => {
     searchTerm: "",
   });
 
-  // Fetch activity logs from API
   const fetchActivityLogs = async (page = 1) => {
     setLoading(true);
     try {
@@ -44,18 +43,15 @@ const ActivityLogPage = () => {
       }
     } catch (error) {
       console.error("Error fetching activity logs:", error);
-      // Optionally show error message to user
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch logs on component mount and when page or filters change
   useEffect(() => {
     fetchActivityLogs(currentPage);
   }, [currentPage]);
 
-  // Handle export to CSV
   const handleExport = async () => {
     try {
       const params = {
@@ -67,7 +63,6 @@ const ActivityLogPage = () => {
       const response = await activityLogsAPI.exportActivityLogs(params);
       const blob = await response.blob();
 
-      // Create a download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -83,11 +78,9 @@ const ActivityLogPage = () => {
       console.log("Activity log exported successfully");
     } catch (error) {
       console.error("Error exporting activity logs:", error);
-      // Optionally show error message to user
     }
   };
 
-  // Handle filter changes
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters((prev) => ({
@@ -96,13 +89,11 @@ const ActivityLogPage = () => {
     }));
   };
 
-  // Apply filters
   const applyFilters = () => {
     setCurrentPage(1);
     fetchActivityLogs(1);
   };
 
-  // Reset filters
   const resetFilters = () => {
     setFilters({
       startDate: "",
@@ -110,7 +101,6 @@ const ActivityLogPage = () => {
       searchTerm: "",
     });
     setCurrentPage(1);
-    // Fetch without filters
     setTimeout(() => {
       fetchActivityLogs(1);
     }, 100);

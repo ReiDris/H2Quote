@@ -13,12 +13,10 @@ const ManageRequestItemsModal = ({ isOpen, onClose, requestId, onSuccess }) => {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 
-  // Modal states for success/failed alerts
   const [showAlertModal, setShowAlertModal] = useState(false);
-  const [alertType, setAlertType] = useState("success"); // "success" or "error"
+  const [alertType, setAlertType] = useState("success");
   const [alertMessage, setAlertMessage] = useState("");
 
-  // Modal state for remove confirmation
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [itemToRemove, setItemToRemove] = useState(null);
 

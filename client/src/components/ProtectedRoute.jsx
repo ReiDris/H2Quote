@@ -6,7 +6,6 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
-  // Show loading spinner while checking authentication
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -15,12 +14,10 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     );
   }
 
-  // If not authenticated, redirect to login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // If user role is not allowed, redirect to appropriate dashboard
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     const redirectPath = user.role === 'admin' 
       ? '/admin/service-tracker' 

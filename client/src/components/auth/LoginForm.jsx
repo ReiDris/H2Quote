@@ -16,21 +16,18 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
   const [successMessage, setSuccessMessage] = useState("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Set default email if provided
   useEffect(() => {
     if (defaultEmail) {
       setFormData((prev) => ({ ...prev, email: defaultEmail }));
     }
   }, [defaultEmail]);
 
-  // Handle messages from password reset or other pages
   useEffect(() => {
     if (location.state?.message) {
       setSuccessMessage(location.state.message);
       if (location.state.email) {
         setFormData((prev) => ({ ...prev, email: location.state.email }));
       }
-      // Clear the state to prevent showing message on refresh
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -73,7 +70,6 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     };
   }, []);
 
-  // Clear local errors when parent error changes
   useEffect(() => {
     if (error) {
       setErrors({ general: error });
@@ -119,14 +115,12 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
       [name]: value,
     }));
 
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
         [name]: "",
       }));
     }
-    // Clear success message when user starts typing
     if (successMessage) {
       setSuccessMessage("");
     }
@@ -171,11 +165,6 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
 
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-    // Debug logs
-    console.log("🔑 Client ID:", clientId);
-    console.log("🌍 Environment:", import.meta.env.MODE);
-    console.log("📦 All env vars:", import.meta.env);
-
     if (!clientId || clientId === "YOUR_GOOGLE_CLIENT_ID") {
       console.error("❌ Google Client ID not configured");
       setErrors({
@@ -187,10 +176,7 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
     setIsGoogleLoading(true);
     setErrors({});
 
-    // Use the current URL's origin for redirect
     const redirectUri = `${window.location.origin}/auth/google/callback`;
-
-    console.log("📍 Redirect URI:", redirectUri);
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -203,9 +189,6 @@ const LoginForm = ({ onLogin, error, defaultEmail, isSubmitting }) => {
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-    console.log("🚀 Redirecting to:", authUrl);
-
-    // Redirect in the same window instead of popup
     window.location.href = authUrl;
   };
 

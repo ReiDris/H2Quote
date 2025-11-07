@@ -14,7 +14,6 @@ const ClientProfilesPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch clients from API
   useEffect(() => {
     fetchClients();
   }, []);
@@ -62,7 +61,6 @@ const ClientProfilesPage = () => {
   const endIndex = startIndex + 10;
   const paginatedData = filteredData.slice(startIndex, endIndex);
 
-  // Reset to page 1 when search term changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);

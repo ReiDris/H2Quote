@@ -14,7 +14,6 @@ const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
   }, [isOpen, paymentId]);
 
   useEffect(() => {
-    // Cleanup: revoke object URL when component unmounts or modal closes
     return () => {
       if (fileUrl) {
         URL.revokeObjectURL(fileUrl);
@@ -33,7 +32,6 @@ const PaymentProofViewer = ({ isOpen, onClose, paymentId, fileName }) => {
         throw new Error("Failed to load payment proof");
       }
 
-      // Create object URL from blob
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       setFileUrl(url);

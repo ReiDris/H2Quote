@@ -14,22 +14,18 @@ const UserManagementPage = () => {
   const [selectedRole, setSelectedRole] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Alert modal states
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertType, setAlertType] = useState("success");
   const [alertMessage, setAlertMessage] = useState("");
 
-  // Archive confirmation modal
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
-  // Archived users view
   const [showArchivedView, setShowArchivedView] = useState(false);
   const [archivedUsers, setArchivedUsers] = useState([]);
   const [loadingArchived, setLoadingArchived] = useState(false);
 
   const usersPerPage = 10;
 
-  // Fetch users from API
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -71,12 +67,8 @@ const UserManagementPage = () => {
   const fetchArchivedUsers = async () => {
     try {
       setLoadingArchived(true);
-
-      console.log("🔍 Fetching archived users...");
       const response = await usersAPI.getArchivedUsers();
 
-      console.log("📡 Response status:", response.status);
-      console.log("📡 Response OK:", response.ok);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
@@ -85,7 +77,6 @@ const UserManagementPage = () => {
       }
 
       const data = await response.json();
-      console.log("✅ Archived users data:", data);
 
       if (data.success && data.data) {
         setArchivedUsers(data.data);

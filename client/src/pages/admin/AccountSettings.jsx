@@ -19,7 +19,6 @@ const AccountSettings = () => {
     password: "",
   });
 
-  // Fetch user account data on component mount
   useEffect(() => {
     fetchAccountData();
   }, []);
@@ -34,7 +33,7 @@ const AccountSettings = () => {
           name: data.data.name || '',
           email: data.data.email || '',
           contactNo: data.data.contactNo || '',
-          password: '************', // Always show placeholder for password
+          password: '************',
         });
       } else {
         setErrors({ general: data.message || 'Failed to load account data' });
@@ -52,7 +51,6 @@ const AccountSettings = () => {
       [name]: value
     }));
 
-    // Clear errors when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -80,12 +78,8 @@ const AccountSettings = () => {
     if (!formData.contactNo.trim()) {
       newErrors.contactNo = 'Contact number is required';
     } else {
-      // Remove spaces, dashes, and parentheses for validation
       const cleanNumber = formData.contactNo.replace(/[\s\-()]/g, '');
-      
-      // Check for Philippine mobile number formats
       const phMobilePattern = /^(09|\+639|639)\d{9}$/;
-      // Check for Philippine landline formats (with area code)
       const phLandlinePattern = /^(02|\+632|632)\d{7,8}$/;
       
       const isValidMobile = phMobilePattern.test(cleanNumber);
@@ -100,7 +94,6 @@ const AccountSettings = () => {
       if (formData.password.length < 12) {
         newErrors.password = 'Password must be at least 12 characters';
       } else {
-        // Check password requirements (same as backend validation)
         const hasUppercase = /[A-Z]/.test(formData.password);
         const hasLowercase = /[a-z]/.test(formData.password);
         const hasNumber = /\d/.test(formData.password);
@@ -130,14 +123,12 @@ const AccountSettings = () => {
     setSuccessMessage('');
 
     try {
-      // Prepare update data
       const updateData = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         contactNo: formData.contactNo.trim(),
       };
 
-      // Only include password if it's been changed
       if (formData.password && formData.password !== '************') {
         updateData.password = formData.password;
       }
@@ -148,7 +139,6 @@ const AccountSettings = () => {
       if (data.success) {
         setSuccessMessage('Account updated successfully!');
         
-        // Update local storage if user data changed
         const currentUser = JSON.parse(localStorage.getItem('h2quote_user') || '{}');
         const updatedUser = {
           ...currentUser,
@@ -159,14 +149,12 @@ const AccountSettings = () => {
         };
         localStorage.setItem('h2quote_user', JSON.stringify(updatedUser));
 
-        // Reset password field to placeholder
         setFormData(prev => ({
           ...prev,
           password: '************'
         }));
         setShowPassword(false);
 
-        // Clear success message after 5 seconds
         setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         setErrors({ general: data.message || 'Failed to update account' });

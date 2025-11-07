@@ -24,7 +24,6 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
       [name]: value,
     }));
 
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -53,12 +52,8 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
     if (!formData.contactNo.trim()) {
       newErrors.contactNo = "Contact number is required";
     } else {
-      // Remove spaces, dashes, and parentheses for validation
       const cleanNumber = formData.contactNo.replace(/[\s\-()]/g, '');
-      
-      // Check for Philippine mobile number formats
       const phMobilePattern = /^(09|\+639|639)\d{9}$/;
-      // Check for Philippine landline formats (with area code)
       const phLandlinePattern = /^(02|\+632|632)\d{7,8}$/;
       
       const isValidMobile = phMobilePattern.test(cleanNumber);
@@ -74,7 +69,6 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
     } else if (formData.password.length < 12) {
       newErrors.password = "Password must be at least 12 characters";
     } else {
-      // Check password requirements (same as backend validation)
       const hasUppercase = /[A-Z]/.test(formData.password);
       const hasLowercase = /[a-z]/.test(formData.password);
       const hasNumber = /\d/.test(formData.password);
@@ -154,7 +148,6 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
     setErrors({});
 
     try {
-      // Prepare data for backend - use verificationDocument instead of verificationFile
       const signupData = {
         ...formData,
         verificationDocument: uploadedFile
