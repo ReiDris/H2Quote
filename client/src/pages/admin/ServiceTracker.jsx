@@ -27,7 +27,6 @@ const ServiceTracker = () => {
   const userType = user?.userType || "admin";
   const itemsPerPage = 10;
 
-  // Fetch service requests from API
   const fetchServiceRequests = async (page = 1, search = "") => {
     try {
       setLoading(true);
@@ -47,9 +46,6 @@ const ServiceTracker = () => {
       const data = await response.json();
 
       if (data.success) {
-        console.log("Fetched service requests:", data.data.requests);
-
-        // ✅ NO FRONTEND FILTERING - Backend now handles staff filtering
         setServiceRequests(data.data.requests);
         setTotalCount(data.data.pagination.totalCount);
       } else {
@@ -74,7 +70,7 @@ const ServiceTracker = () => {
       if (currentPage === 1) {
         fetchServiceRequests(1, searchTerm);
       } else {
-        setCurrentPage(1); // This will trigger the above useEffect
+        setCurrentPage(1);
       }
     }, 300);
 
@@ -88,7 +84,6 @@ const ServiceTracker = () => {
         : userRole === "staff"
         ? "/staff"
         : "/admin";
-    // Remove # from request number if present
     const cleanRequestNumber = requestNumber.replace("#", "");
     navigate(`${basePath}/service-request/${cleanRequestNumber}`);
   };
@@ -131,7 +126,6 @@ const ServiceTracker = () => {
     );
   };
 
-  // Format items summary with debugging
   const formatItemsSummary = (item) => {
     const servicesCount = item.services_count || 0;
     const chemicalsCount = item.chemicals_count || 0;
@@ -161,10 +155,8 @@ const ServiceTracker = () => {
     )}`;
   };
 
-  // Calculate total pages
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-  // Choose layout based on user role
   const Layout = userRole === "admin" ? AdminLayout : StaffLayout;
 
   if (loading) {

@@ -48,14 +48,12 @@ const Messages = () => {
   };
 
   const handleMessageClick = async (messageId, isRead) => {
-    // Mark as read if unread
     if (!isRead) {
       try {
         const response = await messagingAPI.markAsRead([messageId]);
         const data = await response.json();
 
         if (data.success) {
-          // Update local state
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === messageId ? { ...msg, isRead: true } : msg
@@ -86,7 +84,6 @@ const Messages = () => {
 
   const LayoutComponent = getLayout();
 
-  // Calculate total pages
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   if (loading && messages.length === 0) {

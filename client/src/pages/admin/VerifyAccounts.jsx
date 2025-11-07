@@ -36,7 +36,6 @@ const VerifyAccountsPage = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [userToReject, setUserToReject] = useState(null);
 
-  // Fetch pending users from backend
   useEffect(() => {
     fetchPendingUsers();
   }, []);
@@ -72,9 +71,6 @@ const VerifyAccountsPage = () => {
   const viewDocument = async (user) => {
     try {
       setIsProcessing(true);
-
-      // Create the URL for viewing the document
-      // Note: For iframe src, we need to construct the full URL with token as query param
       const token = localStorage.getItem("h2quote_token");
       const API_BASE =
         import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -102,7 +98,6 @@ const VerifyAccountsPage = () => {
   const handleApprove = async () => {
     if (!selectedUser || !selectedRole) return;
 
-    // Prevent duplicate submissions
     if (processingUsers.has(selectedUser.user_id)) {
       return;
     }
@@ -129,7 +124,6 @@ const VerifyAccountsPage = () => {
       } else {
         setModalMessage(data.message || "Failed to approve user");
         setShowErrorModal(true);
-        // Remove from processing set if failed so they can retry
         setProcessingUsers((prev) => {
           const newSet = new Set(prev);
           newSet.delete(selectedUser.user_id);
@@ -140,7 +134,6 @@ const VerifyAccountsPage = () => {
       console.error("Error approving user:", error);
       setModalMessage("Failed to approve user");
       setShowErrorModal(true);
-      // Remove from processing set if failed so they can retry
       setProcessingUsers((prev) => {
         const newSet = new Set(prev);
         newSet.delete(selectedUser.user_id);
@@ -180,7 +173,6 @@ const VerifyAccountsPage = () => {
       } else {
         setModalMessage(data.message || "Failed to reject user");
         setShowErrorModal(true);
-        // Remove from processing set if failed so they can retry
         setProcessingUsers((prev) => {
           const newSet = new Set(prev);
           newSet.delete(userToReject.user_id);
@@ -191,7 +183,6 @@ const VerifyAccountsPage = () => {
       console.error("Error rejecting user:", error);
       setModalMessage("Failed to reject user");
       setShowErrorModal(true);
-      // Remove from processing set if failed so they can retry
       setProcessingUsers((prev) => {
         const newSet = new Set(prev);
         newSet.delete(userToReject.user_id);
