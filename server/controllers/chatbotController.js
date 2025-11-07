@@ -6,36 +6,28 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Helper function to replace context-specific placeholders in responses
 const replaceContextPlaceholders = (response, userContext) => {
   if (!userContext) return response;
   
   const isSystem = userContext.isAuthenticated === true || userContext.userType === 'system';
   
-  // Define replacements based on context
   const replacements = {
-    // Services URL
     '{SERVICES_URL}': isSystem ? '/customer/services' : '/services',
     '{SERVICES_LINK}': isSystem ? '[/customer/services|Services Page]' : '[/services|Services Page]',
     
-    // Sign up references - remove for system users
     '{SIGNUP_STEP}': isSystem ? '' : '\n\n📝 **Step 3:** Sign up for an H2Quote account (if you haven\'t already)\n🔗 [/signup|Sign Up Here]',
     '{SIGNUP_NOTE}': isSystem ? '' : '\n(Skip this if you already have an account)',
     
-    // Home/Dashboard URL
     '{HOME_URL}': isSystem ? '/customer/services' : '/',
     
-    // Generic page references
     '{PAGE_CONTEXT}': isSystem ? 'in your dashboard' : 'on our website',
   };
   
-  // Apply all replacements
   let modifiedResponse = response;
   for (const [placeholder, replacement] of Object.entries(replacements)) {
     modifiedResponse = modifiedResponse.replace(new RegExp(placeholder, 'g'), replacement);
   }
   
-  // Clean up extra whitespace from removed sections
   modifiedResponse = modifiedResponse.replace(/\n{3,}/g, '\n\n').trim();
   
   return modifiedResponse;
@@ -46,7 +38,7 @@ const startChatSession = async (req, res) => {
     const userId = req.user?.id || null; 
     const userIP = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    const { userContext = {} } = req.body; // Get user context from request
+    const { userContext = {} } = req.body;
 
     const { data: session, error } = await supabase
       .from('chat_sessions')
@@ -88,7 +80,6 @@ const startChatSession = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Start chat session error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to start chat session'
@@ -130,7 +121,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Get session metadata for context and attempt tracking
     let sessionMetadata = sessionCheck.rows[0].metadata || {};
     let failedAttempts = sessionMetadata.failed_attempts || 0;
     const userContext = sessionMetadata.user_context || {};
@@ -156,7 +146,7 @@ const sendMessage = async (req, res) => {
       if (quickActionResult.rows.length > 0) {
         botResponse = quickActionResult.rows[0].response_text;
         responseMetadata.is_quick_action = true;
-        failedAttempts = 0; // Reset on successful response
+        failedAttempts = 0;
       } else {
         const responseData = await getBotResponse(client, message);
         botResponse = responseData.response;
@@ -168,13 +158,11 @@ const sendMessage = async (req, res) => {
       const responseData = await getBotResponse(client, message);
       botResponse = responseData.response;
       
-      // Track if response was a fallback
       if (responseData.is_fallback) {
         failedAttempts++;
         responseMetadata.is_fallback = true;
         responseMetadata.attempt_number = failedAttempts;
         
-        // After 3 failed attempts, show contact info
         if (failedAttempts >= 3) {
           const contactResponse = await client.query(
             `SELECT responses FROM chat_intents WHERE intent_name = 'fallback_contact' AND is_active = TRUE LIMIT 1`
@@ -185,17 +173,15 @@ const sendMessage = async (req, res) => {
             botResponse = responses[Math.floor(Math.random() * responses.length)];
           }
           
-          failedAttempts = 0; // Reset after showing contact
+          failedAttempts = 0;
         }
       } else {
-        failedAttempts = 0; // Reset on successful response
+        failedAttempts = 0;
       }
     }
 
-    // Apply context-aware replacements to bot response
     botResponse = replaceContextPlaceholders(botResponse, userContext);
 
-    // Update session metadata with attempt count
     sessionMetadata.failed_attempts = failedAttempts;
     await client.query(
       'UPDATE chat_sessions SET metadata = $1 WHERE session_id = $2',
@@ -252,7 +238,6 @@ const sendMessage = async (req, res) => {
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Send message error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to send message'
@@ -267,7 +252,6 @@ const getBotResponse = async (client, userInput) => {
     const result = await client.query('SELECT get_chatbot_response($1) as response', [userInput]);
     const response = result.rows[0].response;
     
-    // Check if response is a fallback (default) response
     const isFallback = response.includes("I'm sorry, I'm having trouble processing");
     
     return {
@@ -275,7 +259,6 @@ const getBotResponse = async (client, userInput) => {
       is_fallback: isFallback
     };
   } catch (error) {
-    console.error('Error getting bot response:', error);
     return {
       response: "I'm sorry, I'm having trouble processing your request right now. Please try again or contact our support team directly.",
       is_fallback: true
@@ -321,7 +304,6 @@ const getChatHistory = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get chat history error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get chat history'
@@ -359,7 +341,6 @@ const endChatSession = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('End chat session error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to end chat session'
@@ -385,7 +366,6 @@ const getQuickActions = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get quick actions error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get quick actions'
@@ -429,7 +409,6 @@ const getChatAnalytics = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get chat analytics error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get chat analytics'
@@ -465,7 +444,6 @@ const updateChatIntent = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update chat intent error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update chat intent'

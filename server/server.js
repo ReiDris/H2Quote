@@ -4,7 +4,6 @@ const cors = require('cors');
 
 const app = express();
 
-// CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -19,7 +18,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Load routes - EXACT same way as ultra-simple-debug that worked
 const authRoutes = require('./routes/googleOAuth');
 const adminRoutes = require('./routes/admin');
 const healthRoutes = require('./routes/health');
@@ -34,7 +32,6 @@ const userRoutes = require('./routes/users');
 const activityLogRoutes = require('./routes/activityLog'); 
 const { schedulePaymentNotifications } = require('./paymentNotificationScheduler');
 
-// Register routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', healthRoutes);
@@ -48,7 +45,6 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/activity-logs', activityLogRoutes); 
 
-// Error handler
 app.use((error, req, res, next) => {
     console.error('Error:', error.message);
     res.status(500).json({
@@ -57,20 +53,16 @@ app.use((error, req, res, next) => {
     });
 });
 
-// 404 handler
 app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log('H2Quote Server');
     console.log(`Port: ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'production'}`);
     console.log('Server running');
-
-    // ✅ FIXED: Initialize payment notification scheduler
     schedulePaymentNotifications();
 });
 

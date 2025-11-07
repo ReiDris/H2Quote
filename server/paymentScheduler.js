@@ -2,14 +2,11 @@ const cron = require('node-cron');
 const pool = require('./config/database');
 const { createNotification } = require('./controllers/notificationController');
 
-// Check for overdue/upcoming due payments every day at 9 AM
 const schedulePaymentReminders = () => {
-  // Run every day at 9:00 AM
   cron.schedule('0 9 * * *', async () => {
     console.log('Running payment reminder check...');
     
     try {
-      // Get payments that need reminders
       const query = `
         SELECT 
           p.payment_id,
@@ -58,33 +55,27 @@ const schedulePaymentReminders = () => {
         let subject, messageBody;
         
         if (daysUntilDue === 7) {
-          // 7 days before
           subject = `Payment Reminder - Due in 7 Days`;
           messageBody = `Your ${payment.payment_phase} payment of ₱${parseFloat(payment.amount).toLocaleString()} for service request #${payment.request_number} is due in 7 days (${new Date(payment.due_date).toLocaleDateString()}). Please ensure timely payment.`;
         } else if (daysUntilDue === 1) {
-          // 1 day before
           subject = `Payment Reminder - Due Tomorrow`;
           messageBody = `Your ${payment.payment_phase} payment of ₱${parseFloat(payment.amount).toLocaleString()} for service request #${payment.request_number} is due tomorrow (${new Date(payment.due_date).toLocaleDateString()}). Please make your payment as soon as possible.`;
         } else if (daysUntilDue < 0) {
-          // Overdue
           subject = `Payment Overdue`;
           messageBody = `Your ${payment.payment_phase} payment of ₱${parseFloat(payment.amount).toLocaleString()} for service request #${payment.request_number} is now overdue. Due date was ${new Date(payment.due_date).toLocaleDateString()}. Please submit payment immediately to avoid service delays.`;
           
-          // Update payment status to Overdue
           await pool.query(
             'UPDATE payments SET status = $1 WHERE payment_id = $2',
             ['Overdue', payment.payment_id]
           );
-          console.log(`⚠️  Payment ${payment.payment_id} marked as OVERDUE`);
         }
         
-        // Send notification (in-app + email)
         await createNotification(
           payment.requested_by_user_id,
           'Payment',
           subject,
           messageBody,
-          payment.email  // ← Email notification sent here
+          payment.email  
         );
         
         const notifType = daysUntilDue === 7 ? '7-day' : daysUntilDue === 1 ? '1-day' : 'OVERDUE';

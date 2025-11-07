@@ -47,7 +47,6 @@ const getUserAccount = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get account error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve account details',
@@ -185,7 +184,6 @@ const updateUserAccount = async (req, res) => {
           ip_address: req.ip || req.connection.remoteAddress,
         });
       } catch (auditError) {
-        console.error('Failed to log audit entry:', auditError);
       }
 
       const responseData = {
@@ -211,7 +209,6 @@ const updateUserAccount = async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Update account error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update account',
@@ -283,7 +280,6 @@ const changePassword = async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Change password error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to change password',

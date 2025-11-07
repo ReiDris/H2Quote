@@ -7,13 +7,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Get notifications for logged-in user
 const getUserNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
     const { limit = 20, unreadOnly } = req.query;
 
-    // Convert unreadOnly to boolean properly
     const isUnreadOnly = unreadOnly === "true" || unreadOnly === true;
 
     console.log("Parsed params:", {
@@ -42,7 +40,6 @@ const getUserNotifications = async (req, res) => {
 
     const queryParams = [userId];
 
-    // Fix: Filter for anything NOT 'Sent' (includes both 'Pending' and 'Failed')
     if (isUnreadOnly) {
       query += " AND status != $2";
       queryParams.push("Sent");
@@ -56,13 +53,11 @@ const getUserNotifications = async (req, res) => {
 
     const result = await pool.query(query, queryParams);
 
-    // Fix: Get unread count for anything NOT 'Sent'
     const unreadResult = await pool.query(
       "SELECT COUNT(*) as count FROM notifications WHERE recipient_user_id = $1 AND status != $2",
       [userId, "Sent"]
     );
 
-    // Get filtered count (total count matching the current filter)
     let filteredCountQuery =
       "SELECT COUNT(*) as count FROM notifications WHERE recipient_user_id = $1";
     const filteredCountParams = [userId];
@@ -94,7 +89,6 @@ const getUserNotifications = async (req, res) => {
   }
 };
 
-// Mark notification as read
 const markAsRead = async (req, res) => {
   try {
     const { notificationId } = req.params;
@@ -128,12 +122,10 @@ const markAsRead = async (req, res) => {
   }
 };
 
-// Mark all notifications as read
 const markAllAsRead = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Fix: Mark all unread notifications (both Pending and Failed) as read
     const result = await pool.query(
       `UPDATE notifications 
        SET sent_at = NOW(), status = 'Sent'
@@ -160,7 +152,6 @@ const markAllAsRead = async (req, res) => {
   }
 };
 
-// Delete notification
 const deleteNotification = async (req, res) => {
   try {
     const { notificationId } = req.params;
@@ -193,7 +184,6 @@ const deleteNotification = async (req, res) => {
   }
 };
 
-// Clear all read notifications (NEW FUNCTION)
 const clearReadNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -219,14 +209,12 @@ const clearReadNotifications = async (req, res) => {
   }
 };
 
-// Generate notification email HTML
 const generateNotificationEmail = (
   userName,
   subject,
   messageBody,
   notificationType
 ) => {
-  // Map notification types to colors
   const typeColors = {
     "Account Registration": "#007bff",
     "Account Verification": "#17a2b8",
@@ -278,7 +266,6 @@ const generateNotificationEmail = (
   `;
 };
 
-// Helper function to create notification (in-app + email)
 const createNotification = async (
   userId,
   notificationType,
@@ -294,7 +281,6 @@ const createNotification = async (
       notificationType
     );
 
-    // Validate required parameters
     if (!userId && !recipientEmail) {
       throw new Error("Either userId or recipientEmail must be provided");
     }
@@ -307,7 +293,6 @@ const createNotification = async (
 
     const recipientType = userId ? "Internal" : "External";
 
-    // Get user details if userId is provided and email is not
     let finalRecipientEmail = recipientEmail;
     let userName = "User";
 
@@ -326,7 +311,6 @@ const createNotification = async (
 
     console.log("Final recipient email:", finalRecipientEmail);
 
-    // Insert notification into database
     const query = `
       INSERT INTO notifications 
       (notification_type, recipient_type, recipient_user_id, recipient_email, subject, message_body, status, scheduled_for)
@@ -346,7 +330,6 @@ const createNotification = async (
     const notificationId = result.rows[0].notification_id;
     console.log("Notification created with ID:", notificationId);
 
-    // Send email notification asynchronously (don't wait for it)
     if (finalRecipientEmail) {
       setImmediate(async () => {
         try {
@@ -364,7 +347,6 @@ const createNotification = async (
             emailHtml
           );
 
-          // Update notification status
           if (emailSent) {
             await pool.query(
               `UPDATE notifications 
@@ -390,7 +372,7 @@ const createNotification = async (
           }
         } catch (emailError) {
           console.error("Error sending notification email:", emailError);
-          // Update failed status
+
           try {
             await pool.query(
               `UPDATE notifications 
@@ -412,7 +394,6 @@ const createNotification = async (
   }
 };
 
-// Helper function to create notifications for multiple users
 const createBulkNotifications = async (
   userIds,
   notificationType,

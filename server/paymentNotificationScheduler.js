@@ -2,10 +2,8 @@ const cron = require("node-cron");
 const pool = require("./config/database");
 const { createNotification } = require("./controllers/notificationController");
 
-// Track sent notifications to prevent duplicates
 const sentNotifications = new Map();
 
-// Clean up old tracking entries (older than 7 days)
 const cleanupTrackingData = () => {
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   for (const [key, timestamp] of sentNotifications.entries()) {
@@ -14,13 +12,10 @@ const cleanupTrackingData = () => {
     }
   }
 };
-
-// Generate unique notification key to prevent duplicates
 const getNotificationKey = (paymentId, notificationType, recipientId, date) => {
   return `${paymentId}-${notificationType}-${recipientId}-${date}`;
 };
 
-// Check if notification was already sent today
 const wasNotificationSent = (paymentId, notificationType, recipientId) => {
   const today = new Date().toISOString().split("T")[0];
   const key = getNotificationKey(
@@ -32,7 +27,6 @@ const wasNotificationSent = (paymentId, notificationType, recipientId) => {
   return sentNotifications.has(key);
 };
 
-// Mark notification as sent
 const markNotificationSent = (paymentId, notificationType, recipientId) => {
   const today = new Date().toISOString().split("T")[0];
   const key = getNotificationKey(
@@ -44,7 +38,6 @@ const markNotificationSent = (paymentId, notificationType, recipientId) => {
   sentNotifications.set(key, Date.now());
 };
 
-// Check when the last overdue notification was sent for a payment
 const getLastOverdueNotificationDate = async (paymentId) => {
   try {
     const result = await pool.query(
@@ -71,7 +64,6 @@ const getLastOverdueNotificationDate = async (paymentId) => {
   }
 };
 
-// Send payment notification to client
 const notifyClient = async (payment, notificationType, messageTemplate) => {
   const key = `client-${payment.payment_id}-${notificationType}`;
 
@@ -119,7 +111,6 @@ const notifyClient = async (payment, notificationType, messageTemplate) => {
   }
 };
 
-// Send payment notification to admin/staff
 const notifyStaff = async (
   payment,
   notificationType,
@@ -165,7 +156,6 @@ const notifyStaff = async (
   }
 };
 
-// Main function to check payment due dates
 const checkPaymentDueDates = async () => {
   console.log("\n🔔 Running payment notification check...");
   console.log(`📅 Current date: ${new Date().toISOString().split("T")[0]}`);
@@ -210,7 +200,6 @@ const checkPaymentDueDates = async () => {
     let notificationsSent = 0;
 
     for (const payment of payments) {
-      // ✅ SAFETY CHECK: Skip if due_date is invalid
       if (!payment.due_date) {
         console.log(
           `\n⏭️  Skipping payment #${payment.payment_id} - No due date set`
@@ -221,7 +210,6 @@ const checkPaymentDueDates = async () => {
       const dueDate = new Date(payment.due_date);
       dueDate.setHours(0, 0, 0, 0);
 
-      // ✅ SAFETY CHECK: Skip if date is invalid
       if (isNaN(dueDate.getTime())) {
         console.log(
           `\n⚠️  Skipping payment #${payment.payment_id} - Invalid due date: ${payment.due_date}`
@@ -238,11 +226,9 @@ const checkPaymentDueDates = async () => {
       console.log(`   Phase: ${payment.payment_phase}`);
       console.log(`   Due: ${payment.due_date} (${daysUntilDue} days)`);
 
-      // OVERDUE PAYMENT
       if (daysUntilDue < 0) {
         console.log(`   ⚠️  OVERDUE by ${Math.abs(daysUntilDue)} days`);
 
-        // Check when last overdue notification was sent
         const lastOverdueSent = await getLastOverdueNotificationDate(
           payment.payment_id
         );
@@ -250,11 +236,9 @@ const checkPaymentDueDates = async () => {
         let shouldSendOverdue = false;
 
         if (!lastOverdueSent) {
-          // First overdue notification
           shouldSendOverdue = true;
           console.log(`   📤 Sending FIRST overdue notification`);
         } else {
-          // Check if 3 days have passed since last overdue notification
           const daysSinceLastNotification = Math.floor(
             (today - lastOverdueSent) / (1000 * 60 * 60 * 24)
           );
@@ -275,7 +259,6 @@ const checkPaymentDueDates = async () => {
           const daysOverdue = Math.abs(daysUntilDue);
           const reminderText = daysOverdue > 3 ? "URGENT REMINDER: " : "";
 
-          // Notify client
           await notifyClient(
             payment,
             "Overdue",
@@ -284,7 +267,6 @@ const checkPaymentDueDates = async () => {
             }. Amount due: {amount}. Please make payment as soon as possible to avoid service delays.`
           );
 
-          // Notify all admins
           const adminsQuery = `
       SELECT user_id, email, first_name, last_name 
       FROM users 
@@ -305,7 +287,6 @@ const checkPaymentDueDates = async () => {
             );
           }
 
-          // Notify assigned staff if exists
           if (payment.assigned_to_staff_id && payment.assigned_staff_email) {
             await notifyStaff(
               payment,
@@ -322,18 +303,14 @@ const checkPaymentDueDates = async () => {
           notificationsSent++;
         }
       }
-      // DUE TODAY
       else if (daysUntilDue === 0) {
         console.log(`   🔔 DUE TODAY`);
 
-        // Notify client
         await notifyClient(
           payment,
           "Due Today",
           "🔔 PAYMENT DUE TODAY: Your {payment_phase} for service request #{request_number} is due today. Amount: {amount}. Please process payment to avoid delays."
         );
-
-        // Notify all admins
         const adminsQuery = `
           SELECT user_id, email, first_name, last_name 
           FROM users 
@@ -351,8 +328,6 @@ const checkPaymentDueDates = async () => {
             `${admin.first_name} ${admin.last_name}`
           );
         }
-
-        // Notify assigned staff if exists
         if (payment.assigned_to_staff_id && payment.assigned_staff_email) {
           await notifyStaff(
             payment,
@@ -366,18 +341,13 @@ const checkPaymentDueDates = async () => {
 
         notificationsSent++;
       }
-      // DUE IN 3 DAYS
       else if (daysUntilDue === 3) {
-        console.log(`   ⏰ Due in 3 days (reminder)`);
-
-        // Notify client
         await notifyClient(
           payment,
           "Reminder",
           "⏰ PAYMENT REMINDER: Your {payment_phase} for service request #{request_number} is due in 3 days on {due_date}. Amount: {amount}. Please prepare payment."
         );
 
-        // Notify all admins
         const adminsQuery = `
           SELECT user_id, email, first_name, last_name 
           FROM users 
@@ -395,8 +365,6 @@ const checkPaymentDueDates = async () => {
             `${admin.first_name} ${admin.last_name}`
           );
         }
-
-        // Notify assigned staff if exists
         if (payment.assigned_to_staff_id && payment.assigned_staff_email) {
           await notifyStaff(
             payment,
@@ -410,18 +378,12 @@ const checkPaymentDueDates = async () => {
 
         notificationsSent++;
       }
-      // DUE IN 7 DAYS (ADDED THIS)
       else if (daysUntilDue === 7) {
-        console.log(`   📅 Due in 7 days (early reminder)`);
-
-        // Notify client
         await notifyClient(
           payment,
           "Reminder",
           "📅 PAYMENT REMINDER: Your {payment_phase} for service request #{request_number} is due in 7 days on {due_date}. Amount: {amount}. Please prepare payment."
         );
-
-        // Notify all admins
         const adminsQuery = `
           SELECT user_id, email, first_name, last_name 
           FROM users 
@@ -439,8 +401,6 @@ const checkPaymentDueDates = async () => {
             `${admin.first_name} ${admin.last_name}`
           );
         }
-
-        // Notify assigned staff if exists
         if (payment.assigned_to_staff_id && payment.assigned_staff_email) {
           await notifyStaff(
             payment,
@@ -465,8 +425,6 @@ const checkPaymentDueDates = async () => {
     console.error("❌ Error checking payment due dates:", error);
   }
 };
-
-// Function to notify when payment deadline is first set (Bug #3 & #7)
 const notifyPaymentDeadlineSet = async (
   requestId,
   paymentPhase,
@@ -478,7 +436,6 @@ const notifyPaymentDeadlineSet = async (
       `\n🔔 Notifying about new payment deadline for request #${requestId}`
     );
 
-    // Get request and customer details
     const requestQuery = `
       SELECT 
         sr.request_id,
@@ -510,7 +467,6 @@ const notifyPaymentDeadlineSet = async (
     });
     const formattedAmount = `₱${parseFloat(amount).toLocaleString()}`;
 
-    // Notify client
     await createNotification(
       request.customer_id,
       "Payment",
@@ -521,7 +477,6 @@ const notifyPaymentDeadlineSet = async (
 
     console.log(`✅ Client notified about payment deadline`);
 
-    // Notify all admins
     const adminsQuery = `
       SELECT user_id, email, first_name, last_name 
       FROM users 
@@ -541,7 +496,6 @@ const notifyPaymentDeadlineSet = async (
 
     console.log(`✅ Admin(s) notified about payment deadline`);
 
-    // Notify assigned staff if exists
     if (request.assigned_to_staff_id && request.assigned_staff_email) {
       await createNotification(
         request.assigned_to_staff_id,
@@ -558,12 +512,9 @@ const notifyPaymentDeadlineSet = async (
   }
 };
 
-// Schedule payment notifications to run daily at 8:00 AM
 const schedulePaymentNotifications = () => {
   console.log("🚀 Initializing payment notification scheduler...");
 
-  // Run daily at 8:00 AM (Philippine Time)
-  // Cron format: second minute hour day month weekday
   cron.schedule(
     "0 8 * * *",
     async () => {
@@ -579,10 +530,6 @@ const schedulePaymentNotifications = () => {
   console.log(
     "✅ Payment notification scheduler active (runs daily at 8:00 AM PHT)"
   );
-
-  // OPTIONAL: Run immediately on startup for testing
-  // Uncomment the line below if you want to test immediately
-  // setTimeout(checkPaymentDueDates, 5000);
 };
 
 module.exports = {

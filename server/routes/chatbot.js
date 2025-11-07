@@ -3,14 +3,12 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const chatbotController = require('../controllers/chatbotController');
 
-// Public routes (no auth required for chatbot)
 router.post('/start-session', chatbotController.startChatSession);
 router.post('/send-message', chatbotController.sendMessage);
 router.get('/quick-actions', chatbotController.getQuickActions);
 router.get('/chat-history/:sessionId', chatbotController.getChatHistory);
 router.post('/end-session/:sessionId', chatbotController.endChatSession);
 
-// Admin routes (protected)
 const requireAdmin = (req, res, next) => {
   if (req.user?.userType !== 'admin') {
     return res.status(403).json({

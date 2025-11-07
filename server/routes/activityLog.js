@@ -7,12 +7,7 @@ const {
 } = require("../controllers/activityLogController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-/**
- * @route   GET /api/activity-logs
- * @desc    Get paginated activity logs with filters
- * @access  Admin, Staff
- * @query   page, limit, startDate, endDate, userId, action, tableName, searchTerm
- */
+
 router.get(
   "/",
   authenticateToken,
@@ -20,12 +15,7 @@ router.get(
   getActivityLogs
 );
 
-/**
- * @route   GET /api/activity-logs/export
- * @desc    Export activity logs to CSV
- * @access  Admin, Staff
- * @query   startDate, endDate, userId, action, tableName, searchTerm
- */
+
 router.get(
   "/export",
   authenticateToken,
@@ -33,12 +23,6 @@ router.get(
   exportActivityLogs
 );
 
-/**
- * @route   GET /api/activity-logs/stats
- * @desc    Get activity log statistics
- * @access  Admin, Staff
- * @query   startDate, endDate
- */
 router.get(
   "/stats",
   authenticateToken,

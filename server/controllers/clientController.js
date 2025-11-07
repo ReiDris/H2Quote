@@ -7,7 +7,6 @@ const supabase = createClient(
 
 const getAllClients = async (req, res) => {
   try {
-    // Get all active companies with their primary contact and calculate years as customer
     const { data: clients, error } = await supabase
       .from('companies')
       .select(`
@@ -34,7 +33,6 @@ const getAllClients = async (req, res) => {
       throw error;
     }
 
-    // Format the data to match frontend expectations
     const formattedClients = clients.map(company => {
       const primaryContact = company.users[0];
       const createdDate = new Date(company.created_at);

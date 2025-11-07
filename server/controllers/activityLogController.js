@@ -157,7 +157,6 @@ const getActivityLogs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get activity logs error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch activity logs",
@@ -308,7 +307,6 @@ const exportActivityLogs = async (req, res) => {
 
     res.status(200).send(csv);
   } catch (error) {
-    console.error("Export activity logs error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to export activity logs",
@@ -340,7 +338,6 @@ const getActivityLogStats = async (req, res) => {
     const whereClause =
       whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-    // Get statistics
     const statsQuery = `
       SELECT 
         COUNT(*) as total_activities,
@@ -363,7 +360,6 @@ const getActivityLogStats = async (req, res) => {
       data: statsResult.rows[0],
     });
   } catch (error) {
-    console.error("Get activity log stats error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch activity log statistics",
