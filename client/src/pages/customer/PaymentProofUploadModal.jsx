@@ -24,7 +24,6 @@ const PaymentProofUploadModal = ({
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validate file type
     const allowedTypes = [
       "image/jpeg",
       "image/jpg",
@@ -36,7 +35,6 @@ const PaymentProofUploadModal = ({
       return;
     }
 
-    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       setError("File size must be less than 5MB.");
       return;
@@ -45,7 +43,6 @@ const PaymentProofUploadModal = ({
     setSelectedFile(file);
     setError("");
 
-    // Create preview for images
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onloadend = () => {

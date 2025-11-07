@@ -21,7 +21,6 @@ const CustomerServiceTracker = () => {
 
   const itemsPerPage = 10;
 
-  // Helper function to parse service category from counts
   const parseServiceCategory = (servicesCount, chemicalsCount, refrigerantsCount) => {
     const categories = [];
     
@@ -32,23 +31,17 @@ const CustomerServiceTracker = () => {
     return categories.length > 0 ? categories.join(", ") : "-";
   };
 
-  // Helper function to parse requested service details from items_summary
   const parseRequestedService = (itemsSummary) => {
     if (!itemsSummary) return "-";
-    
-    // The items_summary comes as: "2x Service Name (Service), 1x Chemical Name (Chemical)"
-    // We'll split it and clean it up for display
+
     const items = itemsSummary.split(", ");
     
     if (items.length === 0) return "-";
-    
-    // For better readability, we'll format each item
+
     const formattedItems = items.map(item => {
-      // Remove the type suffix in parentheses for cleaner display
       return item.replace(/\s*\((Service|Chemical|Refrigerant)\)/, '');
     });
     
-    // If there are too many items, show first few and add count
     if (formattedItems.length > 3) {
       return `${formattedItems.slice(0, 3).join(", ")} +${formattedItems.length - 3} more`;
     }
@@ -56,7 +49,6 @@ const CustomerServiceTracker = () => {
     return formattedItems.join(", ");
   };
 
-  // Fetch customer requests from API
   const fetchCustomerRequests = async () => {
     try {
       setLoading(true);
@@ -95,8 +87,7 @@ const CustomerServiceTracker = () => {
           paymentStatus: item.payment_status || "Pending",
           warrantyStatus: item.warranty_status || "N/A",
           totalCost: formatCurrency(item.estimated_cost),
-          requestId: item.request_id, // Keep original ID for navigation
-          // Store raw data for search functionality
+          requestId: item.request_id,
           itemsSummary: item.items_summary
         }));
 
@@ -118,13 +109,10 @@ const CustomerServiceTracker = () => {
   }, []);
 
   const formatCurrency = (amount) => {
-    // Convert to number if it's a string
     const numAmount = parseFloat(amount);
     
-    // Check if it's a valid number (this handles null, undefined, NaN)
     if (isNaN(numAmount)) return "₱0.00";
     
-    // Format with 2 decimal places and thousands separator
     return `₱${numAmount.toLocaleString('en-US', { 
       minimumFractionDigits: 2, 
       maximumFractionDigits: 2 
@@ -132,7 +120,6 @@ const CustomerServiceTracker = () => {
   };
 
   const handleMoreActions = (item) => {
-    // Navigate using the actual request_id from backend
     navigate(`/customer/service-request/${item.requestId}`);
   };
 

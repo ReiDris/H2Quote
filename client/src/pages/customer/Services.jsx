@@ -27,11 +27,9 @@ const Services = () => {
     try {
       setLoading(true);
 
-      // Fetch services
       const servicesResponse = await serviceRequestsAPI.getServicesCatalog();
       const servicesData = await servicesResponse.json();
 
-      // Fetch chemicals (with error handling)
       let chemicalsData = { success: true, data: [] };
       try {
         const chemicalsResponse = await serviceRequestsAPI.getChemicalsCatalog();
@@ -40,7 +38,6 @@ const Services = () => {
         console.log("Chemicals not accessible:", chemError);
       }
 
-      // Fetch refrigerants (with error handling)
       let refrigerantsData = { success: true, data: [] };
       try {
         const refrigerantsResponse = await serviceRequestsAPI.getRefrigerantsCatalog();
@@ -49,7 +46,6 @@ const Services = () => {
         console.log("Refrigerants not accessible:", refrigerantError);
       }
 
-      // Transform services data
       if (servicesData.success) {
         const transformedServices = servicesData.data.map((service) => ({
           id: service.service_id,
@@ -70,7 +66,6 @@ const Services = () => {
         setServices(transformedServices);
       }
 
-      // Transform chemicals data
       if (chemicalsData.success && chemicalsData.data.length > 0) {
         const transformedChemicals = chemicalsData.data.map((chemical) => ({
           id: `chem_${chemical.id}`,
@@ -88,7 +83,6 @@ const Services = () => {
         setChemicals(transformedChemicals);
       }
 
-      // Transform refrigerants data
       if (refrigerantsData.success && refrigerantsData.data.length > 0) {
         const transformedRefrigerants = refrigerantsData.data.map(
           (refrigerant) => ({

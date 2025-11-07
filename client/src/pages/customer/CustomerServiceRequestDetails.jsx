@@ -37,24 +37,20 @@ const CustomerServiceRequestDetails = () => {
     return terms;
   };
 
-  // Helper function to calculate subtotal (before discount) from services
   const calculateSubtotal = () => {
     if (!requestData || !requestData.services) return 0;
 
     return requestData.services.reduce((sum, service) => {
-      // Remove currency symbol and parse the number
       const price = parseFloat(service.totalPrice.replace(/[₱,]/g, "").trim());
       return sum + (isNaN(price) ? 0 : price);
     }, 0);
   };
 
-  // Calculate warranty display from service items only (exclude chemicals/refrigerants)
   const calculateWarrantyDisplay = (services) => {
     if (!services || services.length === 0) {
       return "Not set";
     }
 
-    // Filter to only actual services (exclude chemicals and refrigerants)
     const actualServices = services.filter(
       (item) => item.itemType === "service"
     );
@@ -63,7 +59,6 @@ const CustomerServiceRequestDetails = () => {
       return "Not set";
     }
 
-    // Get all unique warranty months from actual services only
     const warrantyValues = actualServices
       .map((service) => service.warranty_months)
       .filter((value) => value !== null && value !== undefined);
@@ -72,19 +67,16 @@ const CustomerServiceRequestDetails = () => {
       return "Not set";
     }
 
-    // Check if all warranty values are the same
     const allSame = warrantyValues.every((val) => val === warrantyValues[0]);
 
     if (allSame) {
       const months = warrantyValues[0];
       return `${months} ${months === 1 ? "month" : "months"}`;
     } else {
-      // If different values, show "Varies"
       return "Varies";
     }
   };
 
-  // Payment proof modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -97,7 +89,6 @@ const CustomerServiceRequestDetails = () => {
     }
   }, [requestId]);
 
-  // Update warranty display whenever services change
   useEffect(() => {
     if (requestData && requestData.services) {
       const warrantyDisplay = calculateWarrantyDisplay(requestData.services);
@@ -168,8 +159,8 @@ const CustomerServiceRequestDetails = () => {
           serviceEndDate: requestDetails.service_end_date || "-",
           estimatedEndDate: requestDetails.estimated_end_date || "-",
           warranty: requestDetails.warranty || "6 months",
-          statusName: requestDetails.status_name, // Backend status name
-          quotation: quotation, // Store quotation information
+          statusName: requestDetails.status_name,
+          quotation: quotation,
           remarks: requestDetails.remarks || "-",
           serviceLocation: requestDetails.site_location || "-",
           preferredSchedule: requestDetails.preferred_schedule || "-",
@@ -208,7 +199,6 @@ const CustomerServiceRequestDetails = () => {
     });
   };
 
-  // ✅ UPDATED: Approve service request directly (quotation auto-created on submit)
   const handleApproveQuotation = async () => {
     setApprovalLoading(true);
     setApprovalError("");
@@ -216,14 +206,12 @@ const CustomerServiceRequestDetails = () => {
     try {
       const token = localStorage.getItem("h2quote_token");
 
-      console.log("🚀 Sending approve request:", requestData.requestId); // ADD THIS
-
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/service-requests/${
           requestData.requestId
         }/approve`,
         {
-          method: "POST", // Make sure this is POST
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
@@ -234,10 +222,6 @@ const CustomerServiceRequestDetails = () => {
         }
       );
 
-      console.log("📡 Response status:", response.status); // ADD THIS
-      console.log("📡 Response ok:", response.ok); // ADD THIS
-
-      // Check if response is ok before parsing JSON
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Server response:", errorText);
