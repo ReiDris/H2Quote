@@ -16,7 +16,6 @@ const ServiceRequestModal = ({ onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // State for success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [requestNumber, setRequestNumber] = useState("");
 
