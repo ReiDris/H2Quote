@@ -11,11 +11,6 @@ const googleAuth = async (req, res) => {
   try {
     const { credential, code, redirect_uri } = req.body;
     
-    console.log('📝 Received:', { 
-      hasCredential: !!credential, 
-      hasCode: !!code, 
-      redirect_uri 
-    });
 
     let googleUser;
     
@@ -24,7 +19,6 @@ const googleAuth = async (req, res) => {
       googleUser = await response.json();
 
       if (googleUser.error) {
-        console.log('Credential validation error:', googleUser.error);
         return res.status(400).json({
           success: false,
           message: 'Invalid Google token'
@@ -46,7 +40,6 @@ const googleAuth = async (req, res) => {
       });
 
       const tokenData = await tokenResponse.json();
-      console.log('🎫 Token response:', tokenData.error ? tokenData : 'Token received successfully');
 
       if (tokenData.error) {
         return res.status(400).json({
@@ -80,8 +73,6 @@ const googleAuth = async (req, res) => {
         message: 'Email not provided by Google'
       });
     }
-
-    console.log('👤 Looking up user:', email);
 
     const { data: userResults, error: userError } = await supabase.rpc(
       'get_user_with_company',
@@ -221,7 +212,6 @@ const googleAuth = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
     }
 
     res.json({

@@ -14,13 +14,6 @@ const getUserNotifications = async (req, res) => {
 
     const isUnreadOnly = unreadOnly === "true" || unreadOnly === true;
 
-    console.log("Parsed params:", {
-      limit,
-      unreadOnly,
-      isUnreadOnly,
-      type: typeof unreadOnly,
-    });
-
     let query = `
       SELECT 
         notification_id,
@@ -43,9 +36,7 @@ const getUserNotifications = async (req, res) => {
     if (isUnreadOnly) {
       query += " AND status != $2";
       queryParams.push("Sent");
-      console.log("✓ Filtering for unread (NOT Sent) notifications only");
     } else {
-      console.log("✓ Showing all notifications");
     }
 
     query += ` ORDER BY created_at DESC LIMIT $${queryParams.length + 1}`;
@@ -81,7 +72,6 @@ const getUserNotifications = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get notifications error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch notifications",
@@ -114,7 +104,6 @@ const markAsRead = async (req, res) => {
       message: "Notification marked as read",
     });
   } catch (error) {
-    console.error("Mark notification as read error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark notification as read",
@@ -134,17 +123,12 @@ const markAllAsRead = async (req, res) => {
       [userId]
     );
 
-    console.log(
-      `Marked ${result.rows.length} notifications as read for user ${userId}`
-    );
-
     res.json({
       success: true,
       message: "All notifications marked as read",
       markedCount: result.rows.length,
     });
   } catch (error) {
-    console.error("Mark all as read error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark all notifications as read",
@@ -176,7 +160,6 @@ const deleteNotification = async (req, res) => {
       message: "Notification deleted successfully",
     });
   } catch (error) {
-    console.error("Delete notification error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete notification",
@@ -201,7 +184,6 @@ const clearReadNotifications = async (req, res) => {
       deletedCount: result.rows.length,
     });
   } catch (error) {
-    console.error("Clear read notifications error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to clear read notifications",
@@ -274,12 +256,6 @@ const createNotification = async (
   recipientEmail = null
 ) => {
   try {
-    console.log(
-      "Creating notification for user:",
-      userId,
-      "Type:",
-      notificationType
-    );
 
     if (!userId && !recipientEmail) {
       throw new Error("Either userId or recipientEmail must be provided");
@@ -309,8 +285,6 @@ const createNotification = async (
       }
     }
 
-    console.log("Final recipient email:", finalRecipientEmail);
-
     const query = `
       INSERT INTO notifications 
       (notification_type, recipient_type, recipient_user_id, recipient_email, subject, message_body, status, scheduled_for)
@@ -328,7 +302,6 @@ const createNotification = async (
     ]);
 
     const notificationId = result.rows[0].notification_id;
-    console.log("Notification created with ID:", notificationId);
 
     if (finalRecipientEmail) {
       setImmediate(async () => {
@@ -354,10 +327,6 @@ const createNotification = async (
                WHERE notification_id = $1`,
               [notificationId]
             );
-            console.log(
-              "Email notification sent successfully to:",
-              finalRecipientEmail
-            );
           } else {
             await pool.query(
               `UPDATE notifications 
@@ -365,13 +334,8 @@ const createNotification = async (
                WHERE notification_id = $1`,
               [notificationId]
             );
-            console.error(
-              "Failed to send email notification to:",
-              finalRecipientEmail
-            );
           }
         } catch (emailError) {
-          console.error("Error sending notification email:", emailError);
 
           try {
             await pool.query(
@@ -381,7 +345,6 @@ const createNotification = async (
               [notificationId]
             );
           } catch (updateError) {
-            console.error("Error updating notification status:", updateError);
           }
         }
       });
@@ -389,7 +352,6 @@ const createNotification = async (
 
     return notificationId;
   } catch (error) {
-    console.error("Create notification error:", error);
     throw error;
   }
 };
@@ -415,7 +377,6 @@ const createBulkNotifications = async (
 
     return notificationIds;
   } catch (error) {
-    console.error("Create bulk notifications error:", error);
     throw error;
   }
 };
@@ -441,7 +402,6 @@ const createServiceRequestNotification = async (
       messageBody
     );
   } catch (error) {
-    console.error("Create service request notification error:", error);
     throw error;
   }
 };

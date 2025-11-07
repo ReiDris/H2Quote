@@ -55,7 +55,6 @@ const getAllClients = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get all clients error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch clients'

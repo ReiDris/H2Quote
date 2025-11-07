@@ -24,7 +24,6 @@ const getAllUsers = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get all users error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch users'
@@ -62,7 +61,6 @@ const updateUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update user error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update user'
@@ -127,7 +125,6 @@ const archiveUser = async (req, res) => {
         ip_address: req.ip || req.connection?.remoteAddress
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
     }
 
     res.json({
@@ -137,7 +134,6 @@ const archiveUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Archive user error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to archive user'
@@ -164,7 +160,6 @@ const getArchivedUsers = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get archived users error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch archived users'
@@ -222,7 +217,6 @@ const restoreUser = async (req, res) => {
         ip_address: req.ip || req.connection?.remoteAddress
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
     }
 
     res.json({
@@ -232,7 +226,6 @@ const restoreUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Restore user error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to restore user'
