@@ -30,7 +30,6 @@ router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCata
 
 router.use(authenticateToken);
 
-// 🔍 DEBUG - Log all incoming requests
 router.use((req, res, next) => {
   console.log('📥 SERVICE REQUEST ROUTE:', req.method, req.path);
   console.log('📥 Full URL:', req.originalUrl);
