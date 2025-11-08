@@ -21,13 +21,13 @@ const getActivityLogs = async (req, res) => {
     let paramCount = 1;
 
     if (startDate) {
-      whereConditions.push(`DATE(al.created_at) >= DATE($${paramCount})`);
+      whereConditions.push(`al.created_at >= $${paramCount}`);
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      whereConditions.push(`DATE(al.created_at) <= DATE($${paramCount})`);
+      whereConditions.push(`al.created_at <= $${paramCount}`);
       queryParams.push(endDate);
       paramCount++;
     }
@@ -52,7 +52,7 @@ const getActivityLogs = async (req, res) => {
 
     if (searchTerm) {
       whereConditions.push(
-        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount} OR CONCAT(u.first_name, ' ', u.last_name) ILIKE $${paramCount})`
+        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount})`
       );
       queryParams.push(`%${searchTerm}%`);
       paramCount++;
@@ -175,13 +175,13 @@ const exportActivityLogs = async (req, res) => {
     let paramCount = 1;
 
     if (startDate) {
-      whereConditions.push(`DATE(al.created_at) >= DATE($${paramCount})`);
+      whereConditions.push(`al.created_at >= $${paramCount}`);
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      whereConditions.push(`DATE(al.created_at) <= DATE($${paramCount})`);
+      whereConditions.push(`al.created_at <= $${paramCount}`);
       queryParams.push(endDate);
       paramCount++;
     }
@@ -206,7 +206,7 @@ const exportActivityLogs = async (req, res) => {
 
     if (searchTerm) {
       whereConditions.push(
-        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount} OR CONCAT(u.first_name, ' ', u.last_name) ILIKE $${paramCount})`
+        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount})`
       );
       queryParams.push(`%${searchTerm}%`);
       paramCount++;
@@ -324,13 +324,13 @@ const getActivityLogStats = async (req, res) => {
     let paramCount = 1;
 
     if (startDate) {
-      whereConditions.push(`DATE(created_at) >= DATE($${paramCount})`);
+      whereConditions.push(`created_at >= $${paramCount}`);
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      whereConditions.push(`DATE(created_at) <= DATE($${paramCount})`);
+      whereConditions.push(`created_at <= $${paramCount}`);
       queryParams.push(endDate);
       paramCount++;
     }
