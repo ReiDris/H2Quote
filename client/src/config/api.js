@@ -2,19 +2,17 @@ const DEBUG_MODE = false;
 
 //Environment Check and Debug Logging
 if (DEBUG_MODE) {
-  console.log("🔧 API Configuration Debug:");
-  console.log("═══════════════════════════════════════");
+  console.log("API Configuration Debug:");
   console.log("Environment Mode:", import.meta.env.MODE);
   console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
   console.log("All env vars:", import.meta.env);
-  console.log("═══════════════════════════════════════");
 }
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 if (DEBUG_MODE) {
-  console.log("✅ Final API_URL:", API_URL);
-  console.log("═══════════════════════════════════════\n");
+  console.log("Final API_URL:", API_URL);
+  console.log("\n");
 }
 
 export const fetchPublic = async (endpoint, options = {}) => {
@@ -33,7 +31,7 @@ export const fetchPublic = async (endpoint, options = {}) => {
   const fullUrl = `${API_URL}${endpoint}`;
 
   if (DEBUG_MODE) {
-    console.log("🌐 Public API Call:", {
+    console.log("Public API Call:", {
       url: fullUrl,
       method: config.method || "GET",
     });
@@ -42,7 +40,7 @@ export const fetchPublic = async (endpoint, options = {}) => {
   const response = await fetch(fullUrl, config);
 
   if (DEBUG_MODE) {
-    console.log("📡 Public Response:", {
+    console.log("Public Response:", {
       status: response.status,
       statusText: response.statusText,
       url: response.url,
@@ -75,27 +73,27 @@ export const fetchWithAuth = async (endpoint, options = {}) => {
   const fullUrl = `${API_URL}${endpoint}`;
 
   if (DEBUG_MODE) {
-    console.log("🔐 Authenticated API Call:");
-    console.log("═══════════════════════════════════════");
+    console.log("Authenticated API Call:");
+
     console.log("URL:", fullUrl);
     console.log("Method:", config.method || "GET");
     console.log("Has FormData:", options.body instanceof FormData);
     console.log("Has Token:", !!token);
     console.log("Headers:", config.headers);
-    console.log("═══════════════════════════════════════");
+
   }
 
   try {
     const response = await fetch(fullUrl, config);
 
     if (DEBUG_MODE) {
-      console.log("📡 Response Received:");
-      console.log("═══════════════════════════════════════");
+      console.log("Response Received:");
+  
       console.log("Status:", response.status);
       console.log("Status Text:", response.statusText);
       console.log("Response URL:", response.url);
       console.log("OK:", response.ok);
-      console.log("═══════════════════════════════════════");
+  
     }
 
     if (response.status === 401) {
@@ -110,11 +108,9 @@ export const fetchWithAuth = async (endpoint, options = {}) => {
   } catch (error) {
     if (DEBUG_MODE) {
       console.error("API Call Failed:");
-      console.error("═══════════════════════════════════════");
       console.error("URL:", fullUrl);
       console.error("Error:", error);
       console.error("Error Message:", error.message);
-      console.error("═══════════════════════════════════════");
     }
     throw error;
   }
@@ -462,12 +458,12 @@ export const paymentsAPI = {
   uploadPaymentProof: (paymentId, file) => {
     if (DEBUG_MODE) {
       console.log("📤 Preparing Payment Proof Upload:");
-      console.log("═══════════════════════════════════════");
+  
       console.log("Payment ID:", paymentId);
       console.log("File Name:", file.name);
       console.log("File Type:", file.type);
       console.log("File Size:", `${(file.size / 1024 / 1024).toFixed(2)} MB`);
-      console.log("═══════════════════════════════════════");
+  
     }
 
     const formData = new FormData();
