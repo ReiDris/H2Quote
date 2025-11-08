@@ -64,6 +64,7 @@ const getActivityLogs = async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM audit_log al
+      LEFT JOIN users u ON al.changed_by = u.email
       ${whereClause}
     `;
     const countResult = await pool.query(countQuery, queryParams);
