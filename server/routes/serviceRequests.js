@@ -14,7 +14,6 @@ const requireAdminOrStaff = (req, res, next) => {
 };
 
 const requireCustomer = (req, res, next) => {
- 
   if (!req.user || req.user.userType !== 'client') {
     return res.status(403).json({
       success: false,
@@ -29,13 +28,6 @@ router.get('/chemicals/catalog', serviceRequestController.getChemicalsCatalog);
 router.get('/refrigerants/catalog', serviceRequestController.getRefrigerantsCatalog);
 
 router.use(authenticateToken);
-
-router.use((req, res, next) => {
-  console.log('📥 SERVICE REQUEST ROUTE:', req.method, req.path);
-  console.log('📥 Full URL:', req.originalUrl);
-  console.log('📥 User:', req.user?.email);
-  next();
-});
 
 router.get('/my-requests', requireCustomer, serviceRequestController.getCustomerRequests);
 router.get('/staff-list', requireAdminOrStaff, serviceRequestController.getStaffList);

@@ -4,8 +4,6 @@ const { createNotification } = require('./controllers/notificationController');
 
 const schedulePaymentReminders = () => {
   cron.schedule('0 9 * * *', async () => {
-    console.log('Running payment reminder check...');
-    
     try {
       const query = `
         SELECT 
@@ -27,7 +25,6 @@ const schedulePaymentReminders = () => {
         WHERE p.status IN ('Pending', 'Overdue')
           AND p.due_date IS NOT NULL
           AND (
-            -- For Full Payment or Down Payment: always send reminders
             (p.payment_phase IN ('Full Payment', 'Down Payment')
               AND (
                 p.due_date = CURRENT_DATE + INTERVAL '7 days'
@@ -36,7 +33,6 @@ const schedulePaymentReminders = () => {
               )
             )
             OR
-            -- For Completion Balance: only send if service is completed
             (p.payment_phase = 'Completion Balance'
               AND rs.status_name = 'Completed'
               AND (
@@ -77,19 +73,12 @@ const schedulePaymentReminders = () => {
           messageBody,
           payment.email  
         );
-        
-        const notifType = daysUntilDue === 7 ? '7-day' : daysUntilDue === 1 ? '1-day' : 'OVERDUE';
-        console.log(`✅ ${notifType} payment reminder sent to ${payment.email} (Payment ID: ${payment.payment_id})`);
       }
-      
-      console.log(`Payment reminder check completed. ${result.rows.length} reminder(s) sent.`);
       
     } catch (error) {
       console.error('Error in payment reminder scheduler:', error);
     }
   });
-  
-  console.log('Payment reminder scheduler initialized - runs daily at 9:00 AM');
 };
 
 module.exports = { schedulePaymentReminders };
