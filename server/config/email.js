@@ -1,18 +1,16 @@
 const nodemailer = require('nodemailer');
 
-// Validate required environment variables
 if (!process.env.EMAIL_USER) {
     console.error('Missing required email environment variables (EMAIL_USER)');
     process.exit(1);
 }
 
-// SendGrid Configuration
 const sendGridConfig = {
     host: 'smtp.sendgrid.net',
     port: 2525,
     secure: false,
     auth: {
-        user: 'apikey', // This is literally the string 'apikey'
+        user: 'apikey', 
         pass: process.env.SENDGRID_API_KEY
     },
     connectionTimeout: 30000,
@@ -30,7 +28,6 @@ const sendGridConfig = {
     debug: false
 };
 
-// App Password Configuration - Using Port 2525 with STARTTLS
 const appPasswordConfig = {
     host: 'smtp.gmail.com',      
     port: 2525,
@@ -55,7 +52,6 @@ const appPasswordConfig = {
     debug: false
 };
 
-// OAuth2 Configuration (preferred for Gmail)
 const oauth2Config = {
     host: 'smtp.gmail.com',
     port: 465,
@@ -81,7 +77,6 @@ const oauth2Config = {
     }
 };
 
-// Determine which config to use (Priority: SendGrid > OAuth2 > App Password)
 let emailConfig;
 let configType;
 
@@ -98,76 +93,35 @@ if (process.env.SENDGRID_API_KEY) {
     configType = 'Gmail App Password (Port 2525 STARTTLS)';
 } else {
     console.error('Missing email authentication credentials');
-    console.log('Please set one of the following:');
-    console.log('1. SENDGRID_API_KEY for SendGrid (Recommended)');
-    console.log('2. GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN for OAuth2');
-    console.log('3. EMAIL_PASSWORD for Gmail App Password');
     process.exit(1);
 }
 
-console.log('📧 Email Configuration:');
-console.log('   Email User:', process.env.EMAIL_USER);
-console.log('   Using:', configType);
-console.log('   Admin Email:', process.env.ADMIN_EMAIL || 'Not set');
-if (configType === 'SendGrid' && process.env.SENDGRID_FROM_EMAIL) {
-    console.log('   SendGrid From Email:', process.env.SENDGRID_FROM_EMAIL);
-}
-
-// Create transporter
 const transporter = nodemailer.createTransport(emailConfig);
 
-// ✅ Graceful error handling
 transporter.on('error', (error) => {
-    console.error('❌ Transporter error:', error.message);
+    console.error('Transporter error:', error.message);
 });
 
-// Verify transporter connection (non-blocking)
 setImmediate(() => {
-    const verifyTimeout = setTimeout(() => {
-        console.log('⚠️  Email verification taking too long, skipping...');
-        console.log('   Email service may still work when actually sending messages.\n');
-    }, 10000); // 10 second timeout for verification
+    const verifyTimeout = setTimeout(() => {}, 10000);
 
     transporter.verify((error, success) => {
         clearTimeout(verifyTimeout);
         if (error) {
-            console.log('⚠️  Email verification warning:', error.message);
-            console.log('   Email service may still work when actually sending messages.');
-            console.log(`   Current configuration: ${configType}`);
-            if (configType === 'SendGrid') {
-                console.log('   If emails fail, check:');
-                console.log('   1. SENDGRID_API_KEY is correct');
-                console.log('   2. Sender email is verified in SendGrid');
-                console.log('   3. SENDGRID_FROM_EMAIL is set (optional but recommended)');
-            } else if (configType === 'Gmail App Password (Port 2525 STARTTLS)') {
-                console.log('   If emails fail, check:');
-                console.log('   1. EMAIL_PASSWORD is a valid Gmail App Password (16 chars, no spaces)');
-                console.log('   2. Your Gmail account allows App Passwords (2FA must be enabled)');
-                console.log('   3. Visit https://accounts.google.com/DisplayUnlockCaptcha');
-            }
-            console.log('');
-        } else {
-            console.log('✅ Email server verified successfully');
-            console.log(`   Ready to send emails via ${configType}\n`);
+            console.error('Email verification failed:', error.message);
         }
     });
 });
 
-// ✅ Improved send email function with retry logic and flexible from address
 const sendEmail = async (to, subject, htmlContent, retries = 2) => {
-    // Determine which email to use based on config type
     const fromEmail = configType === 'SendGrid' 
         ? (process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER)
         : process.env.EMAIL_USER;
     
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            console.log(`📤 Attempting to send email to: ${to} (Attempt ${attempt}/${retries})`);
-            console.log(`   Using: ${configType} with from address: ${fromEmail}`);
-            
-            // Create abort controller for timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 30000); 
             
             try {
                 const info = await transporter.sendMail({
@@ -178,12 +132,6 @@ const sendEmail = async (to, subject, htmlContent, retries = 2) => {
                 });
                 
                 clearTimeout(timeoutId);
-                
-                console.log('✅ Email sent successfully!');
-                console.log('   To:', to);
-                console.log('   From:', fromEmail);
-                console.log('   Subject:', subject);
-                console.log('   Message ID:', info.messageId);
                 return true;
                 
             } catch (sendError) {
@@ -192,38 +140,21 @@ const sendEmail = async (to, subject, htmlContent, retries = 2) => {
             }
             
         } catch (error) {
-            console.error(`❌ Email sending failed (Attempt ${attempt}/${retries})`);
-            console.error('   To:', to);
-            
-            // Check if it's a timeout
-            if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
-                console.error('   Error: Connection timeout');
-            } else {
-                console.error('   Error:', error.message);
-            }
-            
-            // If this was the last attempt, return false
             if (attempt === retries) {
-                console.error('   All retry attempts exhausted');
-                console.error('Failed to send email notification to:', to);
+                console.error('Email sending failed after retries:', error.message);
                 return false;
             }
-            
-            // Exponential backoff: 3s, 6s
-            const waitTime = attempt * 3;
-            console.log(`   Retrying in ${waitTime} seconds...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
     }
     
     return false;
 };
 
-// Email template generators
 const generateUserWelcomeEmail = (customerName, companyName, email, contactNo) => {
     return `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px;">
+            <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px; border-left: 5px solid #007bff;">
                 <h1 style="color: #333; text-align: center; margin-bottom: 30px;">Welcome to H2Quote!</h1>
                 
                 <p style="font-size: 16px; color: #555; line-height: 1.6;">
@@ -231,28 +162,33 @@ const generateUserWelcomeEmail = (customerName, companyName, email, contactNo) =
                 </p>
                 
                 <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                    Thank you for registering with H2Quote! Your account for <strong>${companyName}</strong> has been submitted and is currently under review.
+                    Thank you for registering with TRISHKAYE Enterprises. We have received your account registration request and are currently reviewing your information.
                 </p>
                 
-                <div style="background-color: #e9ecef; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                    <h3 style="color: #333; margin-top: 0;">Account Details:</h3>
-                    <p style="margin: 5px 0;"><strong>Company:</strong> ${companyName}</p>
-                    <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
-                    <p style="margin: 5px 0;"><strong>Contact:</strong> ${contactNo}</p>
+                <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #dee2e6;">
+                    <h3 style="color: #007bff; margin-top: 0;">Registration Details:</h3>
+                    <p style="color: #555; margin: 5px 0;"><strong>Company Name:</strong> ${companyName}</p>
+                    <p style="color: #555; margin: 5px 0;"><strong>Email:</strong> ${email}</p>
+                    <p style="color: #555; margin: 5px 0;"><strong>Contact Number:</strong> ${contactNo}</p>
+                </div>
+                
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 0; font-size: 14px; color: #856404;">
+                        <strong>What's Next?</strong> Your account is currently under review by our team. You will receive another email once your account has been verified and approved. This process typically takes 1-2 business days.
+                    </p>
                 </div>
                 
                 <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                    Our admin team will review your application and verification documents. You'll receive an email notification once your account is approved.
-                </p>
-                
-                <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                    If you have any questions, please don't hesitate to contact our support team.
+                    If you have any questions or need assistance, please don't hesitate to contact our support team.
                 </p>
                 
                 <div style="text-align: center; margin-top: 30px;">
                     <p style="color: #888; font-size: 14px;">
                         Best regards,<br>
-                        TRISHKAYE Enterprises
+                        TRISHKAYE Enterprises Team
+                    </p>
+                    <p style="color: #aaa; font-size: 12px; margin-top: 10px;">
+                        This is an automated notification from H2Quote
                     </p>
                 </div>
             </div>
@@ -263,31 +199,39 @@ const generateUserWelcomeEmail = (customerName, companyName, email, contactNo) =
 const generateAdminNotificationEmail = (customerName, companyName, email, contactNo) => {
     return `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #fff3cd; padding: 30px; border-radius: 10px; border-left: 5px solid #ffc107;">
+            <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px; border-left: 5px solid #28a745;">
                 <h1 style="color: #333; text-align: center; margin-bottom: 30px;">New User Registration</h1>
                 
                 <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                    A new user has registered and requires admin approval.
+                    A new user has registered on H2Quote and requires approval.
                 </p>
                 
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                    <h3 style="color: #333; margin-top: 0;">User Details:</h3>
-                    <p style="margin: 5px 0;"><strong>Name:</strong> ${customerName}</p>
-                    <p style="margin: 5px 0;"><strong>Company:</strong> ${companyName}</p>
-                    <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
-                    <p style="margin: 5px 0;"><strong>Contact:</strong> ${contactNo}</p>
+                <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #dee2e6;">
+                    <h3 style="color: #28a745; margin-top: 0;">User Details:</h3>
+                    <p style="color: #555; margin: 8px 0;"><strong>Name:</strong> ${customerName}</p>
+                    <p style="color: #555; margin: 8px 0;"><strong>Company:</strong> ${companyName}</p>
+                    <p style="color: #555; margin: 8px 0;"><strong>Email:</strong> ${email}</p>
+                    <p style="color: #555; margin: 8px 0;"><strong>Contact Number:</strong> ${contactNo}</p>
                 </div>
                 
-                <div style="text-align: center; margin-top: 30px;">
+                <div style="background-color: #d1ecf1; border-left: 4px solid #17a2b8; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 0; font-size: 14px; color: #0c5460;">
+                        <strong>Action Required:</strong> Please review the user's credentials and verification documents, then approve or reject the account.
+                    </p>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
                     <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin/verify-accounts" 
-                       style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                        Review Application
+                       style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                        Review Registration
                     </a>
                 </div>
                 
-                <p style="font-size: 14px; color: #666; text-align: center; margin-top: 20px;">
-                    Please review the user's verification documents and approve or reject their application.
-                </p>
+                <div style="text-align: center; margin-top: 30px;">
+                    <p style="color: #888; font-size: 14px;">
+                        H2Quote Admin Notification System
+                    </p>
+                </div>
             </div>
         </div>
     `;
@@ -296,7 +240,7 @@ const generateAdminNotificationEmail = (customerName, companyName, email, contac
 const generateAccountApprovalEmail = (customerName, companyName, email) => {
     return `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #d4edda; padding: 30px; border-radius: 10px; border-left: 5px solid #28a745;">
+            <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px; border-left: 5px solid #28a745;">
                 <h1 style="color: #155724; text-align: center; margin-bottom: 30px;">Account Approved!</h1>
                 
                 <p style="font-size: 16px; color: #155724; line-height: 1.6;">
@@ -304,13 +248,19 @@ const generateAccountApprovalEmail = (customerName, companyName, email) => {
                 </p>
                 
                 <p style="font-size: 16px; color: #155724; line-height: 1.6;">
-                    Great news! Your H2Quote account for <strong>${companyName}</strong> has been approved and is now active.
+                    Great news! Your H2Quote account has been successfully verified and approved.
                 </p>
                 
+                <div style="background-color: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                    <h3 style="color: #155724; margin-top: 0;">Account Details:</h3>
+                    <p style="color: #155724; margin: 5px 0;"><strong>Company Name:</strong> ${companyName}</p>
+                    <p style="color: #155724; margin: 5px 0;"><strong>Email:</strong> ${email}</p>
+                    <p style="color: #155724; margin: 5px 0;"><strong>Status:</strong> Active</p>
+                </div>
+                
                 <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #c3e6cb;">
-                    <h3 style="color: #155724; margin-top: 0;">What's Next?</h3>
+                    <h3 style="color: #155724; margin-top: 0;">What You Can Do Now:</h3>
                     <ul style="color: #155724; margin: 10px 0; padding-left: 20px;">
-                        <li style="margin-bottom: 8px;">Log in to your account using your registered email: <strong>${email}</strong></li>
                         <li style="margin-bottom: 8px;">Browse our services catalog and request quotes</li>
                         <li style="margin-bottom: 8px;">Track your service requests and manage payments</li>
                         <li style="margin-bottom: 8px;">Access your account settings and company information</li>
@@ -451,7 +401,6 @@ const generateAccountRejectionEmail = (userName, companyName, rejectionReason) =
     `;
 };
 
-// Public API functions
 const sendUserWelcomeEmail = async (customerName, companyName, email, contactNo) => {
     const subject = 'Welcome to H2Quote - Account Under Review';
     const htmlContent = generateUserWelcomeEmail(customerName, companyName, email, contactNo);
@@ -484,7 +433,6 @@ const sendAccountRejectionEmail = async (userName, userEmail, companyName, rejec
     return await sendEmail(userEmail, subject, htmlContent);
 };
 
-// Export all functions
 module.exports = {
     sendEmail,
     generateUserWelcomeEmail,

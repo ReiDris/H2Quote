@@ -69,6 +69,7 @@ const createUserWithPassword = async (userData) => {
     if (!password) {
         throw new Error('Password is required');
     }
+    
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
     

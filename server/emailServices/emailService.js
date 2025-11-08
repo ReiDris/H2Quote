@@ -1,12 +1,9 @@
-// Import sendEmail function from config/email.js (not transporter!)
 const { sendEmail: sendEmailFromConfig } = require('../config/email');
 
-// Use the imported sendEmail function instead of transporter
 const sendEmail = async (to, subject, htmlContent) => {
     return await sendEmailFromConfig(to, subject, htmlContent);
 };
 
-// Generic notification email template
 const generateNotificationEmail = (userName, subject, messageBody, actionUrl = null) => {
     return `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -48,7 +45,6 @@ const generateNotificationEmail = (userName, subject, messageBody, actionUrl = n
     `;
 };
 
-// Service Request specific email template
 const generateServiceRequestEmail = (userName, requestNumber, status, message, requestId) => {
     const actionUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/service-requests/${requestId}`;
     
@@ -99,13 +95,11 @@ const generateServiceRequestEmail = (userName, requestNumber, status, message, r
     `;
 };
 
-// Send notification email
 const sendNotificationEmail = async (email, userName, subject, messageBody, actionUrl = null) => {
     const htmlContent = generateNotificationEmail(userName, subject, messageBody, actionUrl);
     return await sendEmail(email, subject, htmlContent);
 };
 
-// Send service request notification email
 const sendServiceRequestNotificationEmail = async (email, userName, requestNumber, status, message, requestId) => {
     const subject = `Service Request Update - ${requestNumber}`;
     const htmlContent = generateServiceRequestEmail(userName, requestNumber, status, message, requestId);
@@ -179,7 +173,6 @@ const sendAccountRejectionEmail = async (userName, userEmail, companyName, rejec
   }
 };
 
-// Re-export common functions from config/email.js
 const {
     generateUserWelcomeEmail,
     generateAdminNotificationEmail,
