@@ -163,7 +163,7 @@ const ActivityLogPage = () => {
                 name="searchTerm"
                 value={filters.searchTerm}
                 onChange={handleFilterChange}
-                placeholder="Search user or action..."
+                placeholder="Search name, email, or action..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#004785]"
               />
             </div>
