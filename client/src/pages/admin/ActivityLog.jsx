@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  LucideArrowLeft,
-  LucideArrowRight,
-  Download,
-} from "lucide-react";
+import { LucideArrowLeft, LucideArrowRight, Download } from "lucide-react";
 import AdminLayout from "../../layouts/AdminLayout";
 import { activityLogsAPI } from "../../config/api";
 
@@ -186,41 +182,42 @@ const ActivityLogPage = () => {
 
         {/* Table Section */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-          <div className="overflow-x-auto flex-1 overflow-y-hidden">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-gray-500">Loading activity logs...</div>
-              </div>
-            ) : activityLogs.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-gray-500">No activity logs found</div>
-              </div>
-            ) : (
-              <table className="w-full">
-                <thead className="bg-gray-100 border-b">
+          <div className="flex-1 overflow-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100 border-b sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    User ID
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Name
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Role
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Date
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Time
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-black">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
                   <tr>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                      User ID
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                      Name
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                      Role
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                      Date
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                      Time
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-black">
-                      Actions
-                    </th>
+                    <td
+                      colSpan="6"
+                      className="px-6 py-8 text-center text-gray-500"
+                    >
+                      Loading activity logs...
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {activityLogs.map((item, index) => (
+                ) : activityLogs.length > 0 ? (
+                  activityLogs.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className="px-3 py-5 whitespace-nowrap text-xs xl:text-sm font-medium text-gray-800">
                         {item.userId}
@@ -241,95 +238,148 @@ const ActivityLogPage = () => {
                         {item.action}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="px-6 py-8 text-center text-gray-500"
+                    >
+                      No activity logs found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
 
-          {/* Pagination */}
-         <div className="flex-shrink-0 bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
-            {/* Previous Button */}
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={!pagination.hasPrevPage || loading}
-              className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
-                !pagination.hasPrevPage || loading
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
-              }`}
-            >
-              <LucideArrowLeft className="w-4 mr-2" />
-              Previous
-            </button>
+          {/* Pagination - Fixed at bottom */}
+          {pagination.totalPages > 1 && (
+            <div className="flex-shrink-0 bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
+              {/* Previous Button */}
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={!pagination.hasPrevPage || loading}
+                className={`flex items-center px-3 py-1 border rounded-md font-medium transition-colors duration-300 cursor-pointer ${
+                  !pagination.hasPrevPage || loading
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
+              >
+                <LucideArrowLeft className="w-4 mr-2" />
+                Previous
+              </button>
 
-            {/* Page Numbers - Centered */}
-            <div className="flex items-center space-x-3">
-              {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
-                let pageNum;
-                if (pagination.totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= pagination.totalPages - 2) {
-                  pageNum = pagination.totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
+              {/* Page Numbers - Centered */}
+              <div className="flex items-center space-x-3">
+                {(() => {
+                  const pages = [];
+                  const showEllipsisStart = currentPage > 3;
+                  const showEllipsisEnd =
+                    currentPage < pagination.totalPages - 2;
 
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => handlePageChange(pageNum)}
-                    disabled={loading}
-                    className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
-                      currentPage === pageNum
-                        ? "bg-gray-200 text-gray-600"
-                        : "text-gray-600 hover:bg-gray-100"
-                    } ${loading ? "cursor-not-allowed opacity-50" : ""}`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
+                  // Always show first page
+                  pages.push(
+                    <button
+                      key={1}
+                      onClick={() => handlePageChange(1)}
+                      disabled={loading}
+                      className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                        currentPage === 1
+                          ? "bg-gray-200 text-gray-600"
+                          : "text-gray-600 hover:bg-gray-100"
+                      } ${loading ? "cursor-not-allowed opacity-50" : ""}`}
+                    >
+                      1
+                    </button>
+                  );
 
-              {/* Ellipsis if needed */}
-              {pagination.totalPages > 5 && currentPage < pagination.totalPages - 2 && (
-                <>
-                  <span className="px-2 py-2 text-base text-gray-400">...</span>
-                  <button
-                    onClick={() => handlePageChange(pagination.totalPages)}
-                    disabled={loading}
-                    className="px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
-                  >
-                    {pagination.totalPages}
-                  </button>
-                </>
-              )}
+                  // Show ellipsis after first page if needed
+                  if (showEllipsisStart) {
+                    pages.push(
+                      <span
+                        key="ellipsis-start"
+                        className="px-2 py-2 text-base text-gray-400"
+                      >
+                        ...
+                      </span>
+                    );
+                  }
+
+                  // Show pages around current page
+                  const startPage = Math.max(2, currentPage - 1);
+                  const endPage = Math.min(
+                    pagination.totalPages - 1,
+                    currentPage + 1
+                  );
+
+                  for (let i = startPage; i <= endPage; i++) {
+                    pages.push(
+                      <button
+                        key={i}
+                        onClick={() => handlePageChange(i)}
+                        disabled={loading}
+                        className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                          currentPage === i
+                            ? "bg-gray-200 text-gray-600"
+                            : "text-gray-600 hover:bg-gray-100"
+                        } ${loading ? "cursor-not-allowed opacity-50" : ""}`}
+                      >
+                        {i}
+                      </button>
+                    );
+                  }
+
+                  // Show ellipsis before last page if needed
+                  if (showEllipsisEnd) {
+                    pages.push(
+                      <span
+                        key="ellipsis-end"
+                        className="px-2 py-2 text-base text-gray-400"
+                      >
+                        ...
+                      </span>
+                    );
+                  }
+
+                  // Always show last page if there's more than 1 page
+                  if (pagination.totalPages > 1) {
+                    pages.push(
+                      <button
+                        key={pagination.totalPages}
+                        onClick={() => handlePageChange(pagination.totalPages)}
+                        disabled={loading}
+                        className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                          currentPage === pagination.totalPages
+                            ? "bg-gray-200 text-gray-600"
+                            : "text-gray-600 hover:bg-gray-100"
+                        } ${loading ? "cursor-not-allowed opacity-50" : ""}`}
+                      >
+                        {pagination.totalPages}
+                      </button>
+                    );
+                  }
+
+                  return pages;
+                })()}
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={!pagination.hasNextPage || loading}
+                className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
+                  !pagination.hasNextPage || loading
+                    ? "text-gray-400 cursor-not-allowed border-gray-400"
+                    : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
+                }`}
+              >
+                Next
+                <LucideArrowRight className="w-4 ms-2" />
+              </button>
             </div>
-
-            {/* Next Button */}
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={!pagination.hasNextPage || loading}
-              className={`flex items-center px-3 py-1 border rounded-lg font-medium transition-colors duration-300 cursor-pointer ${
-                !pagination.hasNextPage || loading
-                  ? "text-gray-400 cursor-not-allowed border-gray-400"
-                  : "text-gray-600 hover:text-[#004785] hover:border-[#004785]"
-              }`}
-            >
-              Next
-              <LucideArrowRight className="w-4 ms-2" />
-            </button>
-          </div>
+          )}
         </div>
-
-        {/* Pagination Info */}
-        {!loading && activityLogs.length > 0 && (
-          <div className="text-sm text-gray-600 text-center">
-            Showing page {currentPage} of {pagination.totalPages} ({pagination.totalRecords} total records)
-          </div>
-        )}
       </div>
     </AdminLayout>
   );

@@ -142,10 +142,10 @@ const CustomerMessages = () => {
 
         {/* Messages Table Container - Flexible height with fixed table */}
         <div className="flex-1 bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-          {/* Table wrapper - Fixed height, no vertical scroll */}
-          <div className="flex-1 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200 h-full">
-              <thead className="bg-gray-50">
+          {/* Table wrapper - scrollable */}
+          <div className="flex-1 overflow-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-black whitespace-nowrap">
                     Service Request
@@ -234,7 +234,7 @@ const CustomerMessages = () => {
             </table>
           </div>
 
-          {/* Pagination - Fixed at bottom, matching ServiceTracker exactly */}
+          {/* Pagination - Fixed at bottom */}
           {totalPages > 1 && (
             <div className="flex-shrink-0 bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
               {/* Previous Button */}
@@ -253,47 +253,89 @@ const CustomerMessages = () => {
 
               {/* Page Numbers - Centered */}
               <div className="flex items-center space-x-3">
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
+                {(() => {
+                  const pages = [];
+                  const showEllipsisStart = currentPage > 3;
+                  const showEllipsisEnd = currentPage < totalPages - 2;
 
-                  return (
+                  // Always show first page
+                  pages.push(
                     <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
+                      key={1}
+                      onClick={() => setCurrentPage(1)}
                       className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
-                        currentPage === pageNum
+                        currentPage === 1
                           ? "bg-gray-200 text-gray-600"
                           : "text-gray-600 hover:bg-gray-100"
                       }`}
                     >
-                      {pageNum}
+                      1
                     </button>
                   );
-                })}
 
-                {/* Ellipsis if needed */}
-                {totalPages > 5 && currentPage < totalPages - 2 && (
-                  <>
-                    <span className="px-2 py-2 text-base text-gray-400">
-                      ...
-                    </span>
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      className="px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors duration-300"
-                    >
-                      {totalPages}
-                    </button>
-                  </>
-                )}
+                  // Show ellipsis after first page if needed
+                  if (showEllipsisStart) {
+                    pages.push(
+                      <span
+                        key="ellipsis-start"
+                        className="px-2 py-2 text-base text-gray-400"
+                      >
+                        ...
+                      </span>
+                    );
+                  }
+
+                  // Show pages around current page
+                  const startPage = Math.max(2, currentPage - 1);
+                  const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+                  for (let i = startPage; i <= endPage; i++) {
+                    pages.push(
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i)}
+                        className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                          currentPage === i
+                            ? "bg-gray-200 text-gray-600"
+                            : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        {i}
+                      </button>
+                    );
+                  }
+
+                  // Show ellipsis before last page if needed
+                  if (showEllipsisEnd) {
+                    pages.push(
+                      <span
+                        key="ellipsis-end"
+                        className="px-2 py-2 text-base text-gray-400"
+                      >
+                        ...
+                      </span>
+                    );
+                  }
+
+                  // Always show last page if there's more than 1 page
+                  if (totalPages > 1) {
+                    pages.push(
+                      <button
+                        key={totalPages}
+                        onClick={() => setCurrentPage(totalPages)}
+                        className={`px-3 py-1 text-sm font-base rounded-md transition-colors duration-300 cursor-pointer ${
+                          currentPage === totalPages
+                            ? "bg-gray-200 text-gray-600"
+                            : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        {totalPages}
+                      </button>
+                    );
+                  }
+
+                  return pages;
+                })()}
               </div>
 
               {/* Next Button */}
