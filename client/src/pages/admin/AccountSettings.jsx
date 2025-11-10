@@ -232,7 +232,7 @@ const AccountSettings = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  EMAIL
+                  EMAIL ADDRESS
                 </label>
                 <input
                   type="email"
@@ -242,12 +242,16 @@ const AccountSettings = () => {
                   className={`w-full px-4 py-3 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white ${
                     errors.email ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="Enter your email"
-                  disabled={loading}
+                  placeholder="Enter your email address"
+                  disabled={true}
+                  title="Email address cannot be changed from account settings"
                 />
                 {errors.email && (
                   <p className="mt-1 text-sm text-red-600">{errors.email}</p>
                 )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Your email is used for login and cannot be changed here. Contact support to change email address
+                </p>
               </div>
             </div>
 
