@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Bell, ShoppingCart } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useServiceRequest } from "../../contexts/ServiceRequestContext";
 import ServiceRequestModal from "../customer/ServiceRequestModal";
@@ -7,6 +8,7 @@ import { notificationsAPI } from "../../config/api";
 
 const Header = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { selectedServices } = useServiceRequest();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isServiceRequestModalOpen, setIsServiceRequestModalOpen] =
@@ -123,7 +125,13 @@ const Header = () => {
   };
 
   const handleLogoClick = () => {
-    window.open("/", "_blank");
+    if (user?.role === "customer") {
+      navigate("/customer/company-overview");
+    } else if (user?.role === "admin" || user?.role === "staff") {
+      navigate(`/${user.role}/service-tracker`);
+    } else {
+      window.open("/", "_blank");
+    }
   };
 
   const toggleShowAllNotifications = () => {

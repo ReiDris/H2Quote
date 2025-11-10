@@ -175,7 +175,7 @@ const CompanyOverview = () => {
               {services.map((service) => (
                 <div
                   key={service.id}
-                  className="bg-[#ECF5FB] rounded-4xl p-8 text-center hover:shadow-lg transition-shadow cursor-pointer h-65 flex flex-col items-center justify-center"
+                  className="bg-[#ECF5FB] rounded-4xl p-8 text-center h-65 flex flex-col items-center justify-center"
                 >
                   {/* Icon */}
                   <div className="flex items-center justify-center mx-auto mb-3 md:mb-4">
