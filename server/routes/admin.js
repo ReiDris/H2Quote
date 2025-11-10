@@ -13,11 +13,9 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Apply authentication and admin check to all routes
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// Admin routes with correct parameter syntax
 router.get('/pending-users', adminController.getPendingUsers);
 router.post('/approve-user/:userId', adminController.approveUser);
 router.post('/reject-user/:userId', adminController.rejectUser);

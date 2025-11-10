@@ -13,12 +13,10 @@ const requireAdminOrStaff = (req, res, next) => {
   next();
 };
 
-// All routes require authentication
 router.use(authenticateToken);
 
-// ✅ CORRECTED: Use the exported middleware from controller
 router.post('/:paymentId/upload-proof', 
-  paymentController.paymentUpload,       // ✅ This is now exported
+  paymentController.paymentUpload,       
   paymentController.uploadPaymentProof
 );
 

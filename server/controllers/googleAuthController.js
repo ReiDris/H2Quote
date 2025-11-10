@@ -9,34 +9,22 @@ const supabase = createClient(
 
 const googleAuth = async (req, res) => {
   try {
-    console.log('🔍 Google Auth Request Body:', req.body);
-    
     const { credential, code, redirect_uri } = req.body;
     
-    console.log('📝 Received:', { 
-      hasCredential: !!credential, 
-      hasCode: !!code, 
-      redirect_uri 
-    });
 
     let googleUser;
     
     if (credential) {
-      console.log('🔐 Using credential method');
       const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
       googleUser = await response.json();
 
       if (googleUser.error) {
-        console.log('Credential validation error:', googleUser.error);
         return res.status(400).json({
           success: false,
           message: 'Invalid Google token'
         });
       }
     } else if (code && redirect_uri) {
-      console.log('🔐 Using authorization code method');
-      console.log('📍 Redirect URI:', redirect_uri);
-      
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: {
@@ -52,10 +40,8 @@ const googleAuth = async (req, res) => {
       });
 
       const tokenData = await tokenResponse.json();
-      console.log('🎫 Token response:', tokenData.error ? tokenData : 'Token received successfully');
 
       if (tokenData.error) {
-        console.log('❌ Token exchange error:', tokenData.error, tokenData.error_description);
         return res.status(400).json({
           success: false,
           message: 'Failed to exchange authorization code: ' + tokenData.error_description || tokenData.error
@@ -66,16 +52,13 @@ const googleAuth = async (req, res) => {
       googleUser = await userInfoResponse.json();
 
       if (googleUser.error) {
-        console.log('❌ User info error:', googleUser.error);
         return res.status(400).json({
           success: false,
           message: 'Failed to get user info: ' + googleUser.error
         });
       }
-      
-      console.log('✅ User info retrieved:', { email: googleUser.email, name: googleUser.name });
+
     } else {
-      console.log('❌ Missing required parameters');
       return res.status(400).json({
         success: false,
         message: 'Either Google credential or authorization code with redirect_uri is required'
@@ -85,14 +68,11 @@ const googleAuth = async (req, res) => {
     const { email, name, given_name, family_name, picture } = googleUser;
 
     if (!email) {
-      console.log('❌ No email provided by Google');
       return res.status(400).json({
         success: false,
         message: 'Email not provided by Google'
       });
     }
-
-    console.log('👤 Looking up user:', email);
 
     const { data: userResults, error: userError } = await supabase.rpc(
       'get_user_with_company',
@@ -102,7 +82,6 @@ const googleAuth = async (req, res) => {
     let user;
 
     if (userError || !userResults || userResults.length === 0) {
-      console.log('➕ Creating new user');
       const client = await pool.connect();
       
       try {
@@ -145,21 +124,17 @@ const googleAuth = async (req, res) => {
         );
         
         user = newUserResults[0];
-        console.log('✅ New user created:', user.user_id);
         
       } catch (error) {
         await client.query('ROLLBACK');
-        console.log('❌ User creation error:', error);
         throw error;
       } finally {
         client.release();
       }
     } else {
-      console.log('✅ Existing user found:', userResults[0].user_id);
       user = userResults[0];
 
       if (user.user_status !== 'Active') {
-        console.log('❌ User account not active:', user.user_status);
         return res.status(403).json({
           success: false,
           message: 'Account is not active. Please contact support.',
@@ -237,10 +212,7 @@ const googleAuth = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
     }
-
-    console.log('✅ Google login successful for:', email);
 
     res.json({
       success: true,
@@ -252,7 +224,6 @@ const googleAuth = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Google auth error:', error);
     res.status(500).json({
       success: false,
       message: 'Google authentication failed. Please try again.',

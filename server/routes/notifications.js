@@ -3,7 +3,6 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const notificationController = require('../controllers/notificationController');
 
-// All routes require authentication
 router.use(authenticateToken);
 
 router.get('/', notificationController.getUserNotifications);

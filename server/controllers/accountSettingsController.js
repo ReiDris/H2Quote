@@ -47,7 +47,6 @@ const getUserAccount = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get account error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve account details',
@@ -174,8 +173,7 @@ const updateUserAccount = async (req, res) => {
         if (firstName !== undefined || lastName !== undefined || name) auditData.name_updated = true;
         if (email) auditData.email = email;
         if (contactNo !== undefined) auditData.contact_updated = true;
-        // Note: password updates are NOT logged to audit_log for privacy
-
+        
         await supabase.from('audit_log').insert({
           table_name: 'users',
           record_id: userId,
@@ -186,7 +184,6 @@ const updateUserAccount = async (req, res) => {
           ip_address: req.ip || req.connection.remoteAddress,
         });
       } catch (auditError) {
-        console.error('Failed to log audit entry:', auditError);
       }
 
       const responseData = {
@@ -212,7 +209,6 @@ const updateUserAccount = async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Update account error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update account',
@@ -274,8 +270,6 @@ const changePassword = async (req, res) => {
 
       await client.query(updateQuery, [hashedNewPassword, new Date(), userId]);
 
-      // Password changes are NOT logged to audit_log for privacy
-
       res.json({
         success: true,
         message: 'Password changed successfully'
@@ -286,7 +280,6 @@ const changePassword = async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Change password error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to change password',

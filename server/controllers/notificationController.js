@@ -7,21 +7,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Get notifications for logged-in user
 const getUserNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
     const { limit = 20, unreadOnly } = req.query;
 
-    // Convert unreadOnly to boolean properly
     const isUnreadOnly = unreadOnly === "true" || unreadOnly === true;
-
-    console.log("Parsed params:", {
-      limit,
-      unreadOnly,
-      isUnreadOnly,
-      type: typeof unreadOnly,
-    });
 
     let query = `
       SELECT 
@@ -42,13 +33,10 @@ const getUserNotifications = async (req, res) => {
 
     const queryParams = [userId];
 
-    // Fix: Filter for anything NOT 'Sent' (includes both 'Pending' and 'Failed')
     if (isUnreadOnly) {
       query += " AND status != $2";
       queryParams.push("Sent");
-      console.log("✓ Filtering for unread (NOT Sent) notifications only");
     } else {
-      console.log("✓ Showing all notifications");
     }
 
     query += ` ORDER BY created_at DESC LIMIT $${queryParams.length + 1}`;
@@ -56,13 +44,11 @@ const getUserNotifications = async (req, res) => {
 
     const result = await pool.query(query, queryParams);
 
-    // Fix: Get unread count for anything NOT 'Sent'
     const unreadResult = await pool.query(
       "SELECT COUNT(*) as count FROM notifications WHERE recipient_user_id = $1 AND status != $2",
       [userId, "Sent"]
     );
 
-    // Get filtered count (total count matching the current filter)
     let filteredCountQuery =
       "SELECT COUNT(*) as count FROM notifications WHERE recipient_user_id = $1";
     const filteredCountParams = [userId];
@@ -86,7 +72,6 @@ const getUserNotifications = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get notifications error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch notifications",
@@ -94,7 +79,6 @@ const getUserNotifications = async (req, res) => {
   }
 };
 
-// Mark notification as read
 const markAsRead = async (req, res) => {
   try {
     const { notificationId } = req.params;
@@ -120,7 +104,6 @@ const markAsRead = async (req, res) => {
       message: "Notification marked as read",
     });
   } catch (error) {
-    console.error("Mark notification as read error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark notification as read",
@@ -128,12 +111,10 @@ const markAsRead = async (req, res) => {
   }
 };
 
-// Mark all notifications as read
 const markAllAsRead = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Fix: Mark all unread notifications (both Pending and Failed) as read
     const result = await pool.query(
       `UPDATE notifications 
        SET sent_at = NOW(), status = 'Sent'
@@ -142,17 +123,12 @@ const markAllAsRead = async (req, res) => {
       [userId]
     );
 
-    console.log(
-      `Marked ${result.rows.length} notifications as read for user ${userId}`
-    );
-
     res.json({
       success: true,
       message: "All notifications marked as read",
       markedCount: result.rows.length,
     });
   } catch (error) {
-    console.error("Mark all as read error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark all notifications as read",
@@ -160,7 +136,6 @@ const markAllAsRead = async (req, res) => {
   }
 };
 
-// Delete notification
 const deleteNotification = async (req, res) => {
   try {
     const { notificationId } = req.params;
@@ -185,7 +160,6 @@ const deleteNotification = async (req, res) => {
       message: "Notification deleted successfully",
     });
   } catch (error) {
-    console.error("Delete notification error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete notification",
@@ -193,7 +167,6 @@ const deleteNotification = async (req, res) => {
   }
 };
 
-// Clear all read notifications (NEW FUNCTION)
 const clearReadNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -211,7 +184,6 @@ const clearReadNotifications = async (req, res) => {
       deletedCount: result.rows.length,
     });
   } catch (error) {
-    console.error("Clear read notifications error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to clear read notifications",
@@ -219,14 +191,12 @@ const clearReadNotifications = async (req, res) => {
   }
 };
 
-// Generate notification email HTML
 const generateNotificationEmail = (
   userName,
   subject,
   messageBody,
   notificationType
 ) => {
-  // Map notification types to colors
   const typeColors = {
     "Account Registration": "#007bff",
     "Account Verification": "#17a2b8",
@@ -278,7 +248,6 @@ const generateNotificationEmail = (
   `;
 };
 
-// Helper function to create notification (in-app + email)
 const createNotification = async (
   userId,
   notificationType,
@@ -287,14 +256,7 @@ const createNotification = async (
   recipientEmail = null
 ) => {
   try {
-    console.log(
-      "Creating notification for user:",
-      userId,
-      "Type:",
-      notificationType
-    );
 
-    // Validate required parameters
     if (!userId && !recipientEmail) {
       throw new Error("Either userId or recipientEmail must be provided");
     }
@@ -307,7 +269,6 @@ const createNotification = async (
 
     const recipientType = userId ? "Internal" : "External";
 
-    // Get user details if userId is provided and email is not
     let finalRecipientEmail = recipientEmail;
     let userName = "User";
 
@@ -324,9 +285,6 @@ const createNotification = async (
       }
     }
 
-    console.log("Final recipient email:", finalRecipientEmail);
-
-    // Insert notification into database
     const query = `
       INSERT INTO notifications 
       (notification_type, recipient_type, recipient_user_id, recipient_email, subject, message_body, status, scheduled_for)
@@ -344,9 +302,7 @@ const createNotification = async (
     ]);
 
     const notificationId = result.rows[0].notification_id;
-    console.log("Notification created with ID:", notificationId);
 
-    // Send email notification asynchronously (don't wait for it)
     if (finalRecipientEmail) {
       setImmediate(async () => {
         try {
@@ -364,17 +320,12 @@ const createNotification = async (
             emailHtml
           );
 
-          // Update notification status
           if (emailSent) {
             await pool.query(
               `UPDATE notifications 
                SET sent_at = NOW()
                WHERE notification_id = $1`,
               [notificationId]
-            );
-            console.log(
-              "Email notification sent successfully to:",
-              finalRecipientEmail
             );
           } else {
             await pool.query(
@@ -383,14 +334,9 @@ const createNotification = async (
                WHERE notification_id = $1`,
               [notificationId]
             );
-            console.error(
-              "Failed to send email notification to:",
-              finalRecipientEmail
-            );
           }
         } catch (emailError) {
-          console.error("Error sending notification email:", emailError);
-          // Update failed status
+
           try {
             await pool.query(
               `UPDATE notifications 
@@ -399,7 +345,6 @@ const createNotification = async (
               [notificationId]
             );
           } catch (updateError) {
-            console.error("Error updating notification status:", updateError);
           }
         }
       });
@@ -407,12 +352,10 @@ const createNotification = async (
 
     return notificationId;
   } catch (error) {
-    console.error("Create notification error:", error);
     throw error;
   }
 };
 
-// Helper function to create notifications for multiple users
 const createBulkNotifications = async (
   userIds,
   notificationType,
@@ -434,7 +377,6 @@ const createBulkNotifications = async (
 
     return notificationIds;
   } catch (error) {
-    console.error("Create bulk notifications error:", error);
     throw error;
   }
 };
@@ -460,7 +402,6 @@ const createServiceRequestNotification = async (
       messageBody
     );
   } catch (error) {
-    console.error("Create service request notification error:", error);
     throw error;
   }
 };

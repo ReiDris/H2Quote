@@ -8,8 +8,8 @@ const supabase = createClient(
 );
 
 const getInboxMessages = async (req, res) => {
-  const userId = req.user.id; // Move outside try block
-  const userType = req.user.userType; // Move outside try block
+  const userId = req.user.id; 
+  const userType = req.user.userType; 
 
   try {
     const { type = "all", page = 1, limit = 20 } = req.query;
@@ -20,7 +20,6 @@ const getInboxMessages = async (req, res) => {
     let countQueryParams;
 
     if (userType === "admin") {
-      // Admin sees ALL original messages (not replies) in the system
       whereClause = `
         NOT EXISTS (
           SELECT 1 FROM message_replies mr 
@@ -30,7 +29,6 @@ const getInboxMessages = async (req, res) => {
       queryParams = [];
       countQueryParams = [];
     } else if (userType === "staff") {
-      // Staff only see messages related to service requests assigned to them
       whereClause = `
         NOT EXISTS (
           SELECT 1 FROM message_replies mr 
@@ -47,7 +45,6 @@ const getInboxMessages = async (req, res) => {
       queryParams = [userId];
       countQueryParams = [userId];
     } else {
-      // Customers see messages where they are EITHER sender OR recipient
       whereClause = `
         (m.recipient_id = $1 OR m.sender_id = $1)
         AND (
@@ -69,17 +66,14 @@ const getInboxMessages = async (req, res) => {
       queryParams.push(type);
       countQueryParams.push(type);
     }
-
-    // Calculate pagination parameter positions
     const limitParamIndex = queryParams.length + 1;
     const offsetParamIndex = queryParams.length + 2;
 
-    // For admin, we need to add userId for the read status check
     let readStatusUserParam;
     if (userType === "admin") {
-      readStatusUserParam = limitParamIndex; // Will be added before limit/offset
+      readStatusUserParam = limitParamIndex; 
     } else {
-      readStatusUserParam = 1; // For customers and staff, userId is already param $1
+      readStatusUserParam = 1; 
     }
 
     const query = `
@@ -138,21 +132,14 @@ const getInboxMessages = async (req, res) => {
     }
     `;
 
-    // Add userId to queryParams for admin (for the read status check)
     if (userType === "admin") {
       queryParams.push(userId);
     }
 
-    // Add pagination params
     queryParams.push(limit, offset);
-
-    console.log("User type:", userType);
-    console.log("Query params:", queryParams);
-    console.log("Count query params:", countQueryParams);
 
     const result = await pool.query(query, queryParams);
 
-    // Count query
     const countQuery = `
       SELECT COUNT(*) FROM messages m
       WHERE ${whereClause}
@@ -189,12 +176,6 @@ const getInboxMessages = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get inbox messages error:", error);
-    console.error("Error details:", {
-      message: error.message,
-      userType: userType,
-      userId: userId,
-    });
     res.status(500).json({
       success: false,
       message: "Failed to fetch messages",
@@ -261,7 +242,6 @@ const getSentMessages = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get sent messages error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch sent messages",
@@ -275,10 +255,9 @@ const getMessageDetails = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType;
 
-    // Admin/Staff can view any message, customers only their own
     let accessCheck = "(m.sender_id = $2 OR m.recipient_id = $2)";
     if (userType === "admin" || userType === "staff") {
-      accessCheck = "1=1"; // Allow all access
+      accessCheck = "1=1"; 
     }
 
     const query = `
@@ -321,7 +300,6 @@ const getMessageDetails = async (req, res) => {
 
     const message = result.rows[0];
 
-    // Mark as read if recipient is viewing
     if (message.recipient_id === userId && !message.is_read) {
       await pool.query(
         "UPDATE messages SET is_read = TRUE, read_at = NOW() WHERE message_id = $1",
@@ -329,7 +307,6 @@ const getMessageDetails = async (req, res) => {
       );
     }
 
-    // Get replies
     const repliesQuery = `
       SELECT 
         m.message_id,
@@ -347,7 +324,6 @@ const getMessageDetails = async (req, res) => {
 
     const repliesResult = await pool.query(repliesQuery, [messageId]);
 
-    // Format response to match frontend expectations
     res.json({
       success: true,
       data: {
@@ -376,7 +352,6 @@ const getMessageDetails = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get message details error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch message details",
@@ -407,7 +382,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Check if there's already a message for this service request
     if (relatedRequestId && messageType === "service_request") {
       const existingMessageQuery = `
         SELECT message_id 
@@ -498,13 +472,11 @@ const sendMessage = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
 
     try {
-      // Get sender's name
       const senderQuery = await pool.query(
         "SELECT first_name, last_name FROM users WHERE user_id = $1",
         [senderId]
@@ -526,11 +498,7 @@ const sendMessage = async (req, res) => {
         recipientEmail
       );
 
-      console.log(
-        `✅ Message notification sent to ${recipientEmail} (${recipientName})`
-      );
     } catch (notifError) {
-      console.error("❌ Failed to send message notification:", notifError);
     }
 
     res.status(201).json({
@@ -545,7 +513,6 @@ const sendMessage = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Send message error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send message",
@@ -558,8 +525,7 @@ const sendMessage = async (req, res) => {
 const createServiceRequestMessage = async (req, res) => {
   const client = await pool.connect();
 
-  try {
-    console.log("⚡ createServiceRequestMessage called!"); // ADD THIS LINE
+  try { 
     await client.query("BEGIN");
 
     const requestId = req.params.requestId;
@@ -575,7 +541,6 @@ const createServiceRequestMessage = async (req, res) => {
       });
     }
 
-    // Check if message already exists for this service request
     const existingMessageQuery = `
       SELECT message_id 
       FROM messages 
@@ -601,7 +566,6 @@ const createServiceRequestMessage = async (req, res) => {
       });
     }
 
-    // Get admin/staff users to send message to
     const recipientQuery = `
       SELECT user_id, first_name, last_name, email 
       FROM users 
@@ -668,17 +632,11 @@ const createServiceRequestMessage = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
 
     try {
-      console.log(
-        "🔔 Starting notification process for service request message"
-      );
-
-      // Get sender's name
       const senderQuery = await pool.query(
         "SELECT first_name, last_name FROM users WHERE user_id = $1",
         [senderId]
@@ -689,32 +647,24 @@ const createServiceRequestMessage = async (req, res) => {
           ? `${senderQuery.rows[0].first_name} ${senderQuery.rows[0].last_name}`
           : "Unknown User";
 
-      console.log("📧 Sender name:", senderName);
-
       const contentPreview =
         content.length > 100 ? content.substring(0, 100) + "..." : content;
 
-      // Notify all admins
       const allAdminsQuery = `
         SELECT user_id, email FROM users 
         WHERE user_type = 'admin' AND status = 'Active'
       `;
       const allAdminsResult = await pool.query(allAdminsQuery);
 
-      console.log(`📢 Found ${allAdminsResult.rows.length} admins to notify`);
-
       for (const admin of allAdminsResult.rows) {
-        console.log(`🔔 Notifying admin: ${admin.email}`);
         await createNotification(
           admin.user_id,
-          "Service Request", // ✅ Use this valid type
+          "Service Request",
           subject,
           `New message from ${senderName}. ${contentPreview}`,
           admin.email
         );
       }
-
-      // Notify assigned staff if exists
       const assignedStaffQuery = `
         SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
         FROM service_requests sr
@@ -725,26 +675,18 @@ const createServiceRequestMessage = async (req, res) => {
         requestId,
       ]);
 
-      console.log(
-        `📢 Found ${assignedStaffResult.rows.length} assigned staff to notify`
-      );
-
       if (assignedStaffResult.rows.length > 0) {
         const assignedStaff = assignedStaffResult.rows[0];
-        console.log(`🔔 Notifying assigned staff: ${assignedStaff.email}`);
         await createNotification(
           assignedStaff.assigned_to_staff_id,
-          "Service Request", // ✅ Use this valid type
+          "Service Request", 
           subject,
           `New message from ${senderName}. ${contentPreview}`,
           assignedStaff.email
         );
       }
 
-      console.log(`✅ Service request message notifications sent successfully`);
     } catch (notifError) {
-      console.error("❌ Failed to send notification:", notifError);
-      console.error("❌ Full error details:", notifError.stack);
     }
 
     res.status(201).json({
@@ -757,7 +699,6 @@ const createServiceRequestMessage = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Create service request message error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send message",
@@ -784,7 +725,6 @@ const replyToMessage = async (req, res) => {
       });
     }
 
-    // Get the original message details
     const originalQuery = `
       SELECT 
         m.*,
@@ -809,15 +749,11 @@ const replyToMessage = async (req, res) => {
 
     const original = originalResult.rows[0];
 
-    // Determine recipient of reply (opposite of who sent the original or last reply)
     let recipientId;
     let recipientFirstName;
     let recipientLastName;
     let recipientEmail;
 
-    // Check who should receive this reply
-    // If the current user is the original sender, reply goes to original recipient
-    // If the current user is the original recipient, reply goes to original sender
     if (senderId === original.sender_id) {
       recipientId = original.recipient_id;
       const recipientQuery = await client.query(
@@ -838,12 +774,10 @@ const replyToMessage = async (req, res) => {
       recipientEmail = recipientQuery.rows[0].email;
     }
 
-    // Create the reply subject
     const replySubject = original.subject.startsWith("Re: ")
       ? original.subject
       : `Re: ${original.subject}`;
 
-    // Insert reply as a new message
     const insertReplyQuery = `
       INSERT INTO messages (
         sender_id,
@@ -869,23 +803,16 @@ const replyToMessage = async (req, res) => {
 
     const replyId = replyResult.rows[0].message_id;
 
-    // Link reply to original message
     await client.query(
       `INSERT INTO message_replies (original_message_id, reply_message_id) VALUES ($1, $2)`,
       [messageId, replyId]
     );
 
-    // Remove read status for ALL users except the sender
-    // This makes the thread unread for everyone when there's a new reply
     await client.query(
       `DELETE FROM message_read_status 
        WHERE message_id = $1 
        AND user_id != $2`,
       [messageId, senderId]
-    );
-
-    console.log(
-      `🔔 Marked message ${messageId} as unread for all users except sender ${senderId}`
     );
 
     try {
@@ -905,13 +832,11 @@ const replyToMessage = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
 
     try {
-      // Get sender's name
       const senderQuery = await pool.query(
         "SELECT first_name, last_name, user_type FROM users WHERE user_id = $1",
         [senderId]
@@ -927,22 +852,13 @@ const replyToMessage = async (req, res) => {
       const contentPreview =
         content.length > 100 ? content.substring(0, 100) + "..." : content;
 
-      // Check if this is a service request message AND sender is a client
       if (original.related_request_id && senderUserType === "client") {
-        console.log(
-          "🔔 Client replied to service request message - notifying all admins and assigned staff"
-        );
 
-        // Notify all admins
         const allAdminsQuery = `
           SELECT user_id, email FROM users 
           WHERE user_type = 'admin' AND status = 'Active'
         `;
         const allAdminsResult = await pool.query(allAdminsQuery);
-
-        console.log(
-          `📢 Notifying ${allAdminsResult.rows.length} admins about client reply`
-        );
 
         for (const admin of allAdminsResult.rows) {
           await createNotification(
@@ -954,7 +870,6 @@ const replyToMessage = async (req, res) => {
           );
         }
 
-        // Notify assigned staff if exists
         const assignedStaffQuery = `
           SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
           FROM service_requests sr
@@ -967,7 +882,6 @@ const replyToMessage = async (req, res) => {
 
         if (assignedStaffResult.rows.length > 0) {
           const assignedStaff = assignedStaffResult.rows[0];
-          console.log(`📢 Notifying assigned staff: ${assignedStaff.email}`);
           await createNotification(
             assignedStaff.assigned_to_staff_id,
             "New Message",
@@ -977,11 +891,7 @@ const replyToMessage = async (req, res) => {
           );
         }
 
-        console.log(
-          `✅ Client reply notifications sent to admins and assigned staff`
-        );
       } else {
-        // For non-service-request messages or replies from admin/staff, notify only the direct recipient
         const recipientName =
           `${recipientFirstName} ${recipientLastName}`.trim();
 
@@ -993,12 +903,8 @@ const replyToMessage = async (req, res) => {
           recipientEmail
         );
 
-        console.log(
-          `✅ Reply notification sent to ${recipientEmail} (${recipientName})`
-        );
       }
     } catch (notifError) {
-      console.error("❌ Failed to send reply notification:", notifError);
     }
 
     res.status(201).json({
@@ -1013,7 +919,6 @@ const replyToMessage = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Reply to message error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to send reply",
@@ -1040,7 +945,6 @@ const getUnreadCount = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get unread count error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get unread count",
@@ -1060,8 +964,6 @@ const markAsRead = async (req, res) => {
       });
     }
 
-    // Insert read status for this user and these messages
-    // Use ON CONFLICT to avoid duplicates if already marked as read
     const query = `
       INSERT INTO message_read_status (user_id, message_id, read_at)
       SELECT $1, unnest($2::int[]), NOW()
@@ -1075,7 +977,6 @@ const markAsRead = async (req, res) => {
       message: `Message(s) marked as read`,
     });
   } catch (error) {
-    console.error("Mark as read error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark messages as read",
@@ -1151,7 +1052,6 @@ const deleteMessages = async (req, res) => {
         });
       }
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -1162,7 +1062,6 @@ const deleteMessages = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Delete messages error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete messages",
@@ -1206,7 +1105,6 @@ const getMessageableUsers = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get messageable users error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get users",

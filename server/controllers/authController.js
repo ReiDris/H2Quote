@@ -52,9 +52,6 @@ const signup = async (req, res) => {
       });
     }
 
-    console.log("✅ Verification file uploaded to Supabase at:", req.file.path);
-
-    // ⭐ UPDATED: Check if email exists and handle rejected/suspended accounts
     const existingUserQuery =
       "SELECT user_id, status, company_id, verification_file_path FROM users WHERE email = $1";
     const existingUsers = await client.query(existingUserQuery, [email]);
@@ -62,16 +59,12 @@ const signup = async (req, res) => {
     if (existingUsers.rows.length > 0) {
       const existingUser = existingUsers.rows[0];
 
-      // If account is Suspended (rejected), allow re-registration by deleting old record
       if (existingUser.status === "Suspended") {
-        console.log(`🔄 Deleting rejected account for email: ${email}`);
 
-        // Delete old user record (will cascade delete related records)
         await client.query("DELETE FROM users WHERE user_id = $1", [
           existingUser.user_id,
         ]);
 
-        // Optionally delete old company if it has no other users
         const companyUsersQuery =
           "SELECT COUNT(*) FROM users WHERE company_id = $1";
         const companyUsers = await client.query(companyUsersQuery, [
@@ -82,12 +75,8 @@ const signup = async (req, res) => {
           await client.query("DELETE FROM companies WHERE company_id = $1", [
             existingUser.company_id,
           ]);
-          console.log(
-            `✅ Deleted orphaned company (ID: ${existingUser.company_id})`
-          );
         }
 
-        // Delete old verification file from Supabase if it exists
         if (existingUser.verification_file_path) {
           try {
             const fileName = existingUser.verification_file_path
@@ -98,21 +87,12 @@ const signup = async (req, res) => {
               .remove([fileName]);
 
             if (!deleteError) {
-              console.log(`✅ Deleted old verification file: ${fileName}`);
             }
           } catch (fileError) {
-            console.error(
-              "⚠️  Warning: Could not delete old verification file:",
-              fileError.message
-            );
-            // Continue even if file deletion fails
           }
         }
 
-        console.log(`✅ Old rejected account cleaned up for: ${email}`);
-        // Continue with new registration below
       }
-      // If account is Active or Inactive (pending), don't allow duplicate
       else {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -184,18 +164,12 @@ const signup = async (req, res) => {
 
     const userId = userResult.rows[0].user_id;
 
-    // ✅ COMMIT FIRST - don't let email failures block signup
     await client.query("COMMIT");
 
-    console.log("✅ User created successfully with ID:", userId);
-
-    // ✅ SEND EMAILS ASYNCHRONOUSLY (after commit)
     setImmediate(async () => {
       try {
         await sendUserWelcomeEmail(customerName, companyName, email, contactNo);
-        console.log("✅ Welcome email sent to:", email);
       } catch (emailError) {
-        console.error("❌ Failed to send welcome email:", emailError.message);
       }
 
       try {
@@ -205,16 +179,10 @@ const signup = async (req, res) => {
           email,
           contactNo
         );
-        console.log("✅ Admin notification email sent");
       } catch (emailError) {
-        console.error(
-          "❌ Failed to send admin notification:",
-          emailError.message
-        );
       }
 
       try {
-        // Get all active admin users
         const adminQuery = `
           SELECT user_id, email, first_name, last_name 
           FROM users 
@@ -222,9 +190,6 @@ const signup = async (req, res) => {
         `;
         const adminResult = await pool.query(adminQuery);
 
-        console.log(`Creating in-app notifications for ${adminResult.rows.length} admin(s)`);
-
-        // Create notification for each admin
         for (const admin of adminResult.rows) {
           await createNotification(
             admin.user_id,
@@ -235,14 +200,10 @@ const signup = async (req, res) => {
           );
         }
 
-        console.log('✅ Admin in-app notifications created successfully');
       } catch (notifError) {
-        console.error('❌ Failed to create admin notifications:', notifError);
-        // Don't block signup if notification fails
       }
     });
 
-    // ✅ RESPOND IMMEDIATELY (don't wait for emails)
     res.status(201).json({
       success: true,
       message:
@@ -262,7 +223,6 @@ const signup = async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
 
-    console.error("❌ Signup error:", error);
     res.status(500).json({
       success: false,
       message: "Registration failed. Please try again.",
@@ -351,11 +311,10 @@ const login = async (req, res) => {
       .eq("user_id", user.user_id);
 
     if (updateError) {
-      console.error("Failed to update last login:", updateError);
     }
 
     const tokenPayload = {
-      id: user.user_id, // ✅ ADD THIS
+      id: user.user_id,
       userId: user.user_id,
       email: user.email,
       userType: user.user_type,
@@ -408,7 +367,6 @@ const login = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     res.json({
@@ -420,7 +378,6 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error. Please try again.",
@@ -481,7 +438,6 @@ const getCurrentUser = async (req, res) => {
       data: { user: userData },
     });
   } catch (error) {
-    console.error("Get current user error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get user information",
@@ -505,7 +461,6 @@ const logout = async (req, res) => {
       message: "Logged out successfully",
     });
   } catch (error) {
-    console.error("Logout error:", error);
     res.json({
       success: true,
       message: "Logged out successfully",
@@ -548,7 +503,7 @@ const forgotPassword = async (req, res) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+    const resetTokenExpiry = new Date(Date.now() + 3600000);
 
     const { error: updateError } = await supabase
       .from("users")
@@ -559,7 +514,6 @@ const forgotPassword = async (req, res) => {
       .eq("user_id", user.user_id);
 
     if (updateError) {
-      console.error("Failed to save reset token:", updateError);
       return res.json({
         success: true,
         message: successMessage,
@@ -570,7 +524,6 @@ const forgotPassword = async (req, res) => {
     try {
       await sendPasswordResetEmail(email, userName, resetToken);
     } catch (emailError) {
-      console.error("Failed to send password reset email:", emailError);
     }
 
     res.json({
@@ -578,7 +531,6 @@ const forgotPassword = async (req, res) => {
       message: successMessage,
     });
   } catch (error) {
-    console.error("Password reset error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to process password reset request",
@@ -674,7 +626,6 @@ const resetPassword = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log password reset:", auditError);
     }
 
     res.json({
@@ -683,7 +634,6 @@ const resetPassword = async (req, res) => {
         "Password has been reset successfully. You can now log in with your new password.",
     });
   } catch (error) {
-    console.error("Reset password error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to reset password. Please try again.",
@@ -731,7 +681,6 @@ const validateResetToken = async (req, res) => {
       message: "Reset token is valid",
     });
   } catch (error) {
-    console.error("Validate reset token error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to validate reset token",

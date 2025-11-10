@@ -1,10 +1,6 @@
 const pool = require("../config/database");
 const { Parser } = require("json2csv");
 
-/**
- * Get paginated activity logs with filters
- * Query params: page, limit, startDate, endDate, userId, action, tableName
- */
 const getActivityLogs = async (req, res) => {
   try {
     const {
@@ -20,49 +16,43 @@ const getActivityLogs = async (req, res) => {
 
     const offset = (page - 1) * limit;
 
-    // Build dynamic WHERE clause
     let whereConditions = [];
     let queryParams = [];
     let paramCount = 1;
 
-    // Date range filter
     if (startDate) {
-      whereConditions.push(`al.created_at >= $${paramCount}`);
+      whereConditions.push(`DATE(al.created_at) >= DATE($${paramCount})`);
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      whereConditions.push(`al.created_at <= $${paramCount}`);
+      whereConditions.push(`DATE(al.created_at) <= DATE($${paramCount})`);
       queryParams.push(endDate);
       paramCount++;
     }
 
-    // User filter
     if (userId) {
       whereConditions.push(`al.record_id = $${paramCount}`);
       queryParams.push(userId);
       paramCount++;
     }
 
-    // Action filter (CREATE, UPDATE, DELETE)
     if (action) {
       whereConditions.push(`al.action = $${paramCount}`);
       queryParams.push(action);
       paramCount++;
     }
 
-    // Table name filter
     if (tableName) {
       whereConditions.push(`al.table_name = $${paramCount}`);
       queryParams.push(tableName);
       paramCount++;
     }
 
-    // Search term (searches in changed_by and change_reason)
     if (searchTerm) {
       whereConditions.push(
-        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount})`
+        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount} OR CONCAT(u.first_name, ' ', u.last_name) ILIKE $${paramCount})`
       );
       queryParams.push(`%${searchTerm}%`);
       paramCount++;
@@ -71,17 +61,15 @@ const getActivityLogs = async (req, res) => {
     const whereClause =
       whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-    // Get total count for pagination
     const countQuery = `
       SELECT COUNT(*) as total
       FROM audit_log al
+      LEFT JOIN users u ON al.changed_by = u.email
       ${whereClause}
     `;
     const countResult = await pool.query(countQuery, queryParams);
     const totalRecords = parseInt(countResult.rows[0].total);
 
-    // Get paginated logs with user details
-    // JOIN with users table based on changed_by email, not record_id
     const logsQuery = `
       SELECT 
         al.log_id,
@@ -108,9 +96,7 @@ const getActivityLogs = async (req, res) => {
     queryParams.push(limit, offset);
     const logsResult = await pool.query(logsQuery, queryParams);
 
-    // Format the response
     const formattedLogs = logsResult.rows.map((log) => {
-      // Format date and time
       const logDate = new Date(log.created_at);
       const formattedDate = logDate.toLocaleDateString("en-US", {
         year: "numeric",
@@ -123,17 +109,14 @@ const getActivityLogs = async (req, res) => {
         hour12: true,
       });
 
-      // Determine user ID display based on who made the change
       let userIdDisplay = "SYSTEM";
       if (log.user_id) {
         userIdDisplay = `#USER${String(log.user_id).padStart(2, "0")}`;
       }
 
-      // Get user name and role
       let name = log.user_name || "System";
       let role = log.role ? log.role.charAt(0).toUpperCase() + log.role.slice(1) : "System";
 
-      // If changed_by exists but no user found, extract name from email
       if (log.changed_by && !log.user_name) {
         const emailName = log.changed_by.split("@")[0];
         name = emailName.replace(/[._-]/g, ' ')
@@ -175,7 +158,6 @@ const getActivityLogs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get activity logs error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch activity logs",
@@ -184,28 +166,23 @@ const getActivityLogs = async (req, res) => {
   }
 };
 
-/**
- * Export activity logs to CSV
- * Query params: startDate, endDate, userId, action, tableName
- */
 const exportActivityLogs = async (req, res) => {
   try {
     const { startDate, endDate, userId, action, tableName, searchTerm } =
       req.query;
 
-    // Build dynamic WHERE clause (same as getActivityLogs)
     let whereConditions = [];
     let queryParams = [];
     let paramCount = 1;
 
     if (startDate) {
-      whereConditions.push(`al.created_at >= $${paramCount}`);
+      whereConditions.push(`DATE(al.created_at) >= DATE($${paramCount})`);
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      whereConditions.push(`al.created_at <= $${paramCount}`);
+      whereConditions.push(`DATE(al.created_at) <= DATE($${paramCount})`);
       queryParams.push(endDate);
       paramCount++;
     }
@@ -230,7 +207,7 @@ const exportActivityLogs = async (req, res) => {
 
     if (searchTerm) {
       whereConditions.push(
-        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount})`
+        `(al.changed_by ILIKE $${paramCount} OR al.change_reason ILIKE $${paramCount} OR CONCAT(u.first_name, ' ', u.last_name) ILIKE $${paramCount})`
       );
       queryParams.push(`%${searchTerm}%`);
       paramCount++;
@@ -239,7 +216,6 @@ const exportActivityLogs = async (req, res) => {
     const whereClause =
       whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-    // Get all logs matching filters (no pagination for export)
     const logsQuery = `
       SELECT 
         al.log_id,
@@ -268,7 +244,6 @@ const exportActivityLogs = async (req, res) => {
       });
     }
 
-    // Format data for CSV
     const csvData = logsResult.rows.map((log) => {
       const logDate = new Date(log.created_at);
       const formattedDate = logDate.toLocaleDateString("en-US", {
@@ -312,7 +287,6 @@ const exportActivityLogs = async (req, res) => {
       };
     });
 
-    // Convert to CSV using json2csv
     const fields = [
       "User ID",
       "Name",
@@ -328,14 +302,12 @@ const exportActivityLogs = async (req, res) => {
     const json2csvParser = new Parser({ fields });
     const csv = json2csvParser.parse(csvData);
 
-    // Set response headers for CSV download
     const filename = `activity_logs_${new Date().toISOString().split("T")[0]}.csv`;
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
     res.status(200).send(csv);
   } catch (error) {
-    console.error("Export activity logs error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to export activity logs",
@@ -344,9 +316,6 @@ const exportActivityLogs = async (req, res) => {
   }
 };
 
-/**
- * Get activity log statistics/summary
- */
 const getActivityLogStats = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -356,13 +325,13 @@ const getActivityLogStats = async (req, res) => {
     let paramCount = 1;
 
     if (startDate) {
-      whereConditions.push(`created_at >= $${paramCount}`);
+      whereConditions.push(`DATE(created_at) >= DATE($${paramCount})`);
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      whereConditions.push(`created_at <= $${paramCount}`);
+      whereConditions.push(`DATE(created_at) <= DATE($${paramCount})`);
       queryParams.push(endDate);
       paramCount++;
     }
@@ -370,7 +339,6 @@ const getActivityLogStats = async (req, res) => {
     const whereClause =
       whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-    // Get statistics
     const statsQuery = `
       SELECT 
         COUNT(*) as total_activities,
@@ -393,7 +361,6 @@ const getActivityLogStats = async (req, res) => {
       data: statsResult.rows[0],
     });
   } catch (error) {
-    console.error("Get activity log stats error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch activity log statistics",

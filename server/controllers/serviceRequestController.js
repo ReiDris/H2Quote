@@ -81,7 +81,6 @@ const createDefaultQuotation = async (requestId) => {
   try {
     await client.query("BEGIN");
 
-    // Get request details
     const requestQuery = `
       SELECT 
         sr.request_number,
@@ -110,20 +109,17 @@ const createDefaultQuotation = async (requestId) => {
 
     const discountAmount = (subtotal * (discount_percentage || 0)) / 100;
     const discountedSubtotal = subtotal - discountAmount;
-    const taxRate = 0; // No tax
+    const taxRate = 0;
     const taxAmount = 0;
     const totalAmount = discountedSubtotal;
 
-    // Generate quotation number
     const quotationNumber = `QUOT-${new Date().getFullYear()}-${String(
       Date.now()
     ).slice(-6)}`;
 
-    // Set valid until date (30 days from now)
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + 30);
 
-    // Insert quotation
     const insertQuotationQuery = `
       INSERT INTO quotations 
       (request_id, quotation_number, subtotal, tax_rate, tax_amount, 
@@ -147,12 +143,8 @@ const createDefaultQuotation = async (requestId) => {
     ]);
 
     await client.query("COMMIT");
-    console.log(
-      `Quotation ${quotationNumber} auto-created for request #${request_number}`
-    );
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Failed to create default quotation:", error);
     throw error;
   } finally {
     client.release();
@@ -439,7 +431,7 @@ const createServiceRequest = async (req, res) => {
           total_cost: totalCost,
           estimated_duration: estimatedDuration,
           payment_terms: paymentTerms,
-          total_items: serviceDetails.length, // Total items
+          total_items: serviceDetails.length,
           services_count: serviceDetails.filter((s) => s.itemType === "service")
             .length,
           chemicals_count: serviceDetails.filter(
@@ -452,30 +444,25 @@ const createServiceRequest = async (req, res) => {
             type: s.itemType,
             name: s.name,
             quantity: s.quantity,
-          })), // Optional: detailed breakdown
+          })),
         },
         changed_by: req.user.email,
         change_reason: `Service request #${requestNumber} created by customer`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
 
     try {
       await createDefaultPayments(requestId);
-      console.log("Default payments created successfully");
     } catch (paymentError) {
-      console.error("Failed to create default payments:", paymentError);
     }
 
     try {
       await createDefaultQuotation(requestId);
-      console.log("Default quotation created successfully");
     } catch (quotationError) {
-      console.error("Failed to create default quotation:", quotationError);
     }
 
     try {
@@ -486,13 +473,10 @@ const createServiceRequest = async (req, res) => {
         "Pending",
         `Your service request #${requestNumber} has been submitted successfully. Total cost: ₱${totalCost.toLocaleString()}. We will review it shortly.`
       );
-      console.log("Customer notification sent for new request");
     } catch (notifError) {
-      console.error("Failed to send customer notification:", notifError);
     }
 
     try {
-      // Get customer name for the notification
       const customerQuery = await pool.query(
         "SELECT first_name, last_name FROM users WHERE user_id = $1",
         [req.user.id]
@@ -503,17 +487,12 @@ const createServiceRequest = async (req, res) => {
           ? `${customerQuery.rows[0].first_name} ${customerQuery.rows[0].last_name}`
           : req.user.email;
 
-      // Only notify admins for new requests (staff will be notified when assigned)
       const adminQuery = `
         SELECT user_id, email, first_name, last_name 
         FROM users 
         WHERE user_type = 'admin' AND status = 'Active'
       `;
       const adminResult = await pool.query(adminQuery);
-
-      console.log(
-        `Creating notifications for ${adminResult.rows.length} admin users`
-      );
 
       for (const admin of adminResult.rows) {
         await createNotification(
@@ -525,9 +504,7 @@ const createServiceRequest = async (req, res) => {
         );
       }
 
-      console.log("Admin notifications sent successfully");
     } catch (notifError) {
-      console.error("Failed to create admin notifications:", notifError);
     }
 
     res.status(201).json({
@@ -542,7 +519,6 @@ const createServiceRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Create service request error:", error);
 
     res.status(500).json({
       success: false,
@@ -691,7 +667,6 @@ const getCustomerRequests = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get customer requests error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch service requests",
@@ -850,7 +825,6 @@ const getRequestDetails = async (req, res) => {
         pool.query(refrigerantsQuery, [requestId]),
       ]);
 
-    // Calculate subtotal from all items
     const subtotal = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -859,12 +833,10 @@ const getRequestDetails = async (req, res) => {
       return sum + parseFloat(item.line_total || 0);
     }, 0);
 
-    // Calculate discount
     const discountPercentage = request.discount_percentage || 0;
     const discountAmount = (subtotal * discountPercentage) / 100;
     const totalCostAfterDiscount = subtotal - discountAmount;
 
-    // Format items for display
     const allItems = [
       ...servicesResult.rows,
       ...chemicalsResult.rows,
@@ -875,7 +847,6 @@ const getRequestDetails = async (req, res) => {
       total_price: `₱${parseFloat(item.line_total).toLocaleString()}`,
     }));
 
-    // Ã¢Å“â€¦ FIXED: Calculate percentage from sum of payment amounts, not discounted total
     const paymentQuery = `
       WITH payment_total AS (
         SELECT SUM(amount) as total
@@ -902,7 +873,6 @@ const getRequestDetails = async (req, res) => {
 
     let paymentHistory = paymentResult.rows;
 
-    // Only create default payment history if no payments exist
     if (paymentResult.rows.length === 0) {
       const downpaymentPercent = request.downpayment_percentage || 50;
       const remainingPercent = 100 - downpaymentPercent;
@@ -967,11 +937,10 @@ const getRequestDetails = async (req, res) => {
         },
         items: allItems,
         statusHistory: [],
-        quotation: quotation, // Ã¢â€ Â CHANGE LINE 818: from null to quotation
+        quotation: quotation,
       },
     });
   } catch (error) {
-    console.error("Get request details error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch request details",
@@ -984,20 +953,17 @@ const getAllRequests = async (req, res) => {
     const { status, page = 1, limit = 20, search } = req.query;
     const offset = (page - 1) * limit;
 
-    // Get user information from authenticated request
     const userId = req.user.id;
     const userType = req.user.userType;
 
     let whereClause = "1=1";
     let queryParams = [];
 
-    // ✅ STAFF FILTERING: Staff can only see requests assigned to them
     if (userType === "staff") {
       whereClause +=
         " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
       queryParams.push(userId);
     }
-    // Admin can see all requests (no additional filter needed)
 
     if (status) {
       whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
@@ -1147,7 +1113,6 @@ const getAllRequests = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get all requests error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch service requests",
@@ -1271,7 +1236,6 @@ const addServicesToRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -1285,7 +1249,6 @@ const addServicesToRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Add services to request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to add services to request",
@@ -1410,7 +1373,6 @@ const createQuotation = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -1426,9 +1388,7 @@ const createQuotation = async (req, res) => {
         }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
 
-      console.log(`Quotation notification sent to ${request.customer_email}`);
     } catch (notifError) {
-      console.error("Failed to send quotation notification:", notifError);
     }
 
     res.json({
@@ -1443,7 +1403,6 @@ const createQuotation = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Create quotation error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create quotation",
@@ -1540,7 +1499,6 @@ const respondToQuotation = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -1558,18 +1516,10 @@ const respondToQuotation = async (req, res) => {
         message
       );
 
-      console.log(
-        `Quotation response notification sent to ${quotation.customer_email}`
-      );
     } catch (notifError) {
-      console.error(
-        "Failed to send quotation response notification:",
-        notifError
-      );
     }
 
     try {
-      // Notify all admins
       const adminQuery = `
         SELECT user_id, email FROM users 
         WHERE user_type = 'admin' AND status = 'Active'
@@ -1592,7 +1542,6 @@ const respondToQuotation = async (req, res) => {
         );
       }
 
-      // Notify assigned staff member only
       const assignedStaffQuery = `
         SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
         FROM service_requests sr
@@ -1622,11 +1571,7 @@ const respondToQuotation = async (req, res) => {
         );
       }
 
-      console.log(
-        `Admin and assigned staff notifications sent about quotation response`
-      );
     } catch (notifError) {
-      console.error("Failed to notify staff:", notifError);
     }
 
     res.json({
@@ -1641,7 +1586,6 @@ const respondToQuotation = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Respond to quotation error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to process quotation response",
@@ -1689,7 +1633,6 @@ const getServicesCatalog = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get services catalog error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch services catalog",
@@ -1727,7 +1670,6 @@ const getChemicalsCatalog = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get chemicals catalog error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch chemicals catalog",
@@ -1762,7 +1704,6 @@ const getRefrigerantsCatalog = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get refrigerants catalog error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch refrigerants catalog",
@@ -1830,7 +1771,6 @@ const getServiceWithRelatedItems = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get service with related items error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch service details",
@@ -1898,7 +1838,6 @@ const checkStockAvailability = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Check stock availability error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to check stock availability",
@@ -1957,7 +1896,6 @@ const debugRequestItems = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Debug request items error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to debug request items",
@@ -1986,9 +1924,6 @@ const updateRequestStatus = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType;
 
-    console.log("Update request:", requestId);
-    console.log("New service status:", serviceStatus);
-
     let whereClause = "request_id = $1";
     let queryParams = [requestId];
 
@@ -2015,8 +1950,6 @@ const updateRequestStatus = async (req, res) => {
     const currentRequest = requestCheck.rows[0];
     const currentStatusName = currentRequest.current_status_name;
 
-    console.log("Current status in DB:", currentStatusName);
-
     const statusMapping = {
       Pending: "New",
       Assigned: "Under Review",
@@ -2041,19 +1974,14 @@ const updateRequestStatus = async (req, res) => {
 
     if (serviceStatus) {
       const backendStatus = statusMapping[serviceStatus] || serviceStatus;
-      console.log("Mapped backend status:", backendStatus);
 
       const currentIndex = statusOrder.indexOf(currentStatusName);
       const newIndex = statusOrder.indexOf(backendStatus);
 
-      console.log("Current index:", currentIndex, "New index:", newIndex);
-
       if (currentIndex === -1) {
-        console.error("Current status not found in order:", currentStatusName);
       }
 
       if (newIndex === -1) {
-        console.error("New status not found in order:", backendStatus);
       }
 
       if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
@@ -2182,7 +2110,6 @@ const updateRequestStatus = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     try {
@@ -2204,7 +2131,6 @@ const updateRequestStatus = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -2220,7 +2146,6 @@ const updateRequestStatus = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Update request status error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update service request",
@@ -2240,7 +2165,6 @@ const addChemicalsToRequest = async (req, res) => {
     const { requestId } = req.params;
     const { chemicals, adminNotes } = req.body;
 
-    // Fetch user's name
     const userQuery = `
       SELECT first_name, last_name 
       FROM users 
@@ -2341,7 +2265,6 @@ const addChemicalsToRequest = async (req, res) => {
     try {
       await recreatePayments(requestId);
     } catch (paymentError) {
-      console.error("Failed to recreate payments:", paymentError);
       return res.status(400).json({
         success: false,
         message: paymentError.message,
@@ -2363,7 +2286,6 @@ const addChemicalsToRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     res.json({
@@ -2377,7 +2299,6 @@ const addChemicalsToRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Add chemicals to request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to add chemicals to request",
@@ -2397,7 +2318,6 @@ const addRefrigerantsToRequest = async (req, res) => {
     const { requestId } = req.params;
     const { refrigerants, adminNotes } = req.body;
 
-    // Fetch user's name
     const userQuery = `
       SELECT first_name, last_name 
       FROM users 
@@ -2497,11 +2417,9 @@ const addRefrigerantsToRequest = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Recreate payments with new total (outside transaction)
     try {
       await recreatePayments(requestId);
     } catch (paymentError) {
-      console.error("Failed to recreate payments:", paymentError);
       return res.status(400).json({
         success: false,
         message: paymentError.message,
@@ -2523,7 +2441,6 @@ const addRefrigerantsToRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     res.json({
@@ -2537,7 +2454,6 @@ const addRefrigerantsToRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Add refrigerants to request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to add refrigerants to request",
@@ -2616,7 +2532,6 @@ const removeChemicalsFromRequest = async (req, res) => {
       0
     );
 
-    // Delete the chemicals
     const deleteQuery = `
       DELETE FROM service_request_chemicals
       WHERE request_id = $1 AND item_id = ANY($2)
@@ -2627,7 +2542,6 @@ const removeChemicalsFromRequest = async (req, res) => {
       chemicalItemIds,
     ]);
 
-    // Update request total cost
     const updateCostQuery = `
       UPDATE service_requests 
       SET estimated_cost = GREATEST(estimated_cost - $1, 0),
@@ -2640,7 +2554,6 @@ const removeChemicalsFromRequest = async (req, res) => {
       requestId,
     ]);
 
-    // Log in audit_log
     try {
       await supabase.from("audit_log").insert({
         table_name: "service_request_chemicals",
@@ -2656,7 +2569,6 @@ const removeChemicalsFromRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     try {
@@ -2674,7 +2586,6 @@ const removeChemicalsFromRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -2690,7 +2601,6 @@ const removeChemicalsFromRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Remove chemicals from request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to remove chemicals from request",
@@ -2708,7 +2618,7 @@ const removeRefrigerantsFromRequest = async (req, res) => {
     await client.query("BEGIN");
 
     const { requestId } = req.params;
-    const { refrigerantItemIds } = req.body; // Array of item_ids to remove
+    const { refrigerantItemIds } = req.body;
     const adminId = req.user.id;
 
     if (!Array.isArray(refrigerantItemIds) || refrigerantItemIds.length === 0) {
@@ -2746,7 +2656,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
       });
     }
 
-    // Get the refrigerants to be removed and calculate cost reduction
     const getRefrigerantsQuery = `
       SELECT item_id, refrigerant_id, quantity, line_total
       FROM service_request_refrigerants
@@ -2770,7 +2679,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
       0
     );
 
-    // Delete the refrigerants
     const deleteQuery = `
       DELETE FROM service_request_refrigerants
       WHERE request_id = $1 AND item_id = ANY($2)
@@ -2781,7 +2689,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
       refrigerantItemIds,
     ]);
 
-    // Update request total cost
     const updateCostQuery = `
       UPDATE service_requests 
       SET estimated_cost = GREATEST(estimated_cost - $1, 0),
@@ -2794,7 +2701,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
       requestId,
     ]);
 
-    // Log in audit_log
     try {
       await supabase.from("audit_log").insert({
         table_name: "service_request_refrigerants",
@@ -2810,7 +2716,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     try {
@@ -2828,7 +2733,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -2844,7 +2748,6 @@ const removeRefrigerantsFromRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Remove refrigerants from request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to remove refrigerants from request",
@@ -2877,7 +2780,6 @@ const getStaffList = async (req, res) => {
       data: staffList,
     });
   } catch (error) {
-    console.error("Get staff list error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch staff list",
@@ -2894,7 +2796,6 @@ const updateItemWarranty = async (req, res) => {
     const { requestId } = req.params;
     const { itemId, itemType, warrantyMonths, warrantyStartDate } = req.body;
 
-    // Only allow for services
     if (itemType !== "service") {
       return res.status(400).json({
         success: false,
@@ -2902,7 +2803,6 @@ const updateItemWarranty = async (req, res) => {
       });
     }
 
-    // Calculate warranty end date
     let warrantyEndDate = null;
     if (warrantyStartDate && warrantyMonths) {
       const startDate = new Date(warrantyStartDate);
@@ -2938,7 +2838,6 @@ const updateItemWarranty = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Update warranty error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update warranty",
@@ -3013,27 +2912,14 @@ const updateServiceRequest = async (req, res) => {
 
     const backendStatus = statusMapping[serviceStatus] || serviceStatus;
 
-    // DEBUG LOGGING - Show mapping
-    console.log("=== STATUS MAPPING DEBUG ===");
-    console.log("Frontend Status (serviceStatus):", serviceStatus);
-    console.log("Backend Status (backendStatus):", backendStatus);
-    console.log("Assigned Staff:", assignedStaff);
-    console.log("============================");
-
-    // âœ… VALIDATION: Prevent "Under Review" (Assigned) or "Quote Sent" (Waiting for Approval) without assigned staff
-    // Check BOTH the frontend name and backend mapped name
     const staffValue = (assignedStaff || "").trim();
     const isNoStaff =
       staffValue === "Not assigned" || staffValue === "" || !staffValue;
 
-    // Block "Assigned for Processing" without staff
     if (
       (serviceStatus === "Assigned" || backendStatus === "Under Review") &&
       isNoStaff
     ) {
-      console.error(
-        "âŒ BACKEND VALIDATION BLOCKED: Cannot set to 'Assigned for Processing' / 'Under Review' without staff"
-      );
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
@@ -3042,15 +2928,11 @@ const updateServiceRequest = async (req, res) => {
       });
     }
 
-    // Block "Waiting for Approval" without staff
     if (
       (serviceStatus === "Waiting for Approval" ||
         backendStatus === "Quote Sent") &&
       isNoStaff
     ) {
-      console.error(
-        "âŒ BACKEND VALIDATION BLOCKED: Cannot set to 'Waiting for Approval' / 'Quote Sent' without staff"
-      );
       await client.query("ROLLBACK");
       return res.status(400).json({
         success: false,
@@ -3116,19 +2998,15 @@ const updateServiceRequest = async (req, res) => {
       actualCompletionDate = new Date().toISOString().split("T")[0];
     }
 
-    // ✅ Parse both values as floats to ensure type consistency
     const oldDiscountPercentage =
       parseFloat(currentRequest.discount_percentage) || 0;
 
-    let discountPercentage = oldDiscountPercentage; // Default to existing value
+    let discountPercentage = oldDiscountPercentage;
 
-    // Handle discount changes
     if (discount !== undefined && discount !== null) {
       if (discount === "No Discount") {
-        // ✅ Explicitly set to 0 when "No Discount" is selected
         discountPercentage = 0;
       } else {
-        // Parse the incoming discount (handles "20%" or "20" formats)
         const cleanDiscount =
           typeof discount === "string"
             ? discount.replace("%", "").trim()
@@ -3224,10 +3102,7 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // ✅ FIXED: Always recalculate payment breakdown amounts to ensure they're correct
-    // This handles cases where: discount changes, items added/removed, or initial creation had issues
     {
-      // Get the current subtotal (before discount)
       const subtotalQuery = `
         SELECT 
           COALESCE(
@@ -3246,11 +3121,9 @@ const updateServiceRequest = async (req, res) => {
       const { subtotal, payment_terms, downpayment_percentage } =
         subtotalResult.rows[0];
 
-      // Calculate total after discount
       const discountAmount = (subtotal * discountPercentage) / 100;
       const totalAfterDiscount = subtotal - discountAmount;
 
-      // Get existing payment records to update
       const paymentsQuery = `
         SELECT payment_id, payment_phase 
         FROM payments 
@@ -3260,9 +3133,7 @@ const updateServiceRequest = async (req, res) => {
       const paymentsResult = await client.query(paymentsQuery, [requestId]);
 
       if (paymentsResult.rows.length > 0) {
-        // Recalculate amounts based on payment structure
         if (payment_terms === "Full" || paymentsResult.rows.length === 1) {
-          // Full Payment: update single payment to full discounted amount
           await client.query(
             `UPDATE payments 
              SET amount = $1, updated_at = NOW() 
@@ -3270,7 +3141,6 @@ const updateServiceRequest = async (req, res) => {
             [totalAfterDiscount, requestId]
           );
         } else {
-          // Down Payment structure: recalculate both payments
           const downpaymentPercent = downpayment_percentage || 50;
           const downpaymentAmount = Math.round(
             (totalAfterDiscount * downpaymentPercent) / 100
@@ -3294,11 +3164,9 @@ const updateServiceRequest = async (req, res) => {
       }
     }
 
-    // Update payment statuses if provided and track which ones changed to "Paid"
     const newlyPaidPayments = [];
     if (paymentBreakdown && paymentBreakdown.length > 0) {
       for (const payment of paymentBreakdown) {
-        // Get the old status before updating
         const oldStatusResult = await client.query(
           `SELECT status FROM payments 
           WHERE request_id = $1 AND payment_phase = $2`,
@@ -3307,7 +3175,6 @@ const updateServiceRequest = async (req, res) => {
 
         const oldStatus = oldStatusResult.rows[0]?.status;
 
-        // Update the payment
         await client.query(
           `UPDATE payments
           SET status = $1,
@@ -3317,23 +3184,17 @@ const updateServiceRequest = async (req, res) => {
           [payment.paymentStatus, requestId, payment.phase]
         );
 
-        // Track if this payment just changed to "Paid" (not already "Paid")
         if (payment.paymentStatus === "Paid" && oldStatus !== "Paid") {
           newlyPaidPayments.push(payment.phase);
         }
       }
     }
 
-    // ✅ Check if payment deadline was just set and notify
     const oldPaymentDeadline = currentRequest.payment_deadline;
     const deadlineWasSet = !oldPaymentDeadline && paymentDeadline;
 
     if (deadlineWasSet) {
-      console.log(
-        `💳 Payment deadline set for request ${requestId}: ${paymentDeadline}`
-      );
 
-      // Update due_date for all pending payments to match the payment_deadline
       await client.query(
         `UPDATE payments 
      SET due_date = $1, updated_at = NOW() 
@@ -3341,7 +3202,6 @@ const updateServiceRequest = async (req, res) => {
         [paymentDeadline, requestId]
       );
 
-      // Get payment information for notifications
       const paymentsInfoQuery = `
     SELECT payment_phase, amount, due_date
     FROM payments
@@ -3350,9 +3210,7 @@ const updateServiceRequest = async (req, res) => {
   `;
       const paymentsInfo = await client.query(paymentsInfoQuery, [requestId]);
 
-      // Store payment info to send notifications after commit
       if (paymentsInfo.rows.length > 0) {
-        // After COMMIT, send notifications asynchronously
         setImmediate(async () => {
           try {
             for (const paymentInfo of paymentsInfo.rows) {
@@ -3363,14 +3221,7 @@ const updateServiceRequest = async (req, res) => {
                 paymentInfo.amount
               );
             }
-            console.log(
-              `✅ Payment deadline notifications sent for request ${requestId}`
-            );
           } catch (notifError) {
-            console.error(
-              "❌ Failed to send payment deadline notifications:",
-              notifError
-            );
           }
         });
       }
@@ -3394,7 +3245,6 @@ const updateServiceRequest = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -3407,7 +3257,6 @@ const updateServiceRequest = async (req, res) => {
       ) {
         let notificationMessage = "";
 
-        // Create user-friendly messages based on status
         if (backendStatus === "Quote Sent") {
           notificationMessage = `Your quotation for service request #${currentRequest.request_number} is ready for review.`;
         } else if (backendStatus === "Quote Approved") {
@@ -3435,7 +3284,6 @@ const updateServiceRequest = async (req, res) => {
         } else if (backendStatus === "Cancelled") {
           notificationMessage = `Service request #${currentRequest.request_number} has been cancelled.`;
         } else {
-          // Default fallback for any other status
           notificationMessage = `Service request #${currentRequest.request_number} has been updated to ${serviceStatus}.`;
           if (assignedStaffId && staffName) {
             notificationMessage += ` Assigned to: ${staffName}.`;
@@ -3450,9 +3298,6 @@ const updateServiceRequest = async (req, res) => {
           notificationMessage
         );
 
-        console.log(
-          `Status update notification sent to ${currentRequest.customer_email}`
-        );
       }
 
       if (
@@ -3460,7 +3305,6 @@ const updateServiceRequest = async (req, res) => {
         assignedStaffId !== currentRequest.assigned_to_staff_id &&
         staffName
       ) {
-        // Notify customer about staff assignment
         await createServiceRequestNotification(
           currentRequest.requested_by_user_id,
           currentRequest.request_number,
@@ -3469,11 +3313,6 @@ const updateServiceRequest = async (req, res) => {
           `Your service request #${currentRequest.request_number} has been assigned to ${staffName}. They will contact you shortly to discuss the service details.`
         );
 
-        console.log(
-          `Staff assignment notification sent to ${currentRequest.customer_email}`
-        );
-
-        // NEW: Notify the assigned staff member
         const staffEmailQuery = await pool.query(
           "SELECT email, first_name FROM users WHERE user_id = $1",
           [assignedStaffId]
@@ -3483,7 +3322,6 @@ const updateServiceRequest = async (req, res) => {
           const staffEmail = staffEmailQuery.rows[0].email;
           const staffFirstName = staffEmailQuery.rows[0].first_name;
 
-          // Get customer name for the notification
           const customerNameQuery = await pool.query(
             "SELECT first_name, last_name FROM users WHERE user_id = $1",
             [currentRequest.requested_by_user_id]
@@ -3502,16 +3340,11 @@ const updateServiceRequest = async (req, res) => {
             `You have been assigned to service request #${currentRequest.request_number}. Customer: ${customerName}. Please review the request details and contact the customer to schedule the service.`
           );
 
-          console.log(
-            `Assignment notification sent to staff member: ${staffEmail}`
-          );
         }
       }
 
-      // Only notify about payments that JUST changed to "Paid"
       if (newlyPaidPayments.length > 0) {
-        // ← This checks the NEW variable we created earlier
-        const paidPhases = newlyPaidPayments.join(", "); // ← Uses the payments that JUST changed
+        const paidPhases = newlyPaidPayments.join(", ");
         await createServiceRequestNotification(
           currentRequest.requested_by_user_id,
           currentRequest.request_number,
@@ -3520,32 +3353,23 @@ const updateServiceRequest = async (req, res) => {
           `Payment received for service request #${currentRequest.request_number}. Phase(s): ${paidPhases}. Thank you!`
         );
 
-        console.log(
-          "Payment notification sent to customer for newly paid phases:",
-          paidPhases
-        );
       }
 
       if (discountPercentage !== oldDiscountPercentage) {
         try {
-          // Format discount messages
           let customerMessage, staffMessage;
 
           if (discountPercentage > 0 && oldDiscountPercentage === 0) {
-            // Discount was added
             customerMessage = `Good news! A ${discountPercentage}% discount has been applied to your service request #${currentRequest.request_number}.\n\nYour updated total reflects this discount. Thank you for choosing TRISHKAYE!`;
             staffMessage = `applied a ${discountPercentage}% discount`;
           } else if (discountPercentage === 0 && oldDiscountPercentage > 0) {
-            // Discount was removed
             customerMessage = `The discount on your service request #${currentRequest.request_number} has been removed.\n\nYour total has been updated accordingly.`;
             staffMessage = `removed the discount`;
           } else {
-            // Discount was changed
             customerMessage = `The discount on your service request #${currentRequest.request_number} has been updated from ${oldDiscountPercentage}% to ${discountPercentage}%.\n\nYour total has been recalculated accordingly.`;
             staffMessage = `changed the discount from ${oldDiscountPercentage}% to ${discountPercentage}%`;
           }
 
-          // Notify the customer
           await createNotification(
             currentRequest.requested_by_user_id,
             "Service Request",
@@ -3554,11 +3378,6 @@ const updateServiceRequest = async (req, res) => {
             currentRequest.customer_email
           );
 
-          console.log(
-            `✅ Discount notification sent to customer: ${currentRequest.customer_email}`
-          );
-
-          // Get admin name who made the change
           const adminQuery = await pool.query(
             "SELECT first_name, last_name FROM users WHERE user_id = $1",
             [req.user.id]
@@ -3588,13 +3407,9 @@ const updateServiceRequest = async (req, res) => {
                 `${adminName} ${staffMessage} on service request #${currentRequest.request_number}.\n\nCustomer: ${currentRequest.customer_name}\n\nPlease review the updated quotation if needed.`,
                 staff.email
               );
-              console.log(
-                `✅ Discount notification sent to assigned staff: ${staff.email}`
-              );
             }
           }
 
-          // Notify all admins (excluding the one who made the change)
           const adminNotifyQuery = `
             SELECT user_id, email, first_name, last_name 
             FROM users 
@@ -3616,18 +3431,10 @@ const updateServiceRequest = async (req, res) => {
             );
           }
 
-          console.log(
-            `✅ Discount notifications sent to ${adminNotifyResult.rows.length} admin(s)`
-          );
         } catch (discountNotifError) {
-          console.error(
-            "❌ Failed to send discount notifications:",
-            discountNotifError
-          );
         }
       }
     } catch (notifError) {
-      console.error("Failed to create customer notification:", notifError);
     }
 
     res.json({
@@ -3636,7 +3443,6 @@ const updateServiceRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Update service request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update service request",
@@ -3656,11 +3462,10 @@ const setServiceWarranty = async (req, res) => {
     const { requestId } = req.params;
     const {
       warrantyStartDate,
-      warrantyMonths = 1, // Default 1 month
+      warrantyMonths = 1,
       applyToAllServices = true,
     } = req.body;
 
-    // Verify request exists and is completed
     const requestQuery = `
       SELECT sr.request_id, rs.status_name
       FROM service_requests sr
@@ -3679,7 +3484,6 @@ const setServiceWarranty = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // Only allow setting warranty for completed services
     if (request.status_name !== "Completed") {
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -3691,12 +3495,10 @@ const setServiceWarranty = async (req, res) => {
     const startDate =
       warrantyStartDate || new Date().toISOString().split("T")[0];
 
-    // Calculate warranty end date
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + parseInt(warrantyMonths));
     const warrantyEndDate = endDate.toISOString().split("T")[0];
 
-    // Update ALL service items in the request with warranty information
     const updateQuery = `
       UPDATE service_request_items
       SET 
@@ -3714,7 +3516,6 @@ const setServiceWarranty = async (req, res) => {
       requestId,
     ]);
 
-    // Also update the service_requests table
     await client.query(
       `
       UPDATE service_requests
@@ -3726,7 +3527,6 @@ const setServiceWarranty = async (req, res) => {
       [startDate, warrantyMonths, requestId]
     );
 
-    // Log audit entry
     try {
       await supabase.from("audit_log").insert({
         table_name: "service_request_items",
@@ -3744,7 +3544,6 @@ const setServiceWarranty = async (req, res) => {
         ip_address: req.ip || req.connection.remoteAddress,
       });
     } catch (auditError) {
-      console.error("Failed to log audit entry:", auditError);
     }
 
     await client.query("COMMIT");
@@ -3761,7 +3560,6 @@ const setServiceWarranty = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Set service warranty error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to set warranty",
@@ -3788,13 +3586,11 @@ const updateIndividualServiceWarranty = async (req, res) => {
       });
     }
 
-    // Calculate warranty end date
     const startDate = new Date(warrantyStartDate);
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + parseInt(warrantyMonths));
     const warrantyEndDate = endDate.toISOString().split("T")[0];
 
-    // Update specific service item
     const updateQuery = `
       UPDATE service_request_items
       SET 
@@ -3834,7 +3630,6 @@ const updateIndividualServiceWarranty = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Update individual service warranty error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update service warranty",
@@ -3849,7 +3644,6 @@ const approveServiceRequest = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    console.log("🎯 approveServiceRequest called by user:", req.user.id); // ADD THIS
     await client.query("BEGIN");
 
     const { requestId } = req.params;
@@ -3881,7 +3675,6 @@ const approveServiceRequest = async (req, res) => {
 
     const request = requestResult.rows[0];
 
-    // ✅ FIXED: Check for both "Quote Sent" AND "Waiting for Approval"
     if (
       request.status_name !== "Quote Sent" &&
       request.status_name !== "Waiting for Approval"
@@ -3947,28 +3740,21 @@ const approveServiceRequest = async (req, res) => {
         message
       );
 
-      console.log(`Approval confirmation sent to ${request.customer_email}`);
     } catch (notifError) {
-      console.error("Failed to send approval confirmation:", notifError);
     }
 
     try {
-      console.log("📢 Starting admin/staff notification for approval"); // ADD THIS
 
-      // Notify all admins
       const adminQuery = `
     SELECT user_id, email FROM users 
     WHERE user_type = 'admin' AND status = 'Active'
   `;
       const adminResult = await pool.query(adminQuery);
 
-      console.log(`📢 Found ${adminResult.rows.length} admins to notify`); // ADD THIS
-
       for (const admin of adminResult.rows) {
-        console.log(`🔔 Notifying admin: ${admin.email}`); // ADD THIS
         await createNotification(
           admin.user_id,
-          "Quote Approved", // ✅ Valid type
+          "Quote Approved",
           `Approved - ${request.request_number}`,
           `Customer ${request.customer_name} has approved service request #${
             request.request_number
@@ -3982,7 +3768,6 @@ const approveServiceRequest = async (req, res) => {
         );
       }
 
-      // Notify assigned staff member only
       const assignedStaffQuery = `
         SELECT sr.assigned_to_staff_id, u.email, u.first_name, u.last_name
         FROM service_requests sr
@@ -4011,9 +3796,7 @@ const approveServiceRequest = async (req, res) => {
         );
       }
 
-      console.log(`Admin and assigned staff notifications sent about approval`);
     } catch (notifError) {
-      console.error("Failed to notify staff:", notifError);
     }
 
     res.json({
@@ -4027,7 +3810,6 @@ const approveServiceRequest = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Approve service request error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to approve service request",
