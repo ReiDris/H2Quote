@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, Upload, ArrowLeft } from "lucide-react";
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 
 const SignupForm = ({ onSignup, isSubmitting }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -16,6 +16,7 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -52,15 +53,16 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
     if (!formData.contactNo.trim()) {
       newErrors.contactNo = "Contact number is required";
     } else {
-      const cleanNumber = formData.contactNo.replace(/[\s\-()]/g, '');
+      const cleanNumber = formData.contactNo.replace(/[\s\-()]/g, "");
       const phMobilePattern = /^(09|\+639|639)\d{9}$/;
       const phLandlinePattern = /^(02|\+632|632)\d{7,8}$/;
-      
+
       const isValidMobile = phMobilePattern.test(cleanNumber);
       const isValidLandline = phLandlinePattern.test(cleanNumber);
-      
+
       if (!isValidMobile && !isValidLandline) {
-        newErrors.contactNo = "Please enter a valid Philippine contact number (e.g., 09XXXXXXXXX or +639XXXXXXXXX)";
+        newErrors.contactNo =
+          "Please enter a valid Philippine contact number (e.g., 09XXXXXXXXX or +639XXXXXXXXX)";
       }
     }
 
@@ -75,13 +77,16 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
       const hasSpecial = /[@$!%*?&]/.test(formData.password);
 
       if (!hasUppercase) {
-        newErrors.password = "Password must contain at least 1 uppercase letter";
+        newErrors.password =
+          "Password must contain at least 1 uppercase letter";
       } else if (!hasLowercase) {
-        newErrors.password = "Password must contain at least 1 lowercase letter";
+        newErrors.password =
+          "Password must contain at least 1 lowercase letter";
       } else if (!hasNumber) {
         newErrors.password = "Password must contain at least 1 number";
       } else if (!hasSpecial) {
-        newErrors.password = "Password must contain at least 1 special character";
+        newErrors.password =
+          "Password must contain at least 1 special character";
       }
     }
 
@@ -145,18 +150,26 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
 
     if (!validateStep2()) return;
 
+    // Show terms and conditions modal instead of submitting directly
+    setShowTermsModal(true);
+  };
+
+  const handleAcceptTerms = async () => {
     setErrors({});
+    setShowTermsModal(false);
 
     try {
       const signupData = {
         ...formData,
-        verificationDocument: uploadedFile
+        verificationDocument: uploadedFile,
       };
 
       await onSignup(signupData);
     } catch (error) {
       console.error("Signup form error:", error);
-      setErrors({ general: error.message || "Signup failed. Please try again." });
+      setErrors({
+        general: error.message || "Signup failed. Please try again.",
+      });
     }
   };
 
@@ -366,9 +379,7 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
               </span>
               <span
                 className={
-                  /[@$!%*?&]/.test(formData.password)
-                    ? "text-green-600"
-                    : ""
+                  /[@$!%*?&]/.test(formData.password) ? "text-green-600" : ""
                 }
               >
                 • At least 1 special character
@@ -396,7 +407,7 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
                 errors.confirmPassword
                   ? "border-red-300 bg-red-50"
                   : "border-gray-300 bg-gray-50"
-            }`}
+              }`}
               placeholder="Confirm Password"
               disabled={isSubmitting}
             />
@@ -586,6 +597,207 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
     </div>
   );
 
+  const renderTermsModal = () => {
+    if (!showTermsModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Modal Header */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl lg:text-2xl font-semibold text-[#004785]">
+              Data Privacy Notice & Terms and Conditions
+            </h2>
+          </div>
+
+          {/* Modal Body - Scrollable */}
+          <div className="px-6 py-4 overflow-y-auto flex-1">
+            <div className="space-y-4 text-sm text-gray-700">
+              {/* Introduction */}
+              <p className="text-base font-medium text-gray-900">
+                Your Privacy Matters to Us
+              </p>
+              <p>
+                TRISHKAYE Enterprises & Allied Services is committed to
+                protecting your personal information in accordance with the{" "}
+                <span className="font-medium">
+                  Data Privacy Act of 2012 (Republic Act No. 10173)
+                </span>{" "}
+                and its implementing rules and regulations.
+              </p>
+
+              {/* Data Collection */}
+              <div>
+                <p className="font-medium text-gray-900 mb-2">
+                  What Information We Collect:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Company name and customer details</li>
+                  <li>Contact information (email address and phone number)</li>
+                  <li>Verification documents (for account authentication)</li>
+                  <li>Service request and transaction history</li>
+                </ul>
+              </div>
+
+              {/* Purpose */}
+              <div>
+                <p className="font-medium text-gray-900 mb-2">
+                  How We Use Your Information:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>To verify your identity and company legitimacy</li>
+                  <li>To process and manage your service requests</li>
+                  <li>
+                    To communicate updates about your quotations and services
+                  </li>
+                  <li>To send payment reminders and billing notifications</li>
+                  <li>
+                    To improve our service delivery and customer experience
+                  </li>
+                </ul>
+              </div>
+
+              {/* Data Protection */}
+              <div>
+                <p className="font-medium text-gray-900 mb-2">
+                  How We Protect Your Data:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>
+                    Your information is stored securely using industry-standard
+                    encryption
+                  </li>
+                  <li>
+                    Access to your data is restricted to authorized personnel
+                    only
+                  </li>
+                  <li>
+                    We implement appropriate technical and organizational
+                    security measures
+                  </li>
+                  <li>
+                    Your verification documents are stored confidentially and
+                    used solely for authentication purposes
+                  </li>
+                </ul>
+              </div>
+
+              {/* Data Retention */}
+              <div>
+                <p className="font-medium text-gray-900 mb-2">
+                  Data Retention:
+                </p>
+                <p>
+                  We retain your personal information only for as long as
+                  necessary to fulfill the purposes outlined above, or as
+                  required by law. You may request deletion of your data by
+                  contacting our Data Protection Officer.
+                </p>
+              </div>
+
+              {/* Your Rights */}
+              <div>
+                <p className="font-medium text-gray-900 mb-2">
+                  Your Rights as a Data Subject:
+                </p>
+                <p className="mb-2">
+                  Under the Data Privacy Act, you have the right to:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Be informed about how your data is collected and used</li>
+                  <li>Access your personal information</li>
+                  <li>Dispute inaccurate or incomplete data</li>
+                  <li>
+                    Request correction, blocking, or deletion of your data
+                  </li>
+                  <li>Lodge complaints with the National Privacy Commission</li>
+                </ul>
+              </div>
+
+              {/* Data Sharing */}
+              <div>
+                <p className="font-medium text-gray-900 mb-2">Data Sharing:</p>
+                <p>
+                  We do{" "}
+                  <span className="font-medium">not sell, trade, or rent</span>{" "}
+                  your personal information to third parties. Your data will
+                  only be shared when:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2 mt-2">
+                  <li>Required by law or legal process</li>
+                  <li>Necessary to protect our rights and property</li>
+                  <li>You have given explicit consent</li>
+                </ul>
+              </div>
+
+              {/* Contact */}
+              <div className="pt-2 border-t border-gray-200">
+                <p className="font-medium text-gray-900 mb-2">
+                  Questions or Concerns?
+                </p>
+                <p>
+                  If you have any questions about this Data Privacy Notice or
+                  wish to exercise your data subject rights, please contact us
+                  at:
+                </p>
+                <p className="mt-2 text-[#004785]">
+                  <span className="font-medium">Email:</span>{" "}
+                  trishkaye@trishkayechemicals-services.com
+                </p>
+              </div>
+
+              {/* Consent Statement */}
+              <div className="pt-4 border-t border-gray-200 bg-blue-50 -mx-6 px-6 py-4 mt-4">
+                <p className="font-medium text-gray-900 mb-2">
+                  By clicking "I Accept," you confirm that:
+                </p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>You have read and understood this Data Privacy Notice</li>
+                  <li>
+                    You consent to the collection, processing, and storage of
+                    your personal information as described above
+                  </li>
+                  <li>
+                    You agree to our Terms and Conditions for using H2Quote
+                    services
+                  </li>
+                  <li>The information you provided is accurate and complete</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="flex-1 px-4 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors duration-200 font-medium cursor-pointer"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAcceptTerms}
+                disabled={isSubmitting}
+                className="flex-1 px-4 py-2.5 bg-[#004785] text-white rounded-lg hover:bg-[#0056A3] transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  "I Accept"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Welcome Section */}
@@ -635,8 +847,11 @@ const SignupForm = ({ onSignup, isSubmitting }) => {
       <div className="flex-1 flex items-center justify-center bg-gray-50">
         {currentStep === 1 ? renderStep1() : renderStep2()}
       </div>
+
+      {/* Terms and Conditions Modal */}
+      {renderTermsModal()}
     </div>
   );
-}
+};
 
 export default SignupForm;
