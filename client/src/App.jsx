@@ -23,6 +23,7 @@ import ActivityLogPage from "./pages/admin/ActivityLog";
 import AccountSettings from "./pages/admin/AccountSettings";
 import Messages from "./pages/admin/Messages";
 import MessageDetail from "./pages/admin/MessageDetail";
+import SystemCustomization from "./pages/admin/SystemCustomization";
 
 // Staff Pages
 import StaffServiceRequestDetails from "./pages/staff/ServiceRequestDetails";
@@ -94,6 +95,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <UserManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/system-customization"
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <SystemCustomization />
                   </ProtectedRoute>
                 }
               />

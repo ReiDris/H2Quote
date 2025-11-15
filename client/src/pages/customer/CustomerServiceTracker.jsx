@@ -18,6 +18,28 @@ const CustomerServiceTracker = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    dateFrom: "",
+    dateTo: "",
+    itemType: "",
+    priceMin: "",
+    priceMax: "",
+    serviceStatus: "",
+    paymentStatus: "",
+    warrantyStatus: "",
+  });
+  const [pendingFilters, setPendingFilters] = useState({
+    dateFrom: "",
+    dateTo: "",
+    itemType: "",
+    priceMin: "",
+    priceMax: "",
+    serviceStatus: "",
+    paymentStatus: "",
+    warrantyStatus: "",
+  });
+  const [pendingSearch, setPendingSearch] = useState("");
 
   const itemsPerPage = 10;
 
@@ -167,13 +189,133 @@ const CustomerServiceTracker = () => {
     );
   };
 
-  const filteredData = mockData.filter(
-    (item) =>
+  const handleSearchSubmit = () => {
+    setSearchTerm(pendingSearch);
+    setCurrentPage(1);
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === "Enter") {
+      handleSearchSubmit();
+    }
+  };
+
+  const handleApplyFilters = () => {
+    setFilters(pendingFilters);
+    setShowFilters(false);
+    setCurrentPage(1);
+  };
+
+  const handleClearFilters = () => {
+    const clearedFilters = {
+      dateFrom: "",
+      dateTo: "",
+      itemType: "",
+      priceMin: "",
+      priceMax: "",
+      serviceStatus: "",
+      paymentStatus: "",
+      warrantyStatus: "",
+    };
+    setFilters(clearedFilters);
+    setCurrentPage(1);
+  };
+
+  const handleClearAll = () => {
+    setPendingSearch("");
+    setSearchTerm("");
+    const clearedFilters = {
+      dateFrom: "",
+      dateTo: "",
+      itemType: "",
+      priceMin: "",
+      priceMax: "",
+      serviceStatus: "",
+      paymentStatus: "",
+      warrantyStatus: "",
+    };
+    setFilters(clearedFilters);
+    setCurrentPage(1);
+  };
+
+  const getActiveFilterCount = () => {
+    return Object.values(filters).filter((value) => value !== "").length;
+  };
+
+  const filteredData = mockData.filter((item) => {
+    // Search filter
+    const matchesSearch =
+      !searchTerm ||
       item.requestedService.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.assignedStaff.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Date range filter
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+
+    if (filters.dateFrom || filters.dateTo) {
+      const dateStr = item.requestedAt;
+      const itemDate = new Date(dateStr.replace(" at ", " "));
+
+      if (filters.dateFrom) {
+        const fromDate = new Date(filters.dateFrom);
+        fromDate.setHours(0, 0, 0, 0);
+        itemDate.setHours(0, 0, 0, 0);
+        matchesDateFrom = itemDate >= fromDate;
+      }
+
+      if (filters.dateTo) {
+        const toDate = new Date(filters.dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        itemDate.setHours(0, 0, 0, 0);
+        matchesDateTo = itemDate <= toDate;
+      }
+    }
+
+    // Item type filter
+    let matchesItemType = true;
+    if (filters.itemType) {
+      const category = item.serviceCategory.toLowerCase();
+      if (filters.itemType === "service") {
+        matchesItemType = category === "services";
+      } else if (filters.itemType === "chemical") {
+        matchesItemType = category === "chemicals";
+      } else if (filters.itemType === "refrigerant") {
+        matchesItemType = category === "refrigerants";
+      } else if (filters.itemType === "mixed") {
+        matchesItemType = category.includes(",");
+      }
+    }
+
+    // Price range filter
+    const costValue = parseFloat(item.totalCost.replace(/[₱,]/g, ""));
+    const matchesPriceMin =
+      !filters.priceMin || costValue >= parseFloat(filters.priceMin);
+    const matchesPriceMax =
+      !filters.priceMax || costValue <= parseFloat(filters.priceMax);
+
+    // Status filters
+    const matchesServiceStatus =
+      !filters.serviceStatus || item.serviceStatus === filters.serviceStatus;
+    const matchesPaymentStatus =
+      !filters.paymentStatus || item.paymentStatus === filters.paymentStatus;
+    const matchesWarrantyStatus =
+      !filters.warrantyStatus || item.warrantyStatus === filters.warrantyStatus;
+
+    return (
+      matchesSearch &&
+      matchesDateFrom &&
+      matchesDateTo &&
+      matchesItemType &&
+      matchesPriceMin &&
+      matchesPriceMax &&
+      matchesServiceStatus &&
+      matchesPaymentStatus &&
+      matchesWarrantyStatus
+    );
+  });
 
   const totalPages = Math.ceil(filteredData.length / 10);
   const startIndex = (currentPage - 1) * 10;
@@ -197,20 +339,57 @@ const CustomerServiceTracker = () => {
     <CustomerLayout>
       <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden mb-15">
         {/* Search and Filter Section */}
-        <div className="flex-shrink-0 mb-4 flex items-center justify-between gap-4">
-          <div className="relative flex-1">
-            <Search
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500"
-              size={20}
-            />
-            <input
-              type="text"
-              placeholder="Search my requests..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500 text-lg"
-            />
+        <div className="flex-shrink-0 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 flex gap-2">
+              <div className="relative flex-1">
+                <Search
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                  size={20}
+                />
+                <input
+                  type="text"
+                  placeholder="Search my requests..."
+                  value={pendingSearch}
+                  onChange={(e) => setPendingSearch(e.target.value)}
+                  onKeyPress={handleSearchKeyPress}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-3 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                />
+              </div>
+              <button
+                onClick={handleSearchSubmit}
+                className="px-8 py-2 bg-[#004785] text-white rounded-md hover:bg-[#003666] transition-colors font-medium cursor-pointer"
+              >
+                Search
+              </button>
+              <button
+                onClick={() => setShowFilters(true)}
+                className="flex items-center gap-2 px-5 py-2 border border-gray-400 rounded-md hover:bg-gray-200 transition-colors font-medium cursor-pointer"
+              >
+                <ListFilter size={20} />
+                Filters
+                {getActiveFilterCount() > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                    {getActiveFilterCount()}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={handleClearAll}
+                className="flex items-center gap-2 px-6 py-2 border border-red-500 text-red-600 rounded-md hover:bg-red-50 transition-colors font-medium cursor-pointer"
+                title="Clear search and all filters"
+              >
+                Clear All
+              </button>
+            </div>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600 mt-4">
+              {error}
+            </div>
+          )}
         </div>
 
         {/* Table Section */}
@@ -441,6 +620,236 @@ const CustomerServiceTracker = () => {
           )}
         </div>
       </div>
+
+      {/* Filter Modal */}
+      {showFilters && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-4xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-10">
+            <div className="flex items-center justify-between border-b border-gray-300 pb-3">
+              <h2 className="text-2xl font-semibold text-[#3C61A8]">
+                Filter My Service Requests
+              </h2>
+              <button
+                onClick={() => setShowFilters(false)}
+                className="p-2 rounded-lg transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto mt-5 pr-4 mr-2">
+              {/* Date Range Filter */}
+              <div>
+                <label className="block text-sm font-medium text-black mb-3">
+                  Requested Date Range
+                </label>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      From
+                    </label>
+                    <input
+                      type="date"
+                      value={pendingFilters.dateFrom}
+                      onChange={(e) =>
+                        setPendingFilters({
+                          ...pendingFilters,
+                          dateFrom: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      To
+                    </label>
+                    <input
+                      type="date"
+                      value={pendingFilters.dateTo}
+                      onChange={(e) =>
+                        setPendingFilters({
+                          ...pendingFilters,
+                          dateTo: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Item Type Filter */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-black mb-3">
+                  Service Category
+                </label>
+                <select
+                  value={pendingFilters.itemType}
+                  onChange={(e) =>
+                    setPendingFilters({
+                      ...pendingFilters,
+                      itemType: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">All Categories</option>
+                  <option value="service">Services Only</option>
+                  <option value="chemical">Chemicals Only</option>
+                  <option value="refrigerant">Refrigerants Only</option>
+                  <option value="mixed">Mixed Items</option>
+                </select>
+              </div>
+
+              {/* Price Range Filter */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-black mb-3">
+                  Total Cost Range
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Min (₱)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                      value={pendingFilters.priceMin}
+                      onChange={(e) =>
+                        setPendingFilters({
+                          ...pendingFilters,
+                          priceMin: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Max (₱)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="999999.99"
+                      step="0.01"
+                      min="0"
+                      value={pendingFilters.priceMax}
+                      onChange={(e) =>
+                        setPendingFilters({
+                          ...pendingFilters,
+                          priceMax: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Service Status Filter */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-black mb-3">
+                  Service Status
+                </label>
+                <select
+                  value={pendingFilters.serviceStatus}
+                  onChange={(e) =>
+                    setPendingFilters({
+                      ...pendingFilters,
+                      serviceStatus: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Waiting for Approval">
+                    Waiting for Approval
+                  </option>
+                  <option value="Approved">Approved</option>
+                  <option value="Ongoing">Ongoing</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+
+              {/* Payment Status Filter */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-black mb-3">
+                  Payment Status
+                </label>
+                <select
+                  value={pendingFilters.paymentStatus}
+                  onChange={(e) =>
+                    setPendingFilters({
+                      ...pendingFilters,
+                      paymentStatus: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Partial">Partial</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Overdue">Overdue</option>
+                </select>
+              </div>
+
+              {/* Warranty Status Filter */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-black mb-3">
+                  Warranty Status
+                </label>
+                <select
+                  value={pendingFilters.warrantyStatus}
+                  onChange={(e) =>
+                    setPendingFilters({
+                      ...pendingFilters,
+                      warrantyStatus: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Valid">Valid</option>
+                  <option value="Expired">Expired</option>
+                  <option value="N/A">N/A</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-between items-center gap-4 mt-4">
+              <button
+                onClick={handleClearFilters}
+                className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition-colors cursor-pointer"
+              >
+                Clear All
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowFilters(false)}
+                  className="px-12 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApplyFilters}
+                  className="px-10 py-2 bg-[#004785] text-white rounded-md hover:bg-[#003666] font-medium transition-colors cursor-pointer"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </CustomerLayout>
   );
 };
