@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Building2,
   Package,
+  Sliders,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -82,6 +83,12 @@ const Sidebar = ({ userRole }) => {
         to: `/${actualUserRole}/user-management`,
         icon: UserCheck,
         label: "User Management",
+        roles: ["admin"],
+      },
+      {
+        to: `/${actualUserRole}/system-customization`,
+        icon: Sliders,
+        label: "System Customization",
         roles: ["admin"],
       },
       {
