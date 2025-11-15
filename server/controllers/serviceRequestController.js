@@ -450,20 +450,17 @@ const createServiceRequest = async (req, res) => {
         change_reason: `Service request #${requestNumber} created by customer`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
     try {
       await createDefaultPayments(requestId);
-    } catch (paymentError) {
-    }
+    } catch (paymentError) {}
 
     try {
       await createDefaultQuotation(requestId);
-    } catch (quotationError) {
-    }
+    } catch (quotationError) {}
 
     try {
       await createServiceRequestNotification(
@@ -473,8 +470,7 @@ const createServiceRequest = async (req, res) => {
         "Pending",
         `Your service request #${requestNumber} has been submitted successfully. Total cost: ₱${totalCost.toLocaleString()}. We will review it shortly.`
       );
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     try {
       const customerQuery = await pool.query(
@@ -503,9 +499,7 @@ const createServiceRequest = async (req, res) => {
           admin.email
         );
       }
-
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     res.status(201).json({
       success: true,
@@ -950,7 +944,21 @@ const getRequestDetails = async (req, res) => {
 
 const getAllRequests = async (req, res) => {
   try {
-    const { status, page = 1, limit = 20, search } = req.query;
+    const {
+      status,
+      page = 1,
+      limit = 20,
+      search,
+      dateFrom,
+      dateTo,
+      itemType,
+      priceMin,
+      priceMax,
+      serviceStatus,
+      paymentStatus,
+      warrantyStatus,
+    } = req.query;
+
     const offset = (page - 1) * limit;
 
     const userId = req.user.id;
@@ -959,17 +967,20 @@ const getAllRequests = async (req, res) => {
     let whereClause = "1=1";
     let queryParams = [];
 
+    // ✅ PRESERVED: Staff filtering
     if (userType === "staff") {
       whereClause +=
         " AND sr.assigned_to_staff_id = $" + (queryParams.length + 1);
       queryParams.push(userId);
     }
 
+    // Existing status filter
     if (status) {
       whereClause += " AND rs.status_name = $" + (queryParams.length + 1);
       queryParams.push(status);
     }
 
+    // Existing search filter
     if (search) {
       whereClause += ` AND (CONCAT(u.first_name, ' ', u.last_name) ILIKE $${
         queryParams.length + 1
@@ -979,110 +990,230 @@ const getAllRequests = async (req, res) => {
       queryParams.push(`%${search}%`);
     }
 
-    const query = `
-  SELECT 
-    sr.request_id, 
-    sr.request_number, 
-    rs.status_name as status,
-    
-    -- ✅ BEST: Calculate from items with all COALESCE, no fallback needed
-    (
-      (
-        COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
-        COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
-        COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
-      ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
-    ) as estimated_cost,
-    
-    sr.request_date as created_at,
-    CONCAT(u.first_name, ' ', u.last_name) as customer_name,
-    c.company_name,
-    CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
-    sr.priority,
-    
-    -- Service status mapping
-    CASE 
-      WHEN rs.status_name = 'New' THEN 'Pending'
-      WHEN rs.status_name = 'Under Review' THEN 'Assigned'
-      WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
-      WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
-      WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
-      WHEN rs.status_name = 'Completed' THEN 'Completed'
-      ELSE rs.status_name
-    END as service_status,
-    
-    -- Payment status
-    CASE 
-      WHEN sr.payment_status IS NULL THEN 'Pending'
-      ELSE sr.payment_status
-    END as payment_status,
-    
-    -- ✅ FIXED WARRANTY: Check both request and item levels
-    CASE 
-      WHEN rs.status_name = 'Completed' AND (
-        sr.warranty_start_date IS NOT NULL OR 
-        EXISTS (
+    // NEW: Date range filter
+    if (dateFrom) {
+      whereClause += ` AND DATE(sr.request_date) >= $${queryParams.length + 1}`;
+      queryParams.push(dateFrom);
+    }
+
+    if (dateTo) {
+      whereClause += ` AND DATE(sr.request_date) <= $${queryParams.length + 1}`;
+      queryParams.push(dateTo);
+    }
+
+    // NEW: Item type filter
+    if (itemType) {
+      if (itemType === "service") {
+        whereClause += ` AND EXISTS (
+          SELECT 1 FROM service_request_items sri WHERE sri.request_id = sr.request_id
+        ) AND NOT EXISTS (
+          SELECT 1 FROM service_request_chemicals src WHERE src.request_id = sr.request_id
+        ) AND NOT EXISTS (
+          SELECT 1 FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id
+        )`;
+      } else if (itemType === "chemical") {
+        whereClause += ` AND EXISTS (
+          SELECT 1 FROM service_request_chemicals src WHERE src.request_id = sr.request_id
+        ) AND NOT EXISTS (
+          SELECT 1 FROM service_request_items sri WHERE sri.request_id = sr.request_id
+        ) AND NOT EXISTS (
+          SELECT 1 FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id
+        )`;
+      } else if (itemType === "refrigerant") {
+        whereClause += ` AND EXISTS (
+          SELECT 1 FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id
+        ) AND NOT EXISTS (
+          SELECT 1 FROM service_request_items sri WHERE sri.request_id = sr.request_id
+        ) AND NOT EXISTS (
+          SELECT 1 FROM service_request_chemicals src WHERE src.request_id = sr.request_id
+        )`;
+      } else if (itemType === "mixed") {
+        whereClause += ` AND (
+          (EXISTS (SELECT 1 FROM service_request_items sri WHERE sri.request_id = sr.request_id) AND 
+           EXISTS (SELECT 1 FROM service_request_chemicals src WHERE src.request_id = sr.request_id))
+          OR
+          (EXISTS (SELECT 1 FROM service_request_items sri WHERE sri.request_id = sr.request_id) AND 
+           EXISTS (SELECT 1 FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id))
+          OR
+          (EXISTS (SELECT 1 FROM service_request_chemicals src WHERE src.request_id = sr.request_id) AND 
+           EXISTS (SELECT 1 FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id))
+          OR
+          (EXISTS (SELECT 1 FROM service_request_items sri WHERE sri.request_id = sr.request_id) AND 
+           EXISTS (SELECT 1 FROM service_request_chemicals src WHERE src.request_id = sr.request_id) AND 
+           EXISTS (SELECT 1 FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id))
+        )`;
+      }
+    }
+
+    // NEW: Service status filter
+    if (serviceStatus) {
+      // Map frontend status back to backend status names
+      const statusMapping = {
+        Pending: "New",
+        Assigned: "Under Review",
+        Processing: "Quote Prepared",
+        "Waiting for Approval": "Quote Sent",
+        Approved: "Quote Approved",
+        Ongoing: "In Progress",
+        Completed: "Completed",
+        Cancelled: "Cancelled",
+      };
+      const backendStatus = statusMapping[serviceStatus] || serviceStatus;
+      whereClause += ` AND rs.status_name = $${queryParams.length + 1}`;
+      queryParams.push(backendStatus);
+    }
+
+    // NEW: Payment status filter
+    if (paymentStatus) {
+      whereClause += ` AND COALESCE(sr.payment_status, 'Pending') = $${
+        queryParams.length + 1
+      }`;
+      queryParams.push(paymentStatus);
+    }
+
+    // NEW: Warranty status filter
+    if (warrantyStatus) {
+      if (warrantyStatus === "Valid") {
+        whereClause += ` AND rs.status_name = 'Completed' AND (
+          sr.warranty_start_date IS NOT NULL OR 
+          EXISTS (
+            SELECT 1 FROM service_request_items sri 
+            WHERE sri.request_id = sr.request_id 
+            AND sri.warranty_start_date IS NOT NULL
+          )
+        )`;
+      } else if (warrantyStatus === "Pending") {
+        whereClause += ` AND rs.status_name = 'Completed' AND sr.warranty_start_date IS NULL AND NOT EXISTS (
           SELECT 1 FROM service_request_items sri 
           WHERE sri.request_id = sr.request_id 
           AND sri.warranty_start_date IS NOT NULL
-        )
-      ) THEN 'Valid'
-      WHEN rs.status_name = 'Completed' THEN 'Pending'
-      ELSE 'N/A'
-    END as warranty_status,
-        -- Add item counts for debugging
-        (
-          SELECT COUNT(*)::int 
-          FROM service_request_items sri 
-          WHERE sri.request_id = sr.request_id
-        ) as services_count,
-        (
-          SELECT COUNT(*)::int 
-          FROM service_request_chemicals src 
-          WHERE src.request_id = sr.request_id
-        ) as chemicals_count,
-        (
-          SELECT COUNT(*)::int 
-          FROM service_request_refrigerants srr 
-          WHERE srr.request_id = sr.request_id
-        ) as refrigerants_count,
-        -- Add item summary for display
-        (
-          SELECT STRING_AGG(
-            CASE 
-              WHEN item_type = 'service' THEN CONCAT(qty, 'x ', name, ' (Service)')
-              WHEN item_type = 'chemical' THEN CONCAT(qty, 'x ', name, ' (Chemical)')
-              WHEN item_type = 'refrigerant' THEN CONCAT(qty, 'x ', name, ' (Refrigerant)')
-            END, ', '
+        )`;
+      } else if (warrantyStatus === "N/A") {
+        whereClause += ` AND rs.status_name != 'Completed'`;
+      } else if (warrantyStatus === "Expired") {
+        whereClause += ` AND rs.status_name = 'Completed' AND (
+          sr.warranty_start_date IS NOT NULL OR 
+          EXISTS (
+            SELECT 1 FROM service_request_items sri 
+            WHERE sri.request_id = sr.request_id 
+            AND sri.warranty_start_date IS NOT NULL
           )
-          FROM (
-            SELECT 'service' as item_type, sri.quantity as qty, s.service_name as name
-            FROM service_request_items sri
-            JOIN services s ON sri.service_id = s.service_id
-            WHERE sri.request_id = sr.request_id
-            
-            UNION ALL
-            
-            SELECT 'chemical' as item_type, src.quantity as qty, c.chemical_name as name
-            FROM service_request_chemicals src
-            JOIN chemicals c ON src.chemical_id = c.chemical_id
-            WHERE src.request_id = sr.request_id
-            
-            UNION ALL
-            
-            SELECT 'refrigerant' as item_type, srr.quantity as qty, r.refrigerant_name as name
-            FROM service_request_refrigerants srr
-            JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
-            WHERE srr.request_id = sr.request_id
-          ) items_summary
-        ) as items_summary
-        FROM service_requests sr
-  JOIN request_statuses rs ON sr.status_id = rs.status_id
-  JOIN users u ON sr.requested_by_user_id = u.user_id
-  JOIN companies c ON sr.company_id = c.company_id
-  LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
-  WHERE ${whereClause}
-  ORDER BY sr.request_date DESC
+        )`;
+      }
+    }
+
+    // Build the main query with price filtering in a subquery
+    const query = `
+  SELECT * FROM (
+    SELECT 
+      sr.request_id, 
+      sr.request_number, 
+      rs.status_name as status,
+      
+      -- ✅ Calculate from items with all COALESCE
+      (
+        (
+          COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+          COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+        ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
+      ) as estimated_cost,
+      
+      sr.request_date as created_at,
+      CONCAT(u.first_name, ' ', u.last_name) as customer_name,
+      c.company_name,
+      CONCAT(staff.first_name, ' ', staff.last_name) as assigned_staff_name,
+      sr.priority,
+      
+      -- Service status mapping
+      CASE 
+        WHEN rs.status_name = 'New' THEN 'Pending'
+        WHEN rs.status_name = 'Under Review' THEN 'Assigned'
+        WHEN rs.status_name = 'Quote Sent' THEN 'Waiting for Approval'
+        WHEN rs.status_name = 'Quote Approved' THEN 'Approved'
+        WHEN rs.status_name = 'In Progress' THEN 'Ongoing'
+        WHEN rs.status_name = 'Completed' THEN 'Completed'
+        ELSE rs.status_name
+      END as service_status,
+      
+      -- Payment status
+      CASE 
+        WHEN sr.payment_status IS NULL THEN 'Pending'
+        ELSE sr.payment_status
+      END as payment_status,
+      
+      -- ✅ FIXED WARRANTY: Check both request and item levels
+      CASE 
+        WHEN rs.status_name = 'Completed' AND (
+          sr.warranty_start_date IS NOT NULL OR 
+          EXISTS (
+            SELECT 1 FROM service_request_items sri 
+            WHERE sri.request_id = sr.request_id 
+            AND sri.warranty_start_date IS NOT NULL
+          )
+        ) THEN 'Valid'
+        WHEN rs.status_name = 'Completed' THEN 'Pending'
+        ELSE 'N/A'
+      END as warranty_status,
+      
+      -- Add item counts
+      (
+        SELECT COUNT(*)::int 
+        FROM service_request_items sri 
+        WHERE sri.request_id = sr.request_id
+      ) as services_count,
+      (
+        SELECT COUNT(*)::int 
+        FROM service_request_chemicals src 
+        WHERE src.request_id = sr.request_id
+      ) as chemicals_count,
+      (
+        SELECT COUNT(*)::int 
+        FROM service_request_refrigerants srr 
+        WHERE srr.request_id = sr.request_id
+      ) as refrigerants_count,
+      
+      -- Add item summary for display
+      (
+        SELECT STRING_AGG(
+          CASE 
+            WHEN item_type = 'service' THEN CONCAT(qty, 'x ', name, ' (Service)')
+            WHEN item_type = 'chemical' THEN CONCAT(qty, 'x ', name, ' (Chemical)')
+            WHEN item_type = 'refrigerant' THEN CONCAT(qty, 'x ', name, ' (Refrigerant)')
+          END, ', '
+        )
+        FROM (
+          SELECT 'service' as item_type, sri.quantity as qty, s.service_name as name
+          FROM service_request_items sri
+          JOIN services s ON sri.service_id = s.service_id
+          WHERE sri.request_id = sr.request_id
+          
+          UNION ALL
+          
+          SELECT 'chemical' as item_type, src.quantity as qty, c.chemical_name as name
+          FROM service_request_chemicals src
+          JOIN chemicals c ON src.chemical_id = c.chemical_id
+          WHERE src.request_id = sr.request_id
+          
+          UNION ALL
+          
+          SELECT 'refrigerant' as item_type, srr.quantity as qty, r.refrigerant_name as name
+          FROM service_request_refrigerants srr
+          JOIN refrigerants r ON srr.refrigerant_id = r.refrigerant_id
+          WHERE srr.request_id = sr.request_id
+        ) items_summary
+      ) as items_summary
+    FROM service_requests sr
+    JOIN request_statuses rs ON sr.status_id = rs.status_id
+    JOIN users u ON sr.requested_by_user_id = u.user_id
+    JOIN companies c ON sr.company_id = c.company_id
+    LEFT JOIN users staff ON sr.assigned_to_staff_id = staff.user_id
+    WHERE ${whereClause}
+  ) as filtered_requests
+  WHERE 1=1
+  ${priceMin ? `AND estimated_cost >= ${parseFloat(priceMin)}` : ""}
+  ${priceMax ? `AND estimated_cost <= ${parseFloat(priceMax)}` : ""}
+  ORDER BY created_at DESC
   LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
 `;
 
@@ -1090,12 +1221,27 @@ const getAllRequests = async (req, res) => {
 
     const result = await pool.query(query, queryParams);
 
+    // Update count query to use the same subquery approach
     const countQuery = `
-      SELECT COUNT(*) FROM service_requests sr
-      JOIN request_statuses rs ON sr.status_id = rs.status_id
-      JOIN users u ON sr.requested_by_user_id = u.user_id
-      JOIN companies c ON sr.company_id = c.company_id
-      WHERE ${whereClause}
+      SELECT COUNT(*) FROM (
+        SELECT 
+          sr.request_id,
+          (
+            (
+              COALESCE((SELECT SUM(sri.line_total) FROM service_request_items sri WHERE sri.request_id = sr.request_id), 0) +
+              COALESCE((SELECT SUM(src.line_total) FROM service_request_chemicals src WHERE src.request_id = sr.request_id), 0) +
+              COALESCE((SELECT SUM(srr.line_total) FROM service_request_refrigerants srr WHERE srr.request_id = sr.request_id), 0)
+            ) * (1 - COALESCE(sr.discount_percentage, 0) / 100.0)
+          ) as estimated_cost
+        FROM service_requests sr
+        JOIN request_statuses rs ON sr.status_id = rs.status_id
+        JOIN users u ON sr.requested_by_user_id = u.user_id
+        JOIN companies c ON sr.company_id = c.company_id
+        WHERE ${whereClause}
+      ) as filtered_requests
+      WHERE 1=1
+      ${priceMin ? `AND estimated_cost >= ${parseFloat(priceMin)}` : ""}
+      ${priceMax ? `AND estimated_cost <= ${parseFloat(priceMax)}` : ""}
     `;
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
     const totalCount = parseInt(countResult.rows[0].count);
@@ -1113,9 +1259,11 @@ const getAllRequests = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Get all requests error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch service requests",
+      error: error.message,
     });
   }
 };
@@ -1235,8 +1383,7 @@ const addServicesToRequest = async (req, res) => {
         change_reason: `Added ${addedServices.length} service(s) to request`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -1372,8 +1519,7 @@ const createQuotation = async (req, res) => {
         change_reason: `Quotation created for request #${request.request_number}`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -1387,9 +1533,7 @@ const createQuotation = async (req, res) => {
           request.request_number
         }. Total amount: ₱${totalAmount.toLocaleString()}. Please review and approve at your earliest convenience.`
       );
-
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     res.json({
       success: true,
@@ -1498,8 +1642,7 @@ const respondToQuotation = async (req, res) => {
           : `Customer rejected quotation for request #${quotation.request_number}`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -1515,9 +1658,7 @@ const respondToQuotation = async (req, res) => {
         approved ? "Quote Approved" : "Under Review",
         message
       );
-
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     try {
       const adminQuery = `
@@ -1570,9 +1711,7 @@ const respondToQuotation = async (req, res) => {
           assignedStaff.email
         );
       }
-
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     res.json({
       success: true,
@@ -2109,8 +2248,7 @@ const updateRequestStatus = async (req, res) => {
         change_reason: "Service request status update",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     try {
       await supabase.from("audit_log").insert({
@@ -2130,8 +2268,7 @@ const updateRequestStatus = async (req, res) => {
         change_reason: `Status changed from "${currentStatusName}" to "${backendStatus}"`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -2285,8 +2422,7 @@ const addChemicalsToRequest = async (req, res) => {
         change_reason: "Chemicals added to service request",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     res.json({
       success: true,
@@ -2440,8 +2576,7 @@ const addRefrigerantsToRequest = async (req, res) => {
         change_reason: "Refrigerants added to service request",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     res.json({
       success: true,
@@ -2568,8 +2703,7 @@ const removeChemicalsFromRequest = async (req, res) => {
         change_reason: "Chemicals removed from service request",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     try {
       await supabase.from("audit_log").insert({
@@ -2585,8 +2719,7 @@ const removeChemicalsFromRequest = async (req, res) => {
         change_reason: `Removed ${chemicalItemIds.length} chemical(s) from request`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -2715,8 +2848,7 @@ const removeRefrigerantsFromRequest = async (req, res) => {
         change_reason: "Refrigerants removed from service request",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     try {
       await supabase.from("audit_log").insert({
@@ -2732,8 +2864,7 @@ const removeRefrigerantsFromRequest = async (req, res) => {
         change_reason: `Removed ${refrigerantItemIds.length} refrigerant(s) from request`,
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -3194,7 +3325,6 @@ const updateServiceRequest = async (req, res) => {
     const deadlineWasSet = !oldPaymentDeadline && paymentDeadline;
 
     if (deadlineWasSet) {
-
       await client.query(
         `UPDATE payments 
      SET due_date = $1, updated_at = NOW() 
@@ -3221,8 +3351,7 @@ const updateServiceRequest = async (req, res) => {
                 paymentInfo.amount
               );
             }
-          } catch (notifError) {
-          }
+          } catch (notifError) {}
         });
       }
     }
@@ -3244,8 +3373,7 @@ const updateServiceRequest = async (req, res) => {
         change_reason: "Service request updated by admin/staff",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -3297,7 +3425,6 @@ const updateServiceRequest = async (req, res) => {
           serviceStatus,
           notificationMessage
         );
-
       }
 
       if (
@@ -3339,7 +3466,6 @@ const updateServiceRequest = async (req, res) => {
             "Service Request Assignment",
             `You have been assigned to service request #${currentRequest.request_number}. Customer: ${customerName}. Please review the request details and contact the customer to schedule the service.`
           );
-
         }
       }
 
@@ -3352,7 +3478,6 @@ const updateServiceRequest = async (req, res) => {
           "Payment Confirmed",
           `Payment received for service request #${currentRequest.request_number}. Phase(s): ${paidPhases}. Thank you!`
         );
-
       }
 
       if (discountPercentage !== oldDiscountPercentage) {
@@ -3430,12 +3555,9 @@ const updateServiceRequest = async (req, res) => {
               admin.email
             );
           }
-
-        } catch (discountNotifError) {
-        }
+        } catch (discountNotifError) {}
       }
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     res.json({
       success: true,
@@ -3543,8 +3665,7 @@ const setServiceWarranty = async (req, res) => {
         change_reason: "Warranty activated for completed service",
         ip_address: req.ip || req.connection.remoteAddress,
       });
-    } catch (auditError) {
-    }
+    } catch (auditError) {}
 
     await client.query("COMMIT");
 
@@ -3739,12 +3860,9 @@ const approveServiceRequest = async (req, res) => {
         "Quote Approved",
         message
       );
-
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     try {
-
       const adminQuery = `
     SELECT user_id, email FROM users 
     WHERE user_type = 'admin' AND status = 'Active'
@@ -3795,9 +3913,7 @@ const approveServiceRequest = async (req, res) => {
           assignedStaff.email
         );
       }
-
-    } catch (notifError) {
-    }
+    } catch (notifError) {}
 
     res.json({
       success: true,
