@@ -218,6 +218,7 @@ const CustomerServiceTracker = () => {
       warrantyStatus: "",
     };
     setFilters(clearedFilters);
+    setPendingFilters(clearedFilters);
     setCurrentPage(1);
   };
 
