@@ -1,21 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Save, X, Search } from "lucide-react";
-
-/**
- * Chatbot Settings Component
- * 
- * Manages chatbot prompts and responses for the customer-facing chatbot
- * Features:
- * - View all existing prompts/responses
- * - Add new prompt-response pairs
- * - Edit existing pairs
- * - Delete pairs
- * - Search/filter prompts
- * 
- * TODO (Backend): 
- * - Create API endpoints for CRUD operations on chatbot prompts
- * - Implement fetchPrompts(), addPrompt(), updatePrompt(), deletePrompt()
- */
+import { customizationAPI } from "../../../config/api";
 
 const ChatbotSettings = () => {
   const [prompts, setPrompts] = useState([]);
@@ -33,7 +18,6 @@ const ChatbotSettings = () => {
   });
   const [errors, setErrors] = useState({});
 
-  // Load prompts on component mount
   useEffect(() => {
     fetchPrompts();
   }, []);
@@ -44,48 +28,31 @@ const ChatbotSettings = () => {
    * Expected Response: { success: true, data: [...prompts] }
    */
   const fetchPrompts = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    
+    const response = await customizationAPI.getChatIntents();
+    const data = await response.json();
+    
+    if (data.success) {
+      // Transform backend data to match frontend structure
+      const transformedPrompts = data.data.map(intent => ({
+        id: intent.intent_id,
+        promptText: intent.intent_name,
+        responseText: intent.responses[0] || '', // Use first response
+        category: intent.description || 'General',
+        isActive: intent.is_active,
+        createdAt: intent.created_at
+      }));
       
-      // PLACEHOLDER: Replace with actual API call
-      // const response = await fetch('/api/chatbot/prompts');
-      // const data = await response.json();
-      
-      // Dummy data for development
-      const dummyPrompts = [
-        {
-          id: 1,
-          promptText: "What services do you offer?",
-          responseText: "TRISHKAYE Enterprises offers water treatment services including chemical cleaning, descaling, water testing, and pipeline disinfection.",
-          category: "Services",
-          isActive: true,
-          createdAt: "2024-01-15"
-        },
-        {
-          id: 2,
-          promptText: "What are your business hours?",
-          responseText: "We are open Monday to Friday, 8:00 AM to 5:00 PM. For urgent requests, please call our hotline.",
-          category: "General",
-          isActive: true,
-          createdAt: "2024-01-15"
-        },
-        {
-          id: 3,
-          promptText: "How can I request a quote?",
-          responseText: "You can request a quote by visiting our Services page and clicking 'Request' on any service. You can also message us directly through the Messages tab.",
-          category: "Quotations",
-          isActive: true,
-          createdAt: "2024-01-15"
-        }
-      ];
-
-      setPrompts(dummyPrompts);
-    } catch (error) {
-      console.error("Error fetching prompts:", error);
-    } finally {
-      setLoading(false);
+      setPrompts(transformedPrompts);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching prompts:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   /**
    * TODO (Backend): Implement API call to add new prompt
@@ -93,48 +60,38 @@ const ChatbotSettings = () => {
    * Expected Body: { promptText, responseText, category, isActive }
    */
   const handleAddPrompt = async () => {
-    // Validate form
-    const newErrors = {};
-    if (!formData.promptText.trim()) {
-      newErrors.promptText = "Prompt text is required";
-    }
-    if (!formData.responseText.trim()) {
-      newErrors.responseText = "Response text is required";
-    }
-    if (!formData.category.trim()) {
-      newErrors.category = "Category is required";
-    }
+  const newErrors = {};
+  if (!formData.promptText.trim()) newErrors.promptText = "Prompt text is required";
+  if (!formData.responseText.trim()) newErrors.responseText = "Response text is required";
+  if (!formData.category.trim()) newErrors.category = "Category is required";
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
 
-    try {
-      // PLACEHOLDER: Replace with actual API call
-      // const response = await fetch('/api/chatbot/prompts', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formData)
-      // });
-      // const data = await response.json();
+  try {
+    const response = await customizationAPI.createChatIntent({
+      intent_name: formData.promptText,
+      description: formData.category,
+      keywords: [formData.promptText.toLowerCase()],
+      responses: [formData.responseText],
+      is_active: formData.isActive,
+      priority: 0
+    });
 
-      // Simulated add for development
-      const newPrompt = {
-        id: prompts.length + 1,
-        ...formData,
-        createdAt: new Date().toISOString().split('T')[0]
-      };
-      
-      setPrompts([...prompts, newPrompt]);
+    const data = await response.json();
+    
+    if (data.success) {
+      await fetchPrompts(); // Refresh the list
       setShowAddModal(false);
       resetForm();
-      
       console.log("✅ Prompt added successfully");
-    } catch (error) {
-      console.error("Error adding prompt:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error adding prompt:", error);
+  }
+};
 
   /**
    * TODO (Backend): Implement API call to update prompt
@@ -142,68 +99,57 @@ const ChatbotSettings = () => {
    * Expected Body: { promptText, responseText, category, isActive }
    */
   const handleUpdatePrompt = async () => {
-    // Validate form
-    const newErrors = {};
-    if (!formData.promptText.trim()) {
-      newErrors.promptText = "Prompt text is required";
-    }
-    if (!formData.responseText.trim()) {
-      newErrors.responseText = "Response text is required";
-    }
-    if (!formData.category.trim()) {
-      newErrors.category = "Category is required";
-    }
+  const newErrors = {};
+  if (!formData.promptText.trim()) newErrors.promptText = "Prompt text is required";
+  if (!formData.responseText.trim()) newErrors.responseText = "Response text is required";
+  if (!formData.category.trim()) newErrors.category = "Category is required";
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
 
-    try {
-      // PLACEHOLDER: Replace with actual API call
-      // const response = await fetch(`/api/chatbot/prompts/${selectedPrompt.id}`, {
-      //   method: 'PUT',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formData)
-      // });
+  try {
+    const response = await customizationAPI.updateChatIntent(selectedPrompt.id, {
+      intent_name: formData.promptText,
+      description: formData.category,
+      keywords: [formData.promptText.toLowerCase()],
+      responses: [formData.responseText],
+      is_active: formData.isActive
+    });
 
-      // Simulated update for development
-      setPrompts(prompts.map(p => 
-        p.id === selectedPrompt.id 
-          ? { ...p, ...formData }
-          : p
-      ));
-      
+    const data = await response.json();
+    
+    if (data.success) {
+      await fetchPrompts(); // Refresh the list
       setShowEditModal(false);
       resetForm();
-      
       console.log("✅ Prompt updated successfully");
-    } catch (error) {
-      console.error("Error updating prompt:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error updating prompt:", error);
+  }
+};
 
   /**
    * TODO (Backend): Implement API call to delete prompt
    * Expected API: DELETE /api/chatbot/prompts/:id
    */
   const handleDeletePrompt = async () => {
-    try {
-      // PLACEHOLDER: Replace with actual API call
-      // const response = await fetch(`/api/chatbot/prompts/${selectedPrompt.id}`, {
-      //   method: 'DELETE'
-      // });
-
-      // Simulated delete for development
-      setPrompts(prompts.filter(p => p.id !== selectedPrompt.id));
+  try {
+    const response = await customizationAPI.deleteChatIntent(selectedPrompt.id);
+    const data = await response.json();
+    
+    if (data.success) {
+      await fetchPrompts(); // Refresh the list
       setShowDeleteConfirm(false);
       setSelectedPrompt(null);
-      
       console.log("✅ Prompt deleted successfully");
-    } catch (error) {
-      console.error("Error deleting prompt:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error deleting prompt:", error);
+  }
+};
 
   const openAddModal = () => {
     resetForm();

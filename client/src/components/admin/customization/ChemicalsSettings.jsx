@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Search, TestTube } from "lucide-react";
-
+import { customizationAPI } from "../../../config/api";
 /**
  * Chemicals Settings Component
  * 
@@ -42,137 +42,132 @@ const ChemicalsSettings = () => {
    * TODO (Backend): GET /api/chemicals
    */
   const fetchChemicals = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    
+    const response = await customizationAPI.getAllChemicals();
+    const data = await response.json();
+    
+    if (data.success) {
+      const transformedChemicals = data.data.map(chemical => ({
+        chemicalId: chemical.chemical_id,
+        brand: chemical.brand,
+        chemicalName: chemical.chemical_name,
+        description: chemical.description,
+        price: parseFloat(chemical.price),
+        capacity: chemical.capacity,
+        hazardType: chemical.hazard_type,
+        uses: chemical.uses,
+        isActive: chemical.is_active
+      }));
       
-      const dummyChemicals = [
-        {
-          chemicalId: 1,
-          brand: "ANCO",
-          chemicalName: "Corrosion Inhibitor 100",
-          description: "High-performance corrosion inhibitor",
-          price: 8500,
-          capacity: "25L",
-          hazardType: "Moderate",
-          uses: "Industrial water systems",
-          isActive: true
-        },
-        {
-          chemicalId: 2,
-          brand: "ANCO",
-          chemicalName: "Scale Remover Pro",
-          description: "Professional scale removal solution",
-          price: 12000,
-          capacity: "20L",
-          hazardType: "High",
-          uses: "Descaling equipment",
-          isActive: true
-        }
-      ];
-
-      setChemicals(dummyChemicals);
-    } catch (error) {
-      console.error("Error fetching chemicals:", error);
-    } finally {
-      setLoading(false);
+      setChemicals(transformedChemicals);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching chemicals:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   /**
    * TODO (Backend): POST /api/chemicals
    */
   const handleAddChemical = async () => {
-    const newErrors = {};
+  const newErrors = {};
+  if (!formData.brand.trim()) newErrors.brand = "Brand is required";
+  if (!formData.chemicalName.trim()) newErrors.chemicalName = "Chemical name is required";
+  if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
+  if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
+
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  try {
+    const response = await customizationAPI.createChemical({
+      brand: formData.brand,
+      chemical_name: formData.chemicalName,
+      description: formData.description,
+      price: parseFloat(formData.price),
+      capacity: formData.capacity,
+      hazard_type: formData.hazardType,
+      uses: formData.uses,
+      is_active: formData.isActive
+    });
+
+    const data = await response.json();
     
-    if (!formData.brand.trim()) newErrors.brand = "Brand is required";
-    if (!formData.chemicalName.trim()) newErrors.chemicalName = "Chemical name is required";
-    if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
-    if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      const newChemical = {
-        chemicalId: chemicals.length + 1,
-        brand: formData.brand,
-        chemicalName: formData.chemicalName,
-        description: formData.description,
-        price: parseFloat(formData.price),
-        capacity: formData.capacity,
-        hazardType: formData.hazardType,
-        uses: formData.uses,
-        isActive: formData.isActive
-      };
-
-      setChemicals([...chemicals, newChemical]);
+    if (data.success) {
+      await fetchChemicals(); // Refresh the list
       setShowAddModal(false);
       resetForm();
-      
       console.log("✅ Chemical added successfully");
-    } catch (error) {
-      console.error("Error adding chemical:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error adding chemical:", error);
+  }
+};
 
   /**
    * TODO (Backend): PUT /api/chemicals/:id
    */
   const handleUpdateChemical = async () => {
-    const newErrors = {};
+  const newErrors = {};
+  if (!formData.brand.trim()) newErrors.brand = "Brand is required";
+  if (!formData.chemicalName.trim()) newErrors.chemicalName = "Chemical name is required";
+  if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
+  if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
+
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  try {
+    const response = await customizationAPI.updateChemical(selectedChemical.chemicalId, {
+      brand: formData.brand,
+      chemical_name: formData.chemicalName,
+      description: formData.description,
+      price: parseFloat(formData.price),
+      capacity: formData.capacity,
+      hazard_type: formData.hazardType,
+      uses: formData.uses,
+      is_active: formData.isActive
+    });
+
+    const data = await response.json();
     
-    if (!formData.brand.trim()) newErrors.brand = "Brand is required";
-    if (!formData.chemicalName.trim()) newErrors.chemicalName = "Chemical name is required";
-    if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
-    if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      setChemicals(chemicals.map(c =>
-        c.chemicalId === selectedChemical.chemicalId
-          ? {
-              ...c,
-              brand: formData.brand,
-              chemicalName: formData.chemicalName,
-              description: formData.description,
-              price: parseFloat(formData.price),
-              capacity: formData.capacity,
-              hazardType: formData.hazardType,
-              uses: formData.uses,
-              isActive: formData.isActive
-            }
-          : c
-      ));
-
+    if (data.success) {
+      await fetchChemicals(); // Refresh the list
       setShowEditModal(false);
       resetForm();
-      
       console.log("✅ Chemical updated successfully");
-    } catch (error) {
-      console.error("Error updating chemical:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error updating chemical:", error);
+  }
+};
 
   /**
    * TODO (Backend): DELETE /api/chemicals/:id
    */
   const handleDeleteChemical = async () => {
-    try {
-      setChemicals(chemicals.filter(c => c.chemicalId !== selectedChemical.chemicalId));
+  try {
+    const response = await customizationAPI.deleteChemical(selectedChemical.chemicalId);
+    const data = await response.json();
+    
+    if (data.success) {
+      await fetchChemicals(); // Refresh the list
       setShowDeleteConfirm(false);
       setSelectedChemical(null);
-      
       console.log("✅ Chemical deleted successfully");
-    } catch (error) {
-      console.error("Error deleting chemical:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error deleting chemical:", error);
+  }
+};
 
   const openAddModal = () => {
     resetForm();

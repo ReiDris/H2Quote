@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Search, Package } from "lucide-react";
+import { customizationAPI } from "../../../config/api";
 
 /**
  * Services Settings Component
@@ -45,194 +46,148 @@ const ServicesSettings = () => {
    * GET /api/services
    */
   const fetchServices = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    
+    const response = await customizationAPI.getAllServices();
+    const data = await response.json();
+    
+    if (data.success) {
+      const transformedServices = data.data.map(service => ({
+        serviceId: service.service_id,
+        serviceName: service.service_name,
+        description: service.description,
+        category: service.category_name,
+        categoryId: service.category_id,
+        basePrice: parseFloat(service.base_price),
+        estimatedDurationHours: service.estimated_duration_hours,
+        isActive: service.is_active
+      }));
       
-      // PLACEHOLDER: Dummy data
-      const dummyServices = [
-        {
-          serviceId: 1,
-          serviceName: "Chemical Cleaning",
-          description: "Industrial equipment chemical cleaning service",
-          category: "Maintenance",
-          categoryId: 1,
-          basePrice: 15000,
-          estimatedDurationHours: 48,
-          isActive: true
-        },
-        {
-          serviceId: 2,
-          serviceName: "Descaling Service",
-          description: "Professional descaling for industrial systems",
-          category: "Maintenance",
-          categoryId: 1,
-          basePrice: 12000,
-          estimatedDurationHours: 24,
-          isActive: true
-        },
-        {
-          serviceId: 3,
-          serviceName: "Water Testing",
-          description: "Comprehensive water quality analysis",
-          category: "Testing",
-          categoryId: 2,
-          basePrice: 5000,
-          estimatedDurationHours: 8,
-          isActive: true
-        }
-      ];
-
-      setServices(dummyServices);
-    } catch (error) {
-      console.error("Error fetching services:", error);
-    } finally {
-      setLoading(false);
+      setServices(transformedServices);
     }
-  };
-
+  } catch (error) {
+    console.error("Error fetching services:", error);
+  } finally {
+    setLoading(false);
+  }
+};
   /**
    * TODO (Backend): Implement API call
    * GET /api/service-categories
    */
   const fetchCategories = async () => {
-    try {
-      // PLACEHOLDER: Dummy categories
-      const dummyCategories = [
-        { categoryId: 1, categoryName: "Maintenance" },
-        { categoryId: 2, categoryName: "Testing" },
-        { categoryId: 3, categoryName: "Installation" }
-      ];
-
-      setCategories(dummyCategories);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
+  try {
+    const response = await customizationAPI.getServiceCategories();
+    const data = await response.json();
+    
+    if (data.success) {
+      setCategories(data.data);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+  }
+};
 
   /**
    * TODO (Backend): Implement API call
    * POST /api/services
    */
   const handleAddService = async () => {
-    const newErrors = {};
+  const newErrors = {};
+  if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
+  if (!formData.description.trim()) newErrors.description = "Description is required";
+  if (!formData.categoryId) newErrors.categoryId = "Category is required";
+  if (!formData.basePrice || formData.basePrice <= 0) newErrors.basePrice = "Valid price is required";
+  if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) newErrors.estimatedDurationHours = "Valid duration is required";
+
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  try {
+    const response = await customizationAPI.createService({
+      service_name: formData.serviceName,
+      description: formData.description,
+      category_id: parseInt(formData.categoryId),
+      base_price: parseFloat(formData.basePrice),
+      estimated_duration_hours: parseInt(formData.estimatedDurationHours),
+      is_active: formData.isActive
+    });
+
+    const data = await response.json();
     
-    if (!formData.serviceName.trim()) {
-      newErrors.serviceName = "Service name is required";
-    }
-    if (!formData.description.trim()) {
-      newErrors.description = "Description is required";
-    }
-    if (!formData.categoryId) {
-      newErrors.categoryId = "Category is required";
-    }
-    if (!formData.basePrice || formData.basePrice <= 0) {
-      newErrors.basePrice = "Valid price is required";
-    }
-    if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) {
-      newErrors.estimatedDurationHours = "Valid duration is required";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      // PLACEHOLDER: Simulated add
-      const category = categories.find(c => c.categoryId === parseInt(formData.categoryId));
-      const newService = {
-        serviceId: services.length + 1,
-        serviceName: formData.serviceName,
-        description: formData.description,
-        category: category.categoryName,
-        categoryId: formData.categoryId,
-        basePrice: parseFloat(formData.basePrice),
-        estimatedDurationHours: parseInt(formData.estimatedDurationHours),
-        isActive: formData.isActive
-      };
-
-      setServices([...services, newService]);
+    if (data.success) {
+      await fetchServices(); // Refresh the list
       setShowAddModal(false);
       resetForm();
-      
       console.log("✅ Service added successfully");
-    } catch (error) {
-      console.error("Error adding service:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error adding service:", error);
+  }
+};
 
   /**
    * TODO (Backend): Implement API call
    * PUT /api/services/:id
    */
   const handleUpdateService = async () => {
-    const newErrors = {};
+  const newErrors = {};
+  if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
+  if (!formData.description.trim()) newErrors.description = "Description is required";
+  if (!formData.categoryId) newErrors.categoryId = "Category is required";
+  if (!formData.basePrice || formData.basePrice <= 0) newErrors.basePrice = "Valid price is required";
+  if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) newErrors.estimatedDurationHours = "Valid duration is required";
+
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  try {
+    const response = await customizationAPI.updateService(selectedService.serviceId, {
+      service_name: formData.serviceName,
+      description: formData.description,
+      category_id: parseInt(formData.categoryId),
+      base_price: parseFloat(formData.basePrice),
+      estimated_duration_hours: parseInt(formData.estimatedDurationHours),
+      is_active: formData.isActive
+    });
+
+    const data = await response.json();
     
-    if (!formData.serviceName.trim()) {
-      newErrors.serviceName = "Service name is required";
-    }
-    if (!formData.description.trim()) {
-      newErrors.description = "Description is required";
-    }
-    if (!formData.categoryId) {
-      newErrors.categoryId = "Category is required";
-    }
-    if (!formData.basePrice || formData.basePrice <= 0) {
-      newErrors.basePrice = "Valid price is required";
-    }
-    if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) {
-      newErrors.estimatedDurationHours = "Valid duration is required";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      // PLACEHOLDER: Simulated update
-      const category = categories.find(c => c.categoryId === parseInt(formData.categoryId));
-      
-      setServices(services.map(s =>
-        s.serviceId === selectedService.serviceId
-          ? {
-              ...s,
-              serviceName: formData.serviceName,
-              description: formData.description,
-              category: category.categoryName,
-              categoryId: formData.categoryId,
-              basePrice: parseFloat(formData.basePrice),
-              estimatedDurationHours: parseInt(formData.estimatedDurationHours),
-              isActive: formData.isActive
-            }
-          : s
-      ));
-
+    if (data.success) {
+      await fetchServices(); // Refresh the list
       setShowEditModal(false);
       resetForm();
-      
       console.log("✅ Service updated successfully");
-    } catch (error) {
-      console.error("Error updating service:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error updating service:", error);
+  }
+};
 
   /**
    * TODO (Backend): Implement API call
    * DELETE /api/services/:id
    */
   const handleDeleteService = async () => {
-    try {
-      // PLACEHOLDER: Simulated delete
-      setServices(services.filter(s => s.serviceId !== selectedService.serviceId));
+  try {
+    const response = await customizationAPI.deleteService(selectedService.serviceId);
+    const data = await response.json();
+    
+    if (data.success) {
+      await fetchServices(); // Refresh the list
       setShowDeleteConfirm(false);
       setSelectedService(null);
-      
       console.log("✅ Service deleted successfully");
-    } catch (error) {
-      console.error("Error deleting service:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error deleting service:", error);
+  }
+};
 
   const openAddModal = () => {
     resetForm();
