@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Search, TestTube } from "lucide-react";
 import { customizationAPI } from "../../../config/api";
-/**
- * Chemicals Settings Component
- * 
- * Manages chemicals catalog including:
- * - Brand and chemical name
- * - Price and capacity
- * - Hazard type
- * - Description and uses
- * - Stock status
- * 
- * TODO (Backend): API endpoints for chemicals CRUD operations
- */
 
 const ChemicalsSettings = () => {
   const [chemicals, setChemicals] = useState([]);
@@ -38,9 +26,6 @@ const ChemicalsSettings = () => {
     fetchChemicals();
   }, []);
 
-  /**
-   * TODO (Backend): GET /api/chemicals
-   */
   const fetchChemicals = async () => {
   try {
     setLoading(true);
@@ -70,9 +55,6 @@ const ChemicalsSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): POST /api/chemicals
-   */
   const handleAddChemical = async () => {
   const newErrors = {};
   if (!formData.brand.trim()) newErrors.brand = "Brand is required";
@@ -100,7 +82,7 @@ const ChemicalsSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchChemicals(); // Refresh the list
+      await fetchChemicals();
       setShowAddModal(false);
       resetForm();
       console.log("✅ Chemical added successfully");
@@ -110,9 +92,6 @@ const ChemicalsSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): PUT /api/chemicals/:id
-   */
   const handleUpdateChemical = async () => {
   const newErrors = {};
   if (!formData.brand.trim()) newErrors.brand = "Brand is required";
@@ -140,7 +119,7 @@ const ChemicalsSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchChemicals(); // Refresh the list
+      await fetchChemicals();
       setShowEditModal(false);
       resetForm();
       console.log("✅ Chemical updated successfully");
@@ -150,16 +129,13 @@ const ChemicalsSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): DELETE /api/chemicals/:id
-   */
   const handleDeleteChemical = async () => {
   try {
     const response = await customizationAPI.deleteChemical(selectedChemical.chemicalId);
     const data = await response.json();
     
     if (data.success) {
-      await fetchChemicals(); // Refresh the list
+      await fetchChemicals();
       setShowDeleteConfirm(false);
       setSelectedChemical(null);
       console.log("✅ Chemical deleted successfully");

@@ -6,25 +6,10 @@ import ServicesSettings from "../../components/admin/customization/ServicesSetti
 import ChemicalsSettings from "../../components/admin/customization/ChemicalsSettings";
 import RefrigerantsSettings from "../../components/admin/customization/RefrigerantsSettings";
 
-/**
- * System Customization Page
- * 
- * This page allows administrators to customize:
- * - Chatbot prompts and responses
- * - Services catalog (add/edit services, prices, durations)
- * - Chemicals catalog (add/edit chemicals and prices)
- * - Refrigerants catalog (add/edit refrigerants and prices)
- * 
- * Navigation is done through tabs at the top of the page
- * Each tab loads a different settings component
- */
-
 const SystemCustomization = () => {
-  // Active tab state - determines which settings panel to show
   const [activeTab, setActiveTab] = useState("chatbot");
   const [loading, setLoading] = useState(false);
 
-  // Tab configuration - defines all available customization categories
   const tabs = [
     {
       id: "chatbot",
@@ -52,7 +37,6 @@ const SystemCustomization = () => {
     }
   ];
 
-  // Component mapping - which component to render for each tab
   const renderTabContent = () => {
     switch (activeTab) {
       case "chatbot":

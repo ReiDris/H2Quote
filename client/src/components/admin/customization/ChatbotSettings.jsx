@@ -22,11 +22,6 @@ const ChatbotSettings = () => {
     fetchPrompts();
   }, []);
 
-  /**
-   * TODO (Backend): Implement API call to fetch all chatbot prompts
-   * Expected API: GET /api/chatbot/prompts
-   * Expected Response: { success: true, data: [...prompts] }
-   */
   const fetchPrompts = async () => {
   try {
     setLoading(true);
@@ -39,7 +34,7 @@ const ChatbotSettings = () => {
       const transformedPrompts = data.data.map(intent => ({
         id: intent.intent_id,
         promptText: intent.intent_name,
-        responseText: intent.responses[0] || '', // Use first response
+        responseText: intent.responses[0] || '',
         category: intent.description || 'General',
         isActive: intent.is_active,
         createdAt: intent.created_at
@@ -54,11 +49,6 @@ const ChatbotSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): Implement API call to add new prompt
-   * Expected API: POST /api/chatbot/prompts
-   * Expected Body: { promptText, responseText, category, isActive }
-   */
   const handleAddPrompt = async () => {
   const newErrors = {};
   if (!formData.promptText.trim()) newErrors.promptText = "Prompt text is required";
@@ -83,7 +73,7 @@ const ChatbotSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchPrompts(); // Refresh the list
+      await fetchPrompts();
       setShowAddModal(false);
       resetForm();
       console.log("✅ Prompt added successfully");
@@ -93,11 +83,6 @@ const ChatbotSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): Implement API call to update prompt
-   * Expected API: PUT /api/chatbot/prompts/:id
-   * Expected Body: { promptText, responseText, category, isActive }
-   */
   const handleUpdatePrompt = async () => {
   const newErrors = {};
   if (!formData.promptText.trim()) newErrors.promptText = "Prompt text is required";
@@ -121,7 +106,7 @@ const ChatbotSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchPrompts(); // Refresh the list
+      await fetchPrompts();
       setShowEditModal(false);
       resetForm();
       console.log("✅ Prompt updated successfully");
@@ -131,17 +116,13 @@ const ChatbotSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): Implement API call to delete prompt
-   * Expected API: DELETE /api/chatbot/prompts/:id
-   */
   const handleDeletePrompt = async () => {
   try {
     const response = await customizationAPI.deleteChatIntent(selectedPrompt.id);
     const data = await response.json();
     
     if (data.success) {
-      await fetchPrompts(); // Refresh the list
+      await fetchPrompts();
       setShowDeleteConfirm(false);
       setSelectedPrompt(null);
       console.log("✅ Prompt deleted successfully");
@@ -188,14 +169,12 @@ const ChatbotSettings = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
-    
-    // Clear error for this field
+
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }));
     }
   };
 
-  // Filter prompts based on search term
   const filteredPrompts = prompts.filter(prompt =>
     prompt.promptText.toLowerCase().includes(searchTerm.toLowerCase()) ||
     prompt.responseText.toLowerCase().includes(searchTerm.toLowerCase()) ||
