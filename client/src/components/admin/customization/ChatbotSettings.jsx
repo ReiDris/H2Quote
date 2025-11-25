@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Save, X, Search } from "lucide-react";
+import { Plus, Edit, Trash2, X, Search, AlertCircle, Bot } from "lucide-react";
 import { customizationAPI } from "../../../config/api";
 
 const ChatbotSettings = () => {
@@ -14,126 +14,212 @@ const ChatbotSettings = () => {
     promptText: "",
     responseText: "",
     category: "",
-    isActive: true
+    isActive: true,
+    keywords: "" 
   });
   const [errors, setErrors] = useState({});
+  const [apiError, setApiError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     fetchPrompts();
   }, []);
 
-  const fetchPrompts = async () => {
-  try {
-    setLoading(true);
-    
-    const response = await customizationAPI.getChatIntents();
-    const data = await response.json();
-    
-    if (data.success) {
-      // Transform backend data to match frontend structure
-      const transformedPrompts = data.data.map(intent => ({
-        id: intent.intent_id,
-        promptText: intent.intent_name,
-        responseText: intent.responses[0] || '',
-        category: intent.description || 'General',
-        isActive: intent.is_active,
-        createdAt: intent.created_at
-      }));
-      
-      setPrompts(transformedPrompts);
+  // Auto-hide success messages after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(""), 3000);
+      return () => clearTimeout(timer);
     }
-  } catch (error) {
-    console.error("Error fetching prompts:", error);
-  } finally {
-    setLoading(false);
-  }
-};
+  }, [successMessage]);
+
+  // Auto-hide error messages after 5 seconds
+  useEffect(() => {
+    if (apiError) {
+      const timer = setTimeout(() => setApiError(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [apiError]);
+
+  const fetchPrompts = async () => {
+    try {
+      setLoading(true);
+      
+      const response = await customizationAPI.getChatIntents();
+      const data = await response.json();
+      
+      if (data.success) {
+        // Transform backend data to match frontend structure
+        const transformedPrompts = data.data.map(intent => ({
+          id: intent.intent_id,
+          promptText: intent.intent_name,
+          responseText: Array.isArray(intent.responses) && intent.responses.length > 0 
+            ? intent.responses[0] 
+            : '',
+          category: intent.description || 'General',
+          keywords: Array.isArray(intent.keywords) ? intent.keywords.join(", ") : "",
+          isActive: intent.is_active,
+          priority: intent.priority || 0,
+          createdAt: intent.created_at
+        }));
+        
+        setPrompts(transformedPrompts);
+      } else {
+        setApiError(data.message || "Failed to fetch prompts");
+      }
+    } catch (error) {
+      console.error("Error fetching prompts:", error);
+      setApiError("Failed to connect to server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.promptText.trim()) {
+      newErrors.promptText = "Prompt text is required";
+    } else if (formData.promptText.trim().length < 3) {
+      newErrors.promptText = "Prompt text must be at least 3 characters";
+    }
+    
+    if (!formData.responseText.trim()) {
+      newErrors.responseText = "Response text is required";
+    } else if (formData.responseText.trim().length < 5) {
+      newErrors.responseText = "Response text must be at least 5 characters";
+    }
+    
+    if (!formData.category.trim()) {
+      newErrors.category = "Category is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Parse keywords from comma-separated string to array
+  const parseKeywords = (keywordsString) => {
+    if (!keywordsString || !keywordsString.trim()) {
+      // If no keywords provided, use the prompt text as default
+      return [formData.promptText.toLowerCase().trim()];
+    }
+    
+    return keywordsString
+      .split(",")
+      .map(k => k.trim().toLowerCase())
+      .filter(k => k.length > 0);
+  };
 
   const handleAddPrompt = async () => {
-  const newErrors = {};
-  if (!formData.promptText.trim()) newErrors.promptText = "Prompt text is required";
-  if (!formData.responseText.trim()) newErrors.responseText = "Response text is required";
-  if (!formData.category.trim()) newErrors.category = "Category is required";
+    if (!validateForm()) return;
 
-  if (Object.keys(newErrors).length > 0) {
-    setErrors(newErrors);
-    return;
-  }
-
-  try {
-    const response = await customizationAPI.createChatIntent({
-      intent_name: formData.promptText,
-      description: formData.category,
-      keywords: [formData.promptText.toLowerCase()],
-      responses: [formData.responseText],
-      is_active: formData.isActive,
-      priority: 0
-    });
-
-    const data = await response.json();
+    setApiError("");
     
-    if (data.success) {
-      await fetchPrompts();
-      setShowAddModal(false);
-      resetForm();
-      console.log("✅ Prompt added successfully");
+    try {
+      const keywordsArray = parseKeywords(formData.keywords);
+      
+      const payload = {
+        intent_name: formData.promptText.trim(),
+        description: formData.category.trim(),
+        keywords: keywordsArray,
+        responses: [formData.responseText.trim()],
+        is_active: formData.isActive,
+        priority: 0
+      };
+
+      console.log("Creating chat intent with payload:", payload);
+
+      const response = await customizationAPI.createChatIntent(payload);
+      const data = await response.json();
+      
+      if (data.success) {
+        await fetchPrompts();
+        setShowAddModal(false);
+        resetForm();
+        setSuccessMessage("✅ Prompt added successfully!");
+        console.log("✅ Prompt added successfully");
+      } else {
+        // Handle specific error cases
+        if (data.message && data.message.includes("duplicate") || 
+            data.message && data.message.includes("unique")) {
+          setApiError("A prompt with this name already exists. Please use a different name.");
+        } else {
+          setApiError(data.message || "Failed to add prompt");
+        }
+      }
+    } catch (error) {
+      console.error("Error adding prompt:", error);
+      setApiError("Failed to add prompt. Please check your connection and try again.");
     }
-  } catch (error) {
-    console.error("Error adding prompt:", error);
-  }
-};
+  };
 
   const handleUpdatePrompt = async () => {
-  const newErrors = {};
-  if (!formData.promptText.trim()) newErrors.promptText = "Prompt text is required";
-  if (!formData.responseText.trim()) newErrors.responseText = "Response text is required";
-  if (!formData.category.trim()) newErrors.category = "Category is required";
+    if (!validateForm()) return;
 
-  if (Object.keys(newErrors).length > 0) {
-    setErrors(newErrors);
-    return;
-  }
-
-  try {
-    const response = await customizationAPI.updateChatIntent(selectedPrompt.id, {
-      intent_name: formData.promptText,
-      description: formData.category,
-      keywords: [formData.promptText.toLowerCase()],
-      responses: [formData.responseText],
-      is_active: formData.isActive
-    });
-
-    const data = await response.json();
+    setApiError("");
     
-    if (data.success) {
-      await fetchPrompts();
-      setShowEditModal(false);
-      resetForm();
-      console.log("✅ Prompt updated successfully");
+    try {
+      const keywordsArray = parseKeywords(formData.keywords);
+      
+      const payload = {
+        intent_name: formData.promptText.trim(),
+        description: formData.category.trim(),
+        keywords: keywordsArray,
+        responses: [formData.responseText.trim()],
+        is_active: formData.isActive
+      };
+
+      console.log("Updating chat intent with payload:", payload);
+
+      const response = await customizationAPI.updateChatIntent(selectedPrompt.id, payload);
+      const data = await response.json();
+      
+      if (data.success) {
+        await fetchPrompts();
+        setShowEditModal(false);
+        resetForm();
+        setSuccessMessage("✅ Prompt updated successfully!");
+        console.log("✅ Prompt updated successfully");
+      } else {
+        if (data.message && data.message.includes("duplicate") || 
+            data.message && data.message.includes("unique")) {
+          setApiError("A prompt with this name already exists. Please use a different name.");
+        } else {
+          setApiError(data.message || "Failed to update prompt");
+        }
+      }
+    } catch (error) {
+      console.error("Error updating prompt:", error);
+      setApiError("Failed to update prompt. Please check your connection and try again.");
     }
-  } catch (error) {
-    console.error("Error updating prompt:", error);
-  }
-};
+  };
 
   const handleDeletePrompt = async () => {
-  try {
-    const response = await customizationAPI.deleteChatIntent(selectedPrompt.id);
-    const data = await response.json();
+    setApiError("");
     
-    if (data.success) {
-      await fetchPrompts();
-      setShowDeleteConfirm(false);
-      setSelectedPrompt(null);
-      console.log("✅ Prompt deleted successfully");
+    try {
+      const response = await customizationAPI.deleteChatIntent(selectedPrompt.id);
+      const data = await response.json();
+      
+      if (data.success) {
+        await fetchPrompts();
+        setShowDeleteConfirm(false);
+        setSelectedPrompt(null);
+        setSuccessMessage("✅ Prompt deleted successfully!");
+        console.log("✅ Prompt deleted successfully");
+      } else {
+        setApiError(data.message || "Failed to delete prompt");
+      }
+    } catch (error) {
+      console.error("Error deleting prompt:", error);
+      setApiError("Failed to delete prompt. Please check your connection and try again.");
     }
-  } catch (error) {
-    console.error("Error deleting prompt:", error);
-  }
-};
+  };
 
   const openAddModal = () => {
     resetForm();
+    setApiError("");
     setShowAddModal(true);
   };
 
@@ -143,13 +229,16 @@ const ChatbotSettings = () => {
       promptText: prompt.promptText,
       responseText: prompt.responseText,
       category: prompt.category,
+      keywords: prompt.keywords || "",
       isActive: prompt.isActive
     });
+    setApiError("");
     setShowEditModal(true);
   };
 
   const openDeleteConfirm = (prompt) => {
     setSelectedPrompt(prompt);
+    setApiError("");
     setShowDeleteConfirm(true);
   };
 
@@ -158,9 +247,11 @@ const ChatbotSettings = () => {
       promptText: "",
       responseText: "",
       category: "",
+      keywords: "",
       isActive: true
     });
     setErrors({});
+    setApiError("");
   };
 
   const handleInputChange = (e) => {
@@ -170,6 +261,7 @@ const ChatbotSettings = () => {
       [name]: type === 'checkbox' ? checked : value
     }));
 
+    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }));
     }
@@ -191,6 +283,31 @@ const ChatbotSettings = () => {
 
   return (
     <div className="space-y-4">
+      {/* Success Message */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center gap-2">
+          <span className="text-green-600">✓</span>
+          <span>{successMessage}</span>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {apiError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-start gap-2">
+          <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium">Error</p>
+            <p className="text-sm">{apiError}</p>
+          </div>
+          <button
+            onClick={() => setApiError("")}
+            className="text-red-600 hover:text-red-800"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Search and Add Button */}
       <div className="flex items-center justify-between gap-4">
         <div className="relative flex-1 max-w-md">
@@ -241,11 +358,24 @@ const ChatbotSettings = () => {
                     {prompt.promptText}
                   </h4>
                   
-                  <p className="text-sm text-gray-600 leading-relaxed">
+                  <p className="text-sm text-gray-600 leading-relaxed mb-2">
                     {prompt.responseText}
                   </p>
                   
-                  <p className="text-xs text-gray-400 mt-2">
+                  {prompt.keywords && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {prompt.keywords.split(",").map((keyword, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded"
+                        >
+                          {keyword.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <p className="text-xs text-gray-400">
                     Created: {new Date(prompt.createdAt).toLocaleDateString()}
                   </p>
                 </div>
@@ -292,12 +422,22 @@ const ChatbotSettings = () => {
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 mb-4">
               <h2 className="text-lg font-bold text-[#004785]">Add New Prompt</h2>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setApiError("");
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
+
+            {apiError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-lg text-sm flex items-start gap-2">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{apiError}</span>
+              </div>
+            )}
 
             <div className="space-y-4">
               {/* Category */}
@@ -338,6 +478,24 @@ const ChatbotSettings = () => {
                 {errors.promptText && (
                   <p className="mt-1 text-sm text-red-600">{errors.promptText}</p>
                 )}
+              </div>
+
+              {/* Keywords */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Keywords (optional)
+                </label>
+                <input
+                  type="text"
+                  name="keywords"
+                  value={formData.keywords}
+                  onChange={handleInputChange}
+                  placeholder="e.g., service, price, cost (comma-separated)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Enter keywords separated by commas. If left empty, the prompt text will be used.
+                </p>
               </div>
 
               {/* Response Text */}
@@ -378,7 +536,10 @@ const ChatbotSettings = () => {
 
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setApiError("");
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Cancel
@@ -401,12 +562,22 @@ const ChatbotSettings = () => {
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 mb-4">
               <h2 className="text-lg font-bold text-[#004785]">Edit Prompt</h2>
               <button
-                onClick={() => setShowEditModal(false)}
+                onClick={() => {
+                  setShowEditModal(false);
+                  setApiError("");
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
+
+            {apiError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-lg text-sm flex items-start gap-2">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{apiError}</span>
+              </div>
+            )}
 
             <div className="space-y-4">
               {/* Category */}
@@ -449,6 +620,24 @@ const ChatbotSettings = () => {
                 )}
               </div>
 
+              {/* Keywords */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Keywords (optional)
+                </label>
+                <input
+                  type="text"
+                  name="keywords"
+                  value={formData.keywords}
+                  onChange={handleInputChange}
+                  placeholder="e.g., service, price, cost (comma-separated)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Enter keywords separated by commas. If left empty, the prompt text will be used.
+                </p>
+              </div>
+
               {/* Response Text */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -487,7 +676,10 @@ const ChatbotSettings = () => {
 
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
               <button
-                onClick={() => setShowEditModal(false)}
+                onClick={() => {
+                  setShowEditModal(false);
+                  setApiError("");
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Cancel
@@ -510,12 +702,22 @@ const ChatbotSettings = () => {
             <div className="flex items-center justify-between pb-2 border-b border-gray-200 mb-4">
               <h2 className="text-lg font-bold text-[#004785]">Confirm Delete</h2>
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setApiError("");
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
+
+            {apiError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-lg text-sm flex items-start gap-2">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{apiError}</span>
+              </div>
+            )}
 
             <div className="mb-6">
               <p className="text-black text-sm mb-4">
@@ -536,7 +738,10 @@ const ChatbotSettings = () => {
 
             <div className="flex gap-3">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setApiError("");
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Cancel

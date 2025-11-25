@@ -815,6 +815,121 @@ const getChatIntents = async (req, res) => {
   }
 };
 
+// Add these improved functions to your customizationController.js
+// Replace the existing createChatIntent, updateChatIntent functions
+
+const createChatIntent = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { intent_name, description, keywords, responses, priority } = req.body;
+
+    // Enhanced validation
+    if (!intent_name || !intent_name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Intent name is required",
+      });
+    }
+
+    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Keywords must be a non-empty array",
+      });
+    }
+
+    if (!responses || !Array.isArray(responses) || responses.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Responses must be a non-empty array",
+      });
+    }
+
+    // Check for duplicate intent_name
+    const duplicateCheck = await client.query(
+      `SELECT intent_id FROM chat_intents WHERE LOWER(intent_name) = LOWER($1)`,
+      [intent_name.trim()]
+    );
+
+    if (duplicateCheck.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        success: false,
+        message: "A prompt with this name already exists. Please use a different name.",
+      });
+    }
+
+    const insertQuery = `
+      INSERT INTO chat_intents (
+        intent_name,
+        description,
+        keywords,
+        responses,
+        is_active,
+        priority,
+        created_at,
+        updated_at
+      ) VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
+      RETURNING *
+    `;
+
+    const result = await client.query(insertQuery, [
+      intent_name.trim(),
+      description ? description.trim() : null,
+      keywords,
+      responses,
+      priority || 0,
+    ]);
+
+    // Audit log
+    try {
+      await supabase.from("audit_log").insert({
+        table_name: "chat_intents",
+        record_id: result.rows[0].intent_id,
+        action: "CREATE",
+        new_values: result.rows[0],
+        changed_by: req.user.email,
+        change_reason: "New chat intent created via customization panel",
+        ip_address: req.ip || req.connection.remoteAddress,
+      });
+    } catch (auditError) {
+      console.error("Audit log error:", auditError);
+      // Don't fail the request if audit fails
+    }
+
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      success: true,
+      message: "Chat intent created successfully",
+      data: result.rows[0],
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    
+    console.error("Error creating chat intent:", error);
+
+    // Handle specific PostgreSQL errors
+    if (error.code === '23505') { // Unique violation
+      return res.status(409).json({
+        success: false,
+        message: "A prompt with this name already exists. Please use a different name.",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create chat intent",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  } finally {
+    client.release();
+  }
+};
+
 const updateChatIntent = async (req, res) => {
   const client = await pool.connect();
 
@@ -824,6 +939,22 @@ const updateChatIntent = async (req, res) => {
     const { intentId } = req.params;
     const { intent_name, description, keywords, responses, is_active, priority } = req.body;
 
+    // Enhanced validation
+    if (keywords && !Array.isArray(keywords)) {
+      return res.status(400).json({
+        success: false,
+        message: "Keywords must be an array",
+      });
+    }
+
+    if (responses && !Array.isArray(responses)) {
+      return res.status(400).json({
+        success: false,
+        message: "Responses must be an array",
+      });
+    }
+
+    // Get existing data
     const getOldDataQuery = `
       SELECT * FROM chat_intents WHERE intent_id = $1
     `;
@@ -835,6 +966,23 @@ const updateChatIntent = async (req, res) => {
         success: false,
         message: "Chat intent not found",
       });
+    }
+
+    // Check for duplicate intent_name (excluding current record)
+    if (intent_name && intent_name.trim()) {
+      const duplicateCheck = await client.query(
+        `SELECT intent_id FROM chat_intents 
+         WHERE LOWER(intent_name) = LOWER($1) AND intent_id != $2`,
+        [intent_name.trim(), intentId]
+      );
+
+      if (duplicateCheck.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          success: false,
+          message: "A prompt with this name already exists. Please use a different name.",
+        });
+      }
     }
 
     const updateQuery = `
@@ -852,8 +1000,8 @@ const updateChatIntent = async (req, res) => {
     `;
 
     const result = await client.query(updateQuery, [
-      intent_name,
-      description,
+      intent_name ? intent_name.trim() : null,
+      description ? description.trim() : null,
       keywords,
       responses,
       is_active,
@@ -861,6 +1009,7 @@ const updateChatIntent = async (req, res) => {
       intentId,
     ]);
 
+    // Audit log
     try {
       await supabase.from("audit_log").insert({
         table_name: "chat_intents",
@@ -885,79 +1034,19 @@ const updateChatIntent = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
+    
+    console.error("Error updating chat intent:", error);
+
+    if (error.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        message: "A prompt with this name already exists. Please use a different name.",
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "Failed to update chat intent",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  } finally {
-    client.release();
-  }
-};
-
-const createChatIntent = async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const { intent_name, description, keywords, responses, priority } = req.body;
-
-    if (!intent_name || !keywords || !responses) {
-      return res.status(400).json({
-        success: false,
-        message: "Intent name, keywords, and responses are required",
-      });
-    }
-
-    const insertQuery = `
-      INSERT INTO chat_intents (
-        intent_name,
-        description,
-        keywords,
-        responses,
-        is_active,
-        priority,
-        created_at,
-        updated_at
-      ) VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
-      RETURNING *
-    `;
-
-    const result = await client.query(insertQuery, [
-      intent_name,
-      description,
-      keywords,
-      responses,
-      priority || 0,
-    ]);
-
-    try {
-      await supabase.from("audit_log").insert({
-        table_name: "chat_intents",
-        record_id: result.rows[0].intent_id,
-        action: "CREATE",
-        new_values: result.rows[0],
-        changed_by: req.user.email,
-        change_reason: "New chat intent created via customization panel",
-        ip_address: req.ip || req.connection.remoteAddress,
-      });
-    } catch (auditError) {
-      console.error("Audit log error:", auditError);
-    }
-
-    await client.query("COMMIT");
-
-    res.status(201).json({
-      success: true,
-      message: "Chat intent created successfully",
-      data: result.rows[0],
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    res.status(500).json({
-      success: false,
-      message: "Failed to create chat intent",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   } finally {
