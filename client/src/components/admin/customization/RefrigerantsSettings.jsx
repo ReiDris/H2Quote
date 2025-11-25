@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Search, Droplet } from "lucide-react";
-
-/**
- * Refrigerants Settings Component
- * 
- * Manages refrigerants catalog including:
- * - Refrigerant name
- * - Price and capacity
- * - Chemical components
- * - Hazard type
- * - Description
- * 
- * TODO (Backend): API endpoints for refrigerants CRUD operations
- */
+import { customizationAPI } from "../../../config/api";
 
 const RefrigerantsSettings = () => {
   const [refrigerants, setRefrigerants] = useState([]);
@@ -41,131 +29,127 @@ const RefrigerantsSettings = () => {
    * TODO (Backend): GET /api/refrigerants
    */
   const fetchRefrigerants = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    
+    const response = await customizationAPI.getAllRefrigerants();
+    const data = await response.json();
+    
+    if (data.success) {
+      const transformedRefrigerants = data.data.map(refrigerant => ({
+        refrigerantId: refrigerant.refrigerant_id,
+        refrigerantName: refrigerant.refrigerant_name,
+        description: refrigerant.description,
+        price: parseFloat(refrigerant.price),
+        capacity: refrigerant.capacity,
+        chemicalComponents: refrigerant.chemical_components,
+        hazardType: refrigerant.hazard_type,
+        isActive: refrigerant.is_active
+      }));
       
-      const dummyRefrigerants = [
-        {
-          refrigerantId: 1,
-          refrigerantName: "R-22",
-          description: "Standard refrigerant for air conditioning",
-          price: 15000,
-          capacity: "13.6kg",
-          chemicalComponents: "Chlorodifluoromethane (CHClF2)",
-          hazardType: "Moderate",
-          isActive: true
-        },
-        {
-          refrigerantId: 2,
-          refrigerantName: "R-410A",
-          description: "Eco-friendly refrigerant replacement",
-          price: 18000,
-          capacity: "11.3kg",
-          chemicalComponents: "50% R-32 / 50% R-125",
-          hazardType: "Low",
-          isActive: true
-        }
-      ];
-
-      setRefrigerants(dummyRefrigerants);
-    } catch (error) {
-      console.error("Error fetching refrigerants:", error);
-    } finally {
-      setLoading(false);
+      setRefrigerants(transformedRefrigerants);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching refrigerants:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   /**
    * TODO (Backend): POST /api/refrigerants
    */
   const handleAddRefrigerant = async () => {
-    const newErrors = {};
+  const newErrors = {};
+  if (!formData.refrigerantName.trim()) newErrors.refrigerantName = "Refrigerant name is required";
+  if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
+  if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
+
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  try {
+    const response = await customizationAPI.createRefrigerant({
+      refrigerant_name: formData.refrigerantName,
+      description: formData.description,
+      price: parseFloat(formData.price),
+      capacity: formData.capacity,
+      chemical_components: formData.chemicalComponents,
+      hazard_type: formData.hazardType,
+      is_active: formData.isActive
+    });
+
+    const data = await response.json();
     
-    if (!formData.refrigerantName.trim()) newErrors.refrigerantName = "Refrigerant name is required";
-    if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
-    if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      const newRefrigerant = {
-        refrigerantId: refrigerants.length + 1,
-        refrigerantName: formData.refrigerantName,
-        description: formData.description,
-        price: parseFloat(formData.price),
-        capacity: formData.capacity,
-        chemicalComponents: formData.chemicalComponents,
-        hazardType: formData.hazardType,
-        isActive: formData.isActive
-      };
-
-      setRefrigerants([...refrigerants, newRefrigerant]);
+    if (data.success) {
+      await fetchRefrigerants(); // Refresh the list
       setShowAddModal(false);
       resetForm();
-      
       console.log("✅ Refrigerant added successfully");
-    } catch (error) {
-      console.error("Error adding refrigerant:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error adding refrigerant:", error);
+  }
+};
 
   /**
    * TODO (Backend): PUT /api/refrigerants/:id
    */
   const handleUpdateRefrigerant = async () => {
-    const newErrors = {};
+  const newErrors = {};
+  if (!formData.refrigerantName.trim()) newErrors.refrigerantName = "Refrigerant name is required";
+  if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
+  if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
+
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  try {
+    const response = await customizationAPI.updateRefrigerant(selectedRefrigerant.refrigerantId, {
+      refrigerant_name: formData.refrigerantName,
+      description: formData.description,
+      price: parseFloat(formData.price),
+      capacity: formData.capacity,
+      chemical_components: formData.chemicalComponents,
+      hazard_type: formData.hazardType,
+      is_active: formData.isActive
+    });
+
+    const data = await response.json();
     
-    if (!formData.refrigerantName.trim()) newErrors.refrigerantName = "Refrigerant name is required";
-    if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required";
-    if (!formData.capacity.trim()) newErrors.capacity = "Capacity is required";
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      setRefrigerants(refrigerants.map(r =>
-        r.refrigerantId === selectedRefrigerant.refrigerantId
-          ? {
-              ...r,
-              refrigerantName: formData.refrigerantName,
-              description: formData.description,
-              price: parseFloat(formData.price),
-              capacity: formData.capacity,
-              chemicalComponents: formData.chemicalComponents,
-              hazardType: formData.hazardType,
-              isActive: formData.isActive
-            }
-          : r
-      ));
-
+    if (data.success) {
+      await fetchRefrigerants(); // Refresh the list
       setShowEditModal(false);
       resetForm();
-      
       console.log("✅ Refrigerant updated successfully");
-    } catch (error) {
-      console.error("Error updating refrigerant:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error updating refrigerant:", error);
+  }
+};
 
   /**
    * TODO (Backend): DELETE /api/refrigerants/:id
    */
   const handleDeleteRefrigerant = async () => {
-    try {
-      setRefrigerants(refrigerants.filter(r => r.refrigerantId !== selectedRefrigerant.refrigerantId));
+  try {
+    const response = await customizationAPI.deleteRefrigerant(selectedRefrigerant.refrigerantId);
+    const data = await response.json();
+    
+    if (data.success) {
+      await fetchRefrigerants(); // Refresh the list
       setShowDeleteConfirm(false);
       setSelectedRefrigerant(null);
-      
       console.log("✅ Refrigerant deleted successfully");
-    } catch (error) {
-      console.error("Error deleting refrigerant:", error);
     }
-  };
+  } catch (error) {
+    console.error("Error deleting refrigerant:", error);
+  }
+};
 
   const openAddModal = () => {
     resetForm();

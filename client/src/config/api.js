@@ -542,6 +542,151 @@ export const chatbotAPI = {
   },
 };
 
+// Add this new section to your existing api.js file
+// Place it after the existing API objects (like chatbotAPI, activityLogsAPI, etc.)
+
+export const customizationAPI = {
+  // ============================================
+  // SERVICES
+  // ============================================
+  getAllServices: () => {
+    return fetchWithAuth('/customization/services');
+  },
+
+  getServiceCategories: () => {
+    return fetchWithAuth('/customization/services/categories');
+  },
+
+  createService: (data) => {
+    return fetchWithAuth('/customization/services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateService: (serviceId, data) => {
+    return fetchWithAuth(`/customization/services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // ============================================
+  // CHEMICALS
+  // ============================================
+  getAllChemicals: () => {
+    return fetchWithAuth('/customization/chemicals');
+  },
+
+  createChemical: (data) => {
+    return fetchWithAuth('/customization/chemicals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateChemical: (chemicalId, data) => {
+    return fetchWithAuth(`/customization/chemicals/${chemicalId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // ============================================
+  // REFRIGERANTS
+  // ============================================
+  getAllRefrigerants: () => {
+    return fetchWithAuth('/customization/refrigerants');
+  },
+
+  createRefrigerant: (data) => {
+    return fetchWithAuth('/customization/refrigerants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateRefrigerant: (refrigerantId, data) => {
+    return fetchWithAuth(`/customization/refrigerants/${refrigerantId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // ============================================
+  // CHATBOT
+  // ============================================
+  getChatIntents: () => {
+    return fetchWithAuth('/customization/chatbot/intents');
+  },
+
+  createChatIntent: (data) => {
+    return fetchWithAuth('/customization/chatbot/intents', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateChatIntent: (intentId, data) => {
+    return fetchWithAuth(`/customization/chatbot/intents/${intentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getQuickActions: () => {
+    return fetchWithAuth('/customization/chatbot/quick-actions');
+  },
+
+  createQuickAction: (data) => {
+    return fetchWithAuth('/customization/chatbot/quick-actions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateQuickAction: (actionId, data) => {
+    return fetchWithAuth(`/customization/chatbot/quick-actions/${actionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  
+  // Services Delete
+  deleteService: (serviceId) => {
+    return fetchWithAuth(`/customization/services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Chemicals Delete
+  deleteChemical: (chemicalId) => {
+    return fetchWithAuth(`/customization/chemicals/${chemicalId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Refrigerants Delete
+  deleteRefrigerant: (refrigerantId) => {
+    return fetchWithAuth(`/customization/refrigerants/${refrigerantId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Chatbot Delete
+  deleteChatIntent: (intentId) => {
+    return fetchWithAuth(`/customization/chatbot/intents/${intentId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  deleteQuickAction: (actionId) => {
+    return fetchWithAuth(`/customization/chatbot/quick-actions/${actionId}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export { DEBUG_MODE };
 
 export default API_URL;
