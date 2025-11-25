@@ -2,24 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Search, Package } from "lucide-react";
 import { customizationAPI } from "../../../config/api";
 
-/**
- * Services Settings Component
- * 
- * Manages the services catalog including:
- * - Service name and description
- * - Base price
- * - Estimated duration
- * - Category
- * - Active status
- * 
- * TODO (Backend):
- * - API endpoints for services CRUD operations
- * - Service categories management
- */
-
 const ServicesSettings = () => {
   const [services, setServices] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -29,7 +13,7 @@ const ServicesSettings = () => {
   const [formData, setFormData] = useState({
     serviceName: "",
     description: "",
-    categoryId: "",
+    category: "",
     basePrice: "",
     estimatedDurationHours: "",
     isActive: true
@@ -38,156 +22,123 @@ const ServicesSettings = () => {
 
   useEffect(() => {
     fetchServices();
-    fetchCategories();
   }, []);
 
-  /**
-   * TODO (Backend): Implement API call
-   * GET /api/services
-   */
   const fetchServices = async () => {
-  try {
-    setLoading(true);
-    
-    const response = await customizationAPI.getAllServices();
-    const data = await response.json();
-    
-    if (data.success) {
-      const transformedServices = data.data.map(service => ({
-        serviceId: service.service_id,
-        serviceName: service.service_name,
-        description: service.description,
-        category: service.category_name,
-        categoryId: service.category_id,
-        basePrice: parseFloat(service.base_price),
-        estimatedDurationHours: service.estimated_duration_hours,
-        isActive: service.is_active
-      }));
+    try {
+      setLoading(true);
       
-      setServices(transformedServices);
+      const response = await customizationAPI.getAllServices();
+      const data = await response.json();
+      
+      if (data.success) {
+        const transformedServices = data.data.map(service => ({
+          serviceId: service.service_id,
+          serviceName: service.service_name,
+          description: service.description,
+          category: service.category_name || "",
+          categoryId: service.category_id,
+          basePrice: parseFloat(service.base_price),
+          estimatedDurationHours: service.estimated_duration_hours,
+          isActive: service.is_active
+        }));
+        
+        setServices(transformedServices);
+      }
+    } catch (error) {
+      console.error("Error fetching services:", error);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Error fetching services:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-  /**
-   * TODO (Backend): Implement API call
-   * GET /api/service-categories
-   */
-  const fetchCategories = async () => {
-  try {
-    const response = await customizationAPI.getServiceCategories();
-    const data = await response.json();
-    
-    if (data.success) {
-      setCategories(data.data);
-    }
-  } catch (error) {
-    console.error("Error fetching categories:", error);
-  }
-};
+  };
 
-  /**
-   * TODO (Backend): Implement API call
-   * POST /api/services
-   */
   const handleAddService = async () => {
-  const newErrors = {};
-  if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
-  if (!formData.description.trim()) newErrors.description = "Description is required";
-  if (!formData.categoryId) newErrors.categoryId = "Category is required";
-  if (!formData.basePrice || formData.basePrice <= 0) newErrors.basePrice = "Valid price is required";
-  if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) newErrors.estimatedDurationHours = "Valid duration is required";
+    const newErrors = {};
+    if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
+    if (!formData.description.trim()) newErrors.description = "Description is required";
+    if (!formData.category.trim()) newErrors.category = "Category is required";
+    if (!formData.basePrice || formData.basePrice <= 0) newErrors.basePrice = "Valid price is required";
+    if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) newErrors.estimatedDurationHours = "Valid duration is required";
 
-  if (Object.keys(newErrors).length > 0) {
-    setErrors(newErrors);
-    return;
-  }
-
-  try {
-    const response = await customizationAPI.createService({
-      service_name: formData.serviceName,
-      description: formData.description,
-      category_id: parseInt(formData.categoryId),
-      base_price: parseFloat(formData.basePrice),
-      estimated_duration_hours: parseInt(formData.estimatedDurationHours),
-      is_active: formData.isActive
-    });
-
-    const data = await response.json();
-    
-    if (data.success) {
-      await fetchServices(); // Refresh the list
-      setShowAddModal(false);
-      resetForm();
-      console.log("✅ Service added successfully");
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
     }
-  } catch (error) {
-    console.error("Error adding service:", error);
-  }
-};
 
-  /**
-   * TODO (Backend): Implement API call
-   * PUT /api/services/:id
-   */
+    try {
+      const response = await customizationAPI.createService({
+        service_name: formData.serviceName,
+        description: formData.description,
+        category_name: formData.category,
+        base_price: parseFloat(formData.basePrice),
+        estimated_duration_hours: parseInt(formData.estimatedDurationHours),
+        is_active: formData.isActive
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        await fetchServices();
+        setShowAddModal(false);
+        resetForm();
+        console.log("✅ Service added successfully");
+      }
+    } catch (error) {
+      console.error("Error adding service:", error);
+    }
+  };
+
   const handleUpdateService = async () => {
-  const newErrors = {};
-  if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
-  if (!formData.description.trim()) newErrors.description = "Description is required";
-  if (!formData.categoryId) newErrors.categoryId = "Category is required";
-  if (!formData.basePrice || formData.basePrice <= 0) newErrors.basePrice = "Valid price is required";
-  if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) newErrors.estimatedDurationHours = "Valid duration is required";
+    const newErrors = {};
+    if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
+    if (!formData.description.trim()) newErrors.description = "Description is required";
+    if (!formData.category.trim()) newErrors.category = "Category is required";
+    if (!formData.basePrice || formData.basePrice <= 0) newErrors.basePrice = "Valid price is required";
+    if (!formData.estimatedDurationHours || formData.estimatedDurationHours <= 0) newErrors.estimatedDurationHours = "Valid duration is required";
 
-  if (Object.keys(newErrors).length > 0) {
-    setErrors(newErrors);
-    return;
-  }
-
-  try {
-    const response = await customizationAPI.updateService(selectedService.serviceId, {
-      service_name: formData.serviceName,
-      description: formData.description,
-      category_id: parseInt(formData.categoryId),
-      base_price: parseFloat(formData.basePrice),
-      estimated_duration_hours: parseInt(formData.estimatedDurationHours),
-      is_active: formData.isActive
-    });
-
-    const data = await response.json();
-    
-    if (data.success) {
-      await fetchServices(); // Refresh the list
-      setShowEditModal(false);
-      resetForm();
-      console.log("✅ Service updated successfully");
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
     }
-  } catch (error) {
-    console.error("Error updating service:", error);
-  }
-};
 
-  /**
-   * TODO (Backend): Implement API call
-   * DELETE /api/services/:id
-   */
+    try {
+      const response = await customizationAPI.updateService(selectedService.serviceId, {
+        service_name: formData.serviceName,
+        description: formData.description,
+        category_name: formData.category,
+        base_price: parseFloat(formData.basePrice),
+        estimated_duration_hours: parseInt(formData.estimatedDurationHours),
+        is_active: formData.isActive
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        await fetchServices();
+        setShowEditModal(false);
+        resetForm();
+        console.log("✅ Service updated successfully");
+      }
+    } catch (error) {
+      console.error("Error updating service:", error);
+    }
+  };
+
   const handleDeleteService = async () => {
-  try {
-    const response = await customizationAPI.deleteService(selectedService.serviceId);
-    const data = await response.json();
-    
-    if (data.success) {
-      await fetchServices(); // Refresh the list
-      setShowDeleteConfirm(false);
-      setSelectedService(null);
-      console.log("✅ Service deleted successfully");
+    try {
+      const response = await customizationAPI.deleteService(selectedService.serviceId);
+      const data = await response.json();
+      
+      if (data.success) {
+        await fetchServices();
+        setShowDeleteConfirm(false);
+        setSelectedService(null);
+        console.log("✅ Service deleted successfully");
+      }
+    } catch (error) {
+      console.error("Error deleting service:", error);
     }
-  } catch (error) {
-    console.error("Error deleting service:", error);
-  }
-};
+  };
 
   const openAddModal = () => {
     resetForm();
@@ -199,7 +150,7 @@ const ServicesSettings = () => {
     setFormData({
       serviceName: service.serviceName,
       description: service.description,
-      categoryId: service.categoryId.toString(),
+      category: service.category,
       basePrice: service.basePrice.toString(),
       estimatedDurationHours: service.estimatedDurationHours.toString(),
       isActive: service.isActive
@@ -216,7 +167,7 @@ const ServicesSettings = () => {
     setFormData({
       serviceName: "",
       description: "",
-      categoryId: "",
+      category: "",
       basePrice: "",
       estimatedDurationHours: "",
       isActive: true
@@ -398,23 +349,18 @@ const ServicesSettings = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    name="categoryId"
-                    value={formData.categoryId}
+                  <input
+                    type="text"
+                    name="category"
+                    value={formData.category}
                     onChange={handleInputChange}
+                    placeholder="e.g., HVAC Services"
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.categoryId ? 'border-red-300' : 'border-gray-300'
+                      errors.category ? 'border-red-300' : 'border-gray-300'
                     }`}
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(cat => (
-                      <option key={cat.categoryId} value={cat.categoryId}>
-                        {cat.categoryName}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.categoryId && (
-                    <p className="mt-1 text-sm text-red-600">{errors.categoryId}</p>
+                  />
+                  {errors.category && (
+                    <p className="mt-1 text-sm text-red-600">{errors.category}</p>
                   )}
                 </div>
               </div>
@@ -511,7 +457,7 @@ const ServicesSettings = () => {
         </div>
       )}
 
-      {/* Edit Service Modal (Similar structure to Add Modal) */}
+      {/* Edit Service Modal */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -549,23 +495,18 @@ const ServicesSettings = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    name="categoryId"
-                    value={formData.categoryId}
+                  <input
+                    type="text"
+                    name="category"
+                    value={formData.category}
                     onChange={handleInputChange}
+                    placeholder="e.g., HVAC Services"
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.categoryId ? 'border-red-300' : 'border-gray-300'
+                      errors.category ? 'border-red-300' : 'border-gray-300'
                     }`}
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(cat => (
-                      <option key={cat.categoryId} value={cat.categoryId}>
-                        {cat.categoryName}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.categoryId && (
-                    <p className="mt-1 text-sm text-red-600">{errors.categoryId}</p>
+                  />
+                  {errors.category && (
+                    <p className="mt-1 text-sm text-red-600">{errors.category}</p>
                   )}
                 </div>
               </div>

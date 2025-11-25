@@ -86,7 +86,7 @@ const updateService = async (req, res) => {
       base_price,
       price_unit,
       estimated_duration_hours,
-      category_id,
+      category_name,
       requires_site_visit,
       chemicals_required,
       equipment_required,
@@ -104,6 +104,32 @@ const updateService = async (req, res) => {
         success: false,
         message: "Service not found",
       });
+    }
+
+    // Handle category - look up or create
+    let category_id = oldData.rows[0].category_id;
+    if (category_name && category_name.trim()) {
+      // First, try to find existing category (case-insensitive)
+      const findCategoryQuery = `
+        SELECT category_id FROM service_categories 
+        WHERE LOWER(category_name) = LOWER($1)
+        LIMIT 1
+      `;
+      const existingCategory = await client.query(findCategoryQuery, [category_name.trim()]);
+
+      if (existingCategory.rows.length > 0) {
+        // Use existing category
+        category_id = existingCategory.rows[0].category_id;
+      } else {
+        // Create new category
+        const createCategoryQuery = `
+          INSERT INTO service_categories (category_name, is_active, created_at)
+          VALUES ($1, true, NOW())
+          RETURNING category_id
+        `;
+        const newCategory = await client.query(createCategoryQuery, [category_name.trim()]);
+        category_id = newCategory.rows[0].category_id;
+      }
     }
 
     const updateQuery = `
@@ -185,7 +211,7 @@ const createService = async (req, res) => {
       base_price,
       price_unit,
       estimated_duration_hours,
-      category_id,
+      category_name,
       requires_site_visit,
       chemicals_required,
       equipment_required,
@@ -196,6 +222,28 @@ const createService = async (req, res) => {
         success: false,
         message: "Service name and base price are required",
       });
+    }
+
+    let category_id = null;
+    if (category_name && category_name.trim()) {
+      const findCategoryQuery = `
+        SELECT category_id FROM service_categories 
+        WHERE LOWER(category_name) = LOWER($1)
+        LIMIT 1
+      `;
+      const existingCategory = await client.query(findCategoryQuery, [category_name.trim()]);
+
+      if (existingCategory.rows.length > 0) {
+        category_id = existingCategory.rows[0].category_id;
+      } else {
+        const createCategoryQuery = `
+          INSERT INTO service_categories (category_name, is_active, created_at)
+          VALUES ($1, true, NOW())
+          RETURNING category_id
+        `;
+        const newCategory = await client.query(createCategoryQuery, [category_name.trim()]);
+        category_id = newCategory.rows[0].category_id;
+      }
     }
 
     const insertQuery = `
