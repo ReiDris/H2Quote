@@ -25,9 +25,6 @@ const RefrigerantsSettings = () => {
     fetchRefrigerants();
   }, []);
 
-  /**
-   * TODO (Backend): GET /api/refrigerants
-   */
   const fetchRefrigerants = async () => {
   try {
     setLoading(true);
@@ -56,9 +53,6 @@ const RefrigerantsSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): POST /api/refrigerants
-   */
   const handleAddRefrigerant = async () => {
   const newErrors = {};
   if (!formData.refrigerantName.trim()) newErrors.refrigerantName = "Refrigerant name is required";
@@ -84,7 +78,7 @@ const RefrigerantsSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchRefrigerants(); // Refresh the list
+      await fetchRefrigerants();
       setShowAddModal(false);
       resetForm();
       console.log("✅ Refrigerant added successfully");
@@ -94,9 +88,7 @@ const RefrigerantsSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): PUT /api/refrigerants/:id
-   */
+
   const handleUpdateRefrigerant = async () => {
   const newErrors = {};
   if (!formData.refrigerantName.trim()) newErrors.refrigerantName = "Refrigerant name is required";
@@ -122,7 +114,7 @@ const RefrigerantsSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchRefrigerants(); // Refresh the list
+      await fetchRefrigerants();
       setShowEditModal(false);
       resetForm();
       console.log("✅ Refrigerant updated successfully");
@@ -132,16 +124,13 @@ const RefrigerantsSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): DELETE /api/refrigerants/:id
-   */
   const handleDeleteRefrigerant = async () => {
   try {
     const response = await customizationAPI.deleteRefrigerant(selectedRefrigerant.refrigerantId);
     const data = await response.json();
     
     if (data.success) {
-      await fetchRefrigerants(); // Refresh the list
+      await fetchRefrigerants();
       setShowDeleteConfirm(false);
       setSelectedRefrigerant(null);
       console.log("✅ Refrigerant deleted successfully");
@@ -275,7 +264,7 @@ const RefrigerantsSettings = () => {
                     ₱{refrigerant.price.toLocaleString()}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 text-xs rounded font-medium ${
+                    <span className={`px-2 py-1 text-xs rounded font-medium whitespace-nowrap ${
                       refrigerant.hazardType === 'High' 
                         ? 'bg-red-100 text-red-700'
                         : refrigerant.hazardType === 'Moderate'
