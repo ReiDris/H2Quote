@@ -2,21 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Search, Package } from "lucide-react";
 import { customizationAPI } from "../../../config/api";
 
-/**
- * Services Settings Component
- * 
- * Manages the services catalog including:
- * - Service name and description
- * - Base price
- * - Estimated duration
- * - Category
- * - Active status
- * 
- * TODO (Backend):
- * - API endpoints for services CRUD operations
- * - Service categories management
- */
-
 const ServicesSettings = () => {
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -41,10 +26,6 @@ const ServicesSettings = () => {
     fetchCategories();
   }, []);
 
-  /**
-   * TODO (Backend): Implement API call
-   * GET /api/services
-   */
   const fetchServices = async () => {
   try {
     setLoading(true);
@@ -72,10 +53,7 @@ const ServicesSettings = () => {
     setLoading(false);
   }
 };
-  /**
-   * TODO (Backend): Implement API call
-   * GET /api/service-categories
-   */
+
   const fetchCategories = async () => {
   try {
     const response = await customizationAPI.getServiceCategories();
@@ -89,10 +67,6 @@ const ServicesSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): Implement API call
-   * POST /api/services
-   */
   const handleAddService = async () => {
   const newErrors = {};
   if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
@@ -119,7 +93,7 @@ const ServicesSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchServices(); // Refresh the list
+      await fetchServices();
       setShowAddModal(false);
       resetForm();
       console.log("✅ Service added successfully");
@@ -129,10 +103,6 @@ const ServicesSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): Implement API call
-   * PUT /api/services/:id
-   */
   const handleUpdateService = async () => {
   const newErrors = {};
   if (!formData.serviceName.trim()) newErrors.serviceName = "Service name is required";
@@ -159,7 +129,7 @@ const ServicesSettings = () => {
     const data = await response.json();
     
     if (data.success) {
-      await fetchServices(); // Refresh the list
+      await fetchServices();
       setShowEditModal(false);
       resetForm();
       console.log("✅ Service updated successfully");
@@ -169,17 +139,13 @@ const ServicesSettings = () => {
   }
 };
 
-  /**
-   * TODO (Backend): Implement API call
-   * DELETE /api/services/:id
-   */
   const handleDeleteService = async () => {
   try {
     const response = await customizationAPI.deleteService(selectedService.serviceId);
     const data = await response.json();
     
     if (data.success) {
-      await fetchServices(); // Refresh the list
+      await fetchServices();
       setShowDeleteConfirm(false);
       setSelectedService(null);
       console.log("✅ Service deleted successfully");
